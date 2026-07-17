@@ -1,0 +1,11 @@
+{
+  "src/strikeawin.js": {
+    "file": "assets/strikeawin-DdYgOA1j.js",
+    "name": "strikeawin",
+    "src": "src/strikeawin.js",
+    "isEntry": true,
+    "css": [
+      "assets/strikeawin-DpIGxQVi.css"
+    ]
+  }
+}

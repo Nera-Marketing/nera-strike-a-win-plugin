@@ -1,0 +1,84 @@
+/**
+ * Strike A Win — post-purchase play cards (thank-you + My Account view order).
+ * Loaded only on the order-received and view-order pages.
+ *
+ * Mirrors the single-product "runs to play" CTA (product.css .saw-runs-cta):
+ * a count badge + "N runs to play" + "Play quiz", one per tier line, stacked.
+ */
+
+.saw-order-ctas {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	width: 100%;
+	margin: 0 0 24px;
+}
+
+/* Thank-you page: lay cards side by side (wrapping), each shrunk to its content
+   instead of full width. View-order keeps the stacked full-width column above. */
+.saw-order-ctas--compact {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+.saw-order-ctas--compact .saw-runs-cta {
+	width: auto;
+	max-width: 100%;
+}
+
+.saw-runs-cta {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	margin: 0;
+	padding: 14px 16px;
+	border: 2px solid color-mix(in srgb, var(--color-primary, #2271b1) 28%, #d0e4f7);
+	border-radius: 14px;
+	background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #2271b1) 7%, #fff) 0%, #fff 100%);
+	color: inherit;
+	text-decoration: none;
+	transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.saw-runs-cta:hover {
+	border-color: var(--color-primary, #2271b1);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary, #2271b1) 18%, transparent);
+	transform: translateY(-1px);
+}
+.saw-runs-cta:focus-visible {
+	outline: 2px solid var(--color-primary, #2271b1);
+	outline-offset: 2px;
+}
+.saw-runs-cta__count {
+	flex: 0 0 auto;
+	min-width: 48px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--color-primary, #2271b1);
+	color: #fff;
+	font-size: 22px;
+	font-weight: 800;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+.saw-runs-cta__copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.saw-runs-cta__runs {
+	font-size: 14px;
+	font-weight: 700;
+	color: #111;
+}
+.saw-runs-cta__action {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--color-primary, #2271b1);
+}
+@media (prefers-reduced-motion: reduce) {
+	.saw-runs-cta { transition: none; }
+	.saw-runs-cta:hover { transform: none; }
+}

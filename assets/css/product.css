@@ -1,0 +1,148 @@
+/**
+ * Strike A Win — single-product tier widget + runs pill.
+ * Loaded only on competition product pages (body.saw-competition).
+ */
+
+/* Critical: hide the theme's native price/quantity block and add-to-cart form
+   up-front so the tier widget swap doesn't flash. Targets the purchase-card
+   partial's structure (a .px-6 block holding the TicketPrice atom, and the
+   .px-6 block holding form.cart). */
+body.saw-tiers-ready div.px-6:has(> div.flex.items-center.justify-between.mb-4),
+body.saw-tiers-ready div.px-6:has(form.cart) {
+	display: none !important;
+}
+
+.saw-tierbox {
+	margin: 0 0 8px;
+	padding: 20px 24px 24px;
+}
+.saw-tierbox__title {
+	font-size: 14px;
+	font-weight: 600;
+	margin: 0 0 12px;
+	color: #111;
+}
+.saw-tier-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+.saw-tier-tab {
+	flex: 1 1 auto;
+	min-width: 96px;
+	border: 2px solid #e2e2e6;
+	background: #fff;
+	border-radius: 12px;
+	padding: 10px 12px;
+	cursor: pointer;
+	text-align: center;
+	transition: border-color .12s, background .12s;
+	font: inherit;
+	color: #111;
+}
+.saw-tier-tab:hover:not(:disabled) { border-color: var(--saw-accent, #eb580c); }
+.saw-tier-tab.is-active {
+	border-color: var(--saw-accent, #eb580c);
+	background: color-mix(in srgb, var(--saw-accent, #eb580c) 8%, #fff);
+}
+.saw-tier-tab:disabled { opacity: .45; cursor: not-allowed; }
+.saw-tier-tab__label { display: block; font-weight: 700; }
+.saw-tier-tab__price { display: block; font-size: 13px; opacity: .8; margin-top: 2px; }
+
+.saw-tier-meta {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-bottom: 14px;
+	font-size: 14px;
+}
+.saw-tier-price { font-size: 22px; font-weight: 800; color: var(--saw-accent, #eb580c); }
+.saw-tier-note { color: #555; font-size: 13px; }
+
+.saw-qty {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 14px;
+}
+.saw-qty__label { font-size: 14px; font-weight: 600; }
+.saw-qty__btn {
+	width: 36px; height: 36px;
+	border: 2px solid #e2e2e6; background: #fff;
+	border-radius: 10px; font-size: 18px; cursor: pointer; line-height: 1;
+}
+.saw-qty__input {
+	width: 60px; height: 36px; text-align: center;
+	border: 2px solid #e2e2e6; border-radius: 10px; font-size: 16px;
+}
+.saw-tier-total { margin-bottom: 16px; font-size: 15px; }
+.saw-tier-total strong { font-size: 18px; }
+
+.saw-buy {
+	display: inline-block; width: 100%;
+	padding: 14px 20px; text-align: center;
+	background: var(--saw-accent, #eb580c); color: #fff;
+	border: 0; border-radius: 12px; font-weight: 700; font-size: 16px;
+	cursor: pointer; text-decoration: none;
+}
+.saw-buy:disabled, .saw-buy.is-disabled { opacity: .5; cursor: not-allowed; }
+.saw-buy.is-busy { opacity: .7; cursor: progress; }
+
+/* Runs balance CTA — top of the purchase card when the player already owns runs. */
+.saw-runs-cta {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	margin: 0 0 18px;
+	padding: 14px 16px;
+	border: 2px solid color-mix(in srgb, var(--color-primary, #2271b1) 28%, #d0e4f7);
+	border-radius: 14px;
+	background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #2271b1) 7%, #fff) 0%, #fff 100%);
+	color: inherit;
+	text-decoration: none;
+	transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.saw-runs-cta:hover {
+	border-color: var(--color-primary, #2271b1);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary, #2271b1) 18%, transparent);
+	transform: translateY(-1px);
+}
+.saw-runs-cta:focus-visible {
+	outline: 2px solid var(--color-primary, #2271b1);
+	outline-offset: 2px;
+}
+.saw-runs-cta__count {
+	flex: 0 0 auto;
+	min-width: 48px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--color-primary, #2271b1);
+	color: #fff;
+	font-size: 22px;
+	font-weight: 800;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+.saw-runs-cta__copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.saw-runs-cta__runs {
+	font-size: 14px;
+	font-weight: 700;
+	color: #111;
+}
+.saw-runs-cta__action {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--color-primary, #2271b1);
+}
+@media (prefers-reduced-motion: reduce) {
+	.saw-runs-cta { transition: none; }
+	.saw-runs-cta:hover { transform: none; }
+}

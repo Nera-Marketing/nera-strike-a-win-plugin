@@ -1,0 +1,328 @@
+/* Strike A Win — hub / overview components inside .saw-root-wrap */
+
+.saw-hub {
+	--saw-brand: var(--color-primary, #1313ec);
+	--saw-accent: var(--color-accent, #fbbf24);
+	--saw-text: var(--color-text-primary, #0d0d1b);
+	--saw-text-muted: var(--color-text-secondary, #64748b);
+	position: relative;
+	color: var(--saw-text);
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.saw-hub__nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 16px;
+	margin-bottom: 20px;
+}
+.saw-hub__back {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--saw-brand);
+	text-decoration: none;
+}
+.saw-hub__back:hover { text-decoration: underline; }
+.saw-hub__back--shop { margin-left: auto; }
+
+.saw-hub__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 14px;
+}
+
+.saw-hub-card {
+	display: flex;
+	flex-direction: column;
+	background: rgba(255, 255, 255, 0.92);
+	border: 1px solid #e8edf5;
+	border-left: 4px solid var(--saw-brand);
+	border-radius: 14px;
+	overflow: hidden;
+	text-decoration: none;
+	color: inherit;
+	transition: border-color .15s, transform .15s, box-shadow .15s;
+	box-shadow: 0 4px 16px -8px rgba(15, 23, 42, 0.12);
+}
+.saw-hub-card:hover {
+	border-color: color-mix(in srgb, var(--saw-brand) 35%, #e8edf5);
+	transform: translateY(-2px);
+	box-shadow: 0 12px 28px -12px color-mix(in srgb, var(--saw-brand) 22%, transparent);
+}
+.saw-hub-card__media { aspect-ratio: 16 / 10; overflow: hidden; background: #f1f5f9; }
+.saw-hub-card__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.saw-hub-card__body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.saw-hub-card__title { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 700; }
+.saw-hub-card__runs { margin: 0; font-size: 13px; font-weight: 700; color: var(--saw-brand); }
+.saw-hub-card__cta { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--saw-accent); }
+
+.saw-overview {
+	display: grid;
+	grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+	gap: 22px;
+	margin-bottom: 26px;
+}
+@media (max-width: 768px) {
+	.saw-overview { grid-template-columns: 1fr; }
+}
+
+.saw-competition-hero__media {
+	border-radius: 14px;
+	overflow: hidden;
+	background: #f1f5f9;
+	margin-bottom: 14px;
+	border: 1px solid #e8edf5;
+}
+.saw-competition-hero__img { width: 100%; height: auto; display: block; aspect-ratio: 16 / 10; object-fit: cover; }
+.saw-competition-hero__title { margin: 0 0 10px; font-size: 24px; line-height: 1.2; font-weight: 800; }
+.saw-competition-hero__desc { font-size: 15px; line-height: 1.55; color: var(--saw-text-muted); }
+.saw-competition-hero__desc p { margin: 0 0 10px; }
+.saw-competition-hero__desc p:last-child { margin-bottom: 0; }
+.saw-competition-hero__balance {
+	margin: 14px 0 0;
+	display: inline-flex;
+	padding: 6px 12px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--saw-brand) 10%, #fff);
+	color: var(--saw-brand);
+	font-size: 13px;
+	font-weight: 700;
+	border: 1px solid color-mix(in srgb, var(--saw-brand) 18%, transparent);
+}
+
+.saw-guide {
+	background: rgba(255, 255, 255, 0.92);
+	border: 1px solid #e8edf5;
+	border-radius: 14px;
+	padding: 18px 18px 16px;
+	align-self: start;
+	--saw-warn: #d97706;
+	--saw-warn-soft: #fffbeb;
+	--saw-warn-line: #fcd34d;
+}
+.saw-guide__title {
+	margin: 0 0 14px;
+	font-size: 12px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--saw-brand);
+}
+.saw-guide__steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 12px;
+}
+.saw-guide__step {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 12px;
+	border-radius: 12px;
+	background: linear-gradient(90deg, color-mix(in srgb, var(--saw-brand) 6%, #fff), #fff);
+	border-left: 3px solid var(--saw-brand);
+}
+.saw-guide__marker {
+	flex: 0 0 28px;
+	height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	background: var(--saw-brand);
+	color: #fff;
+	font-size: 13px;
+	font-weight: 800;
+	line-height: 1;
+}
+.saw-guide__step strong { display: block; font-size: 14px; margin-bottom: 2px; }
+.saw-guide__step p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--saw-text-muted); }
+
+/* Player-protection callout — warm tint, same structure as other steps. */
+.saw-guide__step--stay {
+	background: var(--saw-warn-soft);
+	border: 1px solid var(--saw-warn-line);
+	border-left: 3px solid var(--saw-warn);
+	box-shadow: none;
+}
+.saw-guide__step--stay .saw-guide__marker {
+	background: var(--saw-warn);
+	color: #fff;
+	box-shadow: none;
+}
+.saw-guide__tag {
+	display: inline-block;
+	margin-bottom: 4px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--saw-warn);
+}
+.saw-guide__step--stay strong {
+	font-size: 14px;
+	font-weight: 800;
+	color: var(--saw-text);
+}
+.saw-guide__step--stay p {
+	color: var(--saw-text-muted);
+}
+
+.saw-tier-pick__title {
+	margin: 0 0 14px;
+	font-size: 12px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--saw-brand);
+}
+.saw-tier-pick__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 12px;
+}
+.saw-tier-pick__card {
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	padding: 16px 16px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-height: 100%;
+	box-shadow: 0 2px 10px -6px rgba(15, 23, 42, 0.07);
+}
+.saw-tier-pick__card .saw-btn,
+.saw-tier-pick__card .saw-btn-disabled {
+	margin-top: auto;
+	width: 100%;
+}
+.saw-tier-pick__card .saw-btn-play {
+	box-shadow: 0 8px 22px -14px color-mix(in srgb, var(--saw-brand) 45%, transparent);
+}
+.saw-tier-pick__card .saw-btn-ghost {
+	box-shadow: none;
+}
+.saw-tier-pick__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 8px;
+}
+.saw-tier-pick__label { font-size: 17px; font-weight: 800; }
+.saw-tier-pick__runs {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--saw-brand);
+	white-space: nowrap;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--saw-brand) 8%, #fff);
+}
+.saw-tier-pick__note { margin: 0; font-size: 13px; color: var(--saw-text-muted); }
+.saw-tier-pick__empty { margin: 14px 0 0; font-size: 14px; color: var(--saw-text-muted); }
+.saw-tier-pick__empty a { color: var(--saw-brand); font-weight: 600; }
+
+.saw-entry-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+
+.saw-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.75rem 1.5rem;
+	background: var(--saw-brand);
+	color: #fff;
+	border-radius: 0.75rem;
+	text-decoration: none;
+	font-weight: 600;
+	border: 2px solid transparent;
+	text-align: center;
+	box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--saw-brand) 45%, transparent);
+	transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+/* Beat theme global `a:hover { color: primary-dark }` on product/play pages. */
+a.saw-btn,
+a.saw-btn:hover,
+a.saw-btn:focus,
+a.saw-btn:focus-visible,
+a.saw-btn:active {
+	color: #fff;
+	text-decoration: none;
+}
+a.saw-btn:hover {
+	background: color-mix(in srgb, var(--saw-brand) 90%, #000);
+	box-shadow: 0 14px 36px -10px color-mix(in srgb, var(--saw-brand) 50%, transparent);
+	transform: translateY(-1px);
+}
+a.saw-btn:active {
+	background: color-mix(in srgb, var(--saw-brand) 82%, #000);
+	transform: translateY(0);
+	box-shadow: 0 8px 24px -12px color-mix(in srgb, var(--saw-brand) 40%, transparent);
+}
+a.saw-btn:focus-visible {
+	outline: 2px solid var(--saw-brand);
+	outline-offset: 2px;
+}
+.saw-btn-play { margin-top: auto; width: 100%; }
+.saw-btn-ghost {
+	background: transparent;
+	color: var(--saw-brand);
+	border-color: color-mix(in srgb, var(--saw-brand) 35%, transparent);
+	box-shadow: none;
+}
+a.saw-btn.saw-btn-ghost,
+a.saw-btn.saw-btn-ghost:hover,
+a.saw-btn.saw-btn-ghost:focus,
+a.saw-btn.saw-btn-ghost:active {
+	color: var(--saw-brand);
+}
+a.saw-btn.saw-btn-ghost:hover {
+	background: color-mix(in srgb, var(--saw-brand) 8%, #fff);
+	border-color: color-mix(in srgb, var(--saw-brand) 55%, transparent);
+	transform: translateY(-1px);
+}
+a.saw-btn.saw-btn-ghost:active {
+	background: color-mix(in srgb, var(--saw-brand) 12%, #fff);
+	transform: translateY(0);
+}
+.saw-btn-disabled {
+	background: #cbd5e1;
+	border-color: #cbd5e1;
+	cursor: not-allowed;
+	pointer-events: none;
+	box-shadow: none;
+}
+
+.saw-notice {
+	text-align: center;
+	padding: 2rem 1rem;
+	color: var(--saw-text-muted);
+}
+.saw-error { color: #dc2626; }
+.saw-loading { text-align: center; opacity: .7; }
+
+.saw-tier-list {
+	list-style: none; padding: 0; margin: 0;
+	display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+@media (max-width: 480px) { .saw-tier-list { grid-template-columns: 1fr; } }
+.saw-tier-card {
+	background: #fff; border: 1px solid #e8edf5;
+	border-radius: 12px; padding: 16px; text-align: center;
+}
+.saw-tier-label { font-weight: 700; font-size: 18px; }
+.saw-tier-price { color: var(--saw-brand); font-weight: 800; font-size: 22px; margin: 4px 0; }
+.saw-tier-note { font-size: 13px; opacity: .75; margin-bottom: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+	.saw-hub-card,
+	.saw-hub-card:hover,
+	a.saw-btn,
+	a.saw-btn:hover,
+	a.saw-btn:active { transition: none; transform: none; }
+}

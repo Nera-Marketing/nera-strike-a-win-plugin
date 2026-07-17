@@ -1,0 +1,85 @@
+/* Strike A Win — order line meta (thank-you + My Account view order) */
+
+.saw-order-line {
+	--saw-brand: var(--color-primary, #1313ec);
+	--saw-text: var(--color-text-primary, #0d0d1b);
+	--saw-text-muted: var(--color-text-secondary, #64748b);
+	--saw-surface: #fff;
+	margin-top: 10px;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.saw-order-tier-badge {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px 10px;
+	margin-bottom: 2px;
+}
+
+.saw-order-tier-badge__label {
+	font-size: 14px;
+	font-weight: 800;
+	color: var(--saw-text);
+	letter-spacing: -0.01em;
+}
+
+.saw-order-tier-badge__price {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--saw-text-muted);
+}
+
+.saw-order-runs {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin: 10px 0 6px;
+	padding: 0;
+}
+
+.saw-order-runs__stat {
+	flex: 1 1 0;
+	min-width: 0;
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: var(--saw-surface);
+	border: 1px solid color-mix(in srgb, var(--saw-brand) 10%, #e8edf5);
+	text-align: center;
+}
+
+.saw-order-runs__stat dt {
+	margin: 0 0 4px;
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--saw-text-muted);
+}
+
+.saw-order-runs__stat dd {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.1;
+	color: var(--saw-brand);
+}
+
+.saw-order-runs__stat--remaining dd {
+	color: color-mix(in srgb, var(--saw-brand) 72%, #0d0d1b);
+}
+
+.saw-order-runs__note {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--saw-text-muted);
+}
+
+@media (max-width: 640px) {
+	.saw-order-runs {
+		grid-template-columns: 1fr;
+	}
+}

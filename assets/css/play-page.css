@@ -1,0 +1,330 @@
+/* ==========================================================================
+   Strike A Win — play page layout (mirrors Spin To Win page chrome)
+   ========================================================================== */
+
+html {
+	scrollbar-gutter: stable;
+}
+
+body.nera-strikeawin-page #primary,
+body.nera-strikeawin-page .site-content,
+body.nera-strikeawin-page .ast-container,
+body.nera-strikeawin-page .site-main,
+body.nera-strikeawin-page #content {
+	max-width: 100% !important;
+	width: 100% !important;
+	padding-left: 0 !important;
+	padding-right: 0 !important;
+	margin: 0 !important;
+}
+
+body.nera-strikeawin-page .entry-content {
+	max-width: 100% !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+body.nera-strikeawin-page #primary.site-main {
+	background: transparent !important;
+	min-height: 0 !important;
+	padding-top: 0 !important;
+	padding-bottom: 0 !important;
+}
+
+body.nera-strikeawin-page article > header {
+	display: none !important;
+}
+
+body.nera-strikeawin-page article {
+	margin: 0;
+}
+
+@media (min-width: 64rem) {
+	body.nera-strikeawin-page #site-header > div > nav > .hidden.lg\:flex {
+		display: flex !important;
+	}
+	body.nera-strikeawin-page #site-header > div > nav > .flex.lg\:hidden {
+		display: none !important;
+	}
+	body.nera-strikeawin-page #site-header #mobile-menu {
+		display: none !important;
+	}
+}
+
+@media (max-width: 63.999rem) {
+	body.nera-strikeawin-page #site-header > div > nav > .hidden.lg\:flex {
+		display: none !important;
+	}
+	body.nera-strikeawin-page #site-header > div > nav > .flex.lg\:hidden {
+		display: flex !important;
+	}
+}
+
+@media (min-width: 48rem) {
+	body.nera-strikeawin-page #site-footer .md\:grid-cols-2 {
+		grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+	}
+}
+
+@media (min-width: 64rem) {
+	body.nera-strikeawin-page #site-footer .lg\:grid-cols-5 {
+		grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+	}
+	body.nera-strikeawin-page #site-footer .lg\:col-span-2 {
+		grid-column: span 2 / span 2 !important;
+	}
+	body.nera-strikeawin-page #site-footer .lg\:gap-12 {
+		gap: 3rem !important;
+	}
+}
+
+/* --- Outer page section --- */
+.saw-page {
+	--saw-brand: var(--color-primary, #1313ec);
+	--saw-accent: var(--color-accent, #fbbf24);
+	position: relative;
+	overflow: hidden;
+	background: linear-gradient(
+		to bottom,
+		var(--color-secondary, #f4f7ff),
+		#ffffff,
+		rgba(246, 246, 248, 0.8)
+	);
+}
+
+.saw-page-bg {
+	pointer-events: none;
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(
+		ellipse 80% 50% at 50% -20%,
+		color-mix(in srgb, var(--saw-brand) 12%, transparent),
+		transparent
+	);
+}
+
+.saw-page-blob-right {
+	pointer-events: none;
+	position: absolute;
+	right: 0;
+	top: 25%;
+	height: min(60vw, 28rem);
+	width: min(60vw, 28rem);
+	transform: translateX(33%);
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--saw-accent) 10%, transparent);
+	filter: blur(48px);
+}
+
+.saw-page-blob-left {
+	pointer-events: none;
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	height: 12rem;
+	width: 12rem;
+	transform: translate(-25%, 25%);
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--saw-brand) 5%, transparent);
+	filter: blur(48px);
+}
+
+.saw-hero-container {
+	position: relative;
+	margin: 0 auto;
+	max-width: 1280px;
+	padding: 2.5rem 1rem;
+}
+
+@media (min-width: 1024px) {
+	.saw-hero-container {
+		padding-top: 3.5rem;
+		padding-bottom: 3.5rem;
+	}
+}
+
+.saw-hero-header {
+	margin-bottom: 2rem;
+	text-align: center;
+}
+
+@media (min-width: 1024px) {
+	.saw-hero-header {
+		margin-bottom: 2.5rem;
+	}
+}
+
+.saw-hero-badge {
+	margin-bottom: 1rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	border-radius: 9999px;
+	border: 1px solid color-mix(in srgb, var(--saw-accent) 35%, transparent);
+	background: linear-gradient(
+		to right,
+		color-mix(in srgb, var(--saw-brand) 7%, transparent),
+		rgba(255, 251, 235, 0.9),
+		color-mix(in srgb, var(--saw-brand) 7%, transparent)
+	);
+	padding: 0.375rem 1rem;
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.2em;
+	color: var(--saw-brand);
+	box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--saw-brand) 25%, transparent);
+}
+
+.saw-hero-badge-dot {
+	display: inline-block;
+	height: 0.375rem;
+	width: 0.375rem;
+	border-radius: 9999px;
+	background: var(--saw-accent);
+	box-shadow: 0 0 10px color-mix(in srgb, var(--saw-accent) 85%, transparent);
+	animation: saw-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes saw-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+.saw-hero-heading {
+	font-family: var(--font-heading, system-ui, sans-serif);
+	font-size: 1.875rem;
+	font-weight: 800;
+	letter-spacing: -0.025em;
+	color: var(--color-text-primary, #0d0d1b);
+	text-wrap: balance;
+	line-height: 1.2;
+	margin: 0;
+}
+
+@media (min-width: 640px) {
+	.saw-hero-heading { font-size: 2.25rem; }
+}
+
+@media (min-width: 1024px) {
+	.saw-hero-heading { font-size: 2.5rem; line-height: 1.15; }
+}
+
+.saw-hero-divider {
+	margin: 1.25rem auto 0;
+	height: 0.25rem;
+	width: 7rem;
+	border-radius: 9999px;
+	background: linear-gradient(to right, transparent, var(--saw-accent), transparent);
+	opacity: 0.9;
+}
+
+.saw-hero-intro {
+	margin: 1rem auto 0;
+	max-width: 36rem;
+	font-size: 0.875rem;
+	line-height: 1.625;
+	color: var(--color-text-secondary, #64748b);
+}
+
+.saw-root-wrap {
+	position: relative;
+	border-radius: 1.75rem;
+	border: 1px solid color-mix(in srgb, var(--saw-accent) 20%, transparent);
+	background: linear-gradient(
+		to bottom right,
+		#ffffff,
+		rgba(244, 247, 255, 0.8),
+		rgba(255, 251, 235, 0.3)
+	);
+	padding: 1.25rem;
+	box-shadow:
+		0 32px 90px -28px color-mix(in srgb, var(--saw-brand) 18%, transparent),
+		0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+@media (min-width: 640px) {
+	.saw-root-wrap { padding: 1.75rem; }
+}
+
+@media (min-width: 1024px) {
+	.saw-root-wrap { padding: 2rem; }
+}
+
+.saw-root-blob-right {
+	pointer-events: none;
+	position: absolute;
+	right: -4rem;
+	top: 0;
+	height: 14rem;
+	width: 14rem;
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--saw-brand) 6%, transparent);
+	filter: blur(48px);
+}
+
+.saw-root-blob-left {
+	pointer-events: none;
+	position: absolute;
+	bottom: -3rem;
+	left: -2.5rem;
+	height: 12rem;
+	width: 12rem;
+	border-radius: 9999px;
+	background: color-mix(in srgb, var(--saw-accent) 15%, transparent);
+	filter: blur(48px);
+}
+
+.saw-login-card {
+	margin: 0 auto;
+	max-width: 36rem;
+	border-radius: 1.5rem;
+	border: 1px solid #f3f4f6;
+	background: rgba(255, 255, 255, 0.95);
+	padding: 2rem;
+	text-align: center;
+	box-shadow:
+		0 24px 80px -24px color-mix(in srgb, var(--saw-brand) 20%, transparent),
+		0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.saw-login-text {
+	margin: 0 0 1rem;
+	font-weight: 600;
+	color: var(--color-text-primary, #0d0d1b);
+}
+
+.saw-login-text a {
+	color: var(--saw-brand);
+	font-weight: 700;
+}
+
+.saw-quiz-mount .saw-loading {
+	min-height: 12rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4rem 0;
+	font-size: 0.875rem;
+	color: var(--color-text-secondary, #64748b);
+}
+
+.saw-quiz-mount .saw-app {
+	width: 100%;
+	max-width: none;
+}
+
+.saw-quiz-mount .saw-play,
+.saw-quiz-mount .saw-end,
+.saw-quiz-mount .saw-feedbackwrap {
+	width: 100%;
+}
+
+.saw-quiz-mount .saw-tickets__list .saw-ticket {
+	color: #fff;
+	background: var(--color-primary, #1313ec);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.saw-hero-badge-dot { animation: none; }
+}
