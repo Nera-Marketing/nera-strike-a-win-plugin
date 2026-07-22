@@ -142,6 +142,14 @@
 .saw-answer-row .saw-answer-text { flex: 1; }
 .saw-answer-correct-wrap { white-space: nowrap; font-size: 12px; color: var(--saw-muted); }
 
+/* --- Difficulty level box (question editor) -------------------------- */
+/* The select uses width:100%; without border-box its border/padding overflow
+   the metabox and produce a small horizontal scrollbar. Constrain it. */
+#saw-question-difficulty select {
+	box-sizing: border-box;
+	max-width: 100%;
+}
+
 /* --- Seeder (Demo) page ---------------------------------------------- */
 .saw-demo__hero {
 	display: flex;

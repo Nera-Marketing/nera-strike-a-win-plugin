@@ -3,7 +3,7 @@
  * Plugin Name: Nera – Strike A Win
  * Plugin URI: https://github.com/Nera-Marketing/nera-strike-a-win-plugin
  * Description: Skill-based prize-competition quiz mechanic. Paid entry -> timed increasing-difficulty quiz -> earned LFW lottery tickets entered into the competition draw. Server-scored, no-oversell reservation pool, compliance-locked (Gambling Act 2005 skill exemption).
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Nera
  * Text Domain: nera-strikeawin
  * Requires at least: 6.0
@@ -27,18 +27,21 @@ use YahnisElsts\PluginUpdateChecker\v5p5\Vcs\GitHubApi;
  * (tools.php?page=nera-saw-demo → Feature flags).
  */
 
-define( 'NERA_SAW_VERSION', '1.0.0' );
+define( 'NERA_SAW_VERSION', '1.0.1' );
+define( 'NERA_SAW_PLUGIN_SLUG', 'nera-strike-a-win-plugin' );
 define( 'NERA_SAW_PLUGIN_FILE', __FILE__ );
 define( 'NERA_SAW_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NERA_SAW_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+require_once NERA_SAW_PLUGIN_DIR . 'includes/class-plugin-path-migration.php';
+Nera_SAW_Plugin_Path_Migration::maybe_migrate();
 
 /**
  * GitHub updates (Plugin Update Checker v5.5). On by default when
  * `lib/plugin-update-checker/load-v5p5.php` exists.
  *
- * The plugin folder/slug is `nera-strikeawin`; the GitHub repo it pulls from is
- * `nera-strike-a-win-plugin` (the names differ on purpose — release.sh keeps them
- * in sync). PUC's third argument MUST stay the folder slug (`nera-strikeawin`).
+ * The plugin folder/slug is `nera-strike-a-win-plugin` (matches the GitHub repo
+ * `nera-strike-a-win-plugin`). PUC's third argument MUST stay the folder slug.
  *
  * Disable only if the repo is missing or you are developing without GitHub:
  *   define( 'NERA_SAW_DISABLE_GITHUB_UPDATES', true );
@@ -70,7 +73,7 @@ if ( ! defined( 'NERA_SAW_DISABLE_GITHUB_UPDATES' ) || ! NERA_SAW_DISABLE_GITHUB
 		$nera_saw_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
 			$nera_saw_github_repo,
 			__FILE__,
-			'nera-strikeawin',
+			NERA_SAW_PLUGIN_SLUG,
 			6
 		);
 		$nera_saw_update_checker->setBranch( 'main' );

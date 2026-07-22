@@ -9,9 +9,8 @@
 # Requirements: git, grep, sed, php + build-wp-release-zip.php (or zip), gh (optional).
 # Pushes to `origin` (configure it once: git remote add origin git@github.com:Nera-Marketing/nera-strike-a-win-plugin.git).
 #
-# Note: the plugin folder/slug is `nera-strikeawin` (the zip's inner folder + PUC
-# slug), while the GitHub repo is `nera-strike-a-win-plugin`. They differ on
-# purpose — do not "fix" one to match the other.
+# Note: the plugin folder/slug is `nera-strike-a-win-plugin` (matches the GitHub
+# repo). The main bootstrap file stays `nera-strikeawin.php`.
 #
 # Cross-platform: Linux, macOS, Windows Git Bash (MSYS). Push branch: default main; override with
 # RELEASE_GIT_BRANCH=master if needed.
@@ -27,7 +26,8 @@
 set -e
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_SLUG="nera-strikeawin"
+PLUGIN_SLUG="nera-strike-a-win-plugin"
+PLUGIN_MAIN="nera-strikeawin.php"
 GITHUB_REPO="Nera-Marketing/nera-strike-a-win-plugin"
 GITHUB_REMOTE="git@github.com:${GITHUB_REPO}.git"
 
@@ -60,7 +60,7 @@ trap cleanup EXIT
 if [ -n "${1:-}" ]; then
   VERSION="${1#v}"
 else
-  VERSION=$(grep -m1 '^ \* Version:' "$PLUGIN_DIR/${PLUGIN_SLUG}.php" | sed 's/.*Version: *//')
+  VERSION=$(grep -m1 '^ \* Version:' "$PLUGIN_DIR/${PLUGIN_MAIN}" | sed 's/.*Version: *//')
 fi
 
 if [ -z "$VERSION" ]; then
@@ -116,7 +116,7 @@ else
 fi
 
 echo "▶ Setting * Version + NERA_SAW_VERSION to ${VERSION} in release tree (for PUC)..."
-PHP_MAIN="$WORK_DIR/${PLUGIN_SLUG}.php"
+PHP_MAIN="$WORK_DIR/${PLUGIN_MAIN}"
 if [ ! -f "$PHP_MAIN" ]; then
   echo "ERROR: Missing $PHP_MAIN"
   exit 1
