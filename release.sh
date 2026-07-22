@@ -302,6 +302,30 @@ else
 fi
 
 echo ""
+# -- 7. Slack release notification (optional) --------------------------------
+# Set NERA_SLACK_WEBHOOK_URL (a Slack Incoming Webhook URL) in your environment
+# to post a release message to Slack. The secret is read from the environment
+# only and is never committed to the repo. Non-fatal: by this point the GitHub
+# release is already published, so a Slack failure never fails the release.
+if [ -n "${NERA_SLACK_WEBHOOK_URL:-}" ]; then
+  echo "> Posting release notification to Slack..."
+  SLACK_RELEASE_URL="https://github.com/${GITHUB_REPO}/releases/tag/${TAG}"
+  SLACK_TEXT=":rocket: *${PLUGIN_SLUG}* ${TAG} released -- <${SLACK_RELEASE_URL}|view release>"
+  SLACK_PAYLOAD="{\"text\":\"${SLACK_TEXT}\"}"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -sf -X POST -H 'Content-type: application/json' --data "$SLACK_PAYLOAD" "$NERA_SLACK_WEBHOOK_URL" >/dev/null 2>&1; then
+      echo "> Slack notified."
+    else
+      echo "!  Slack notification failed (continuing; release is already published)."
+    fi
+  else
+    echo "!  curl not found -- skipped Slack notification."
+  fi
+else
+  echo "> NERA_SLACK_WEBHOOK_URL not set -- skipping Slack notification."
+fi
+
+
 echo "✅ Done! Tag $TAG is on GitHub."
 if [ -n "$GH_CMD" ]; then
   echo "   Release: https://github.com/${GITHUB_REPO}/releases/tag/${TAG}"
