@@ -66,8 +66,9 @@ class Nera_SAW_Seeder_Admin {
 	}
 
 	/**
-	 * Register under Tools when NERA_SAW_DEMO_SEEDER is true; otherwise hidden
-	 * from the menu but still reachable at tools.php?page=nera-saw-demo (feature flags).
+	 * Register under Tools when NERA_SAW_DEMO_SEEDER is true; otherwise still
+	 * reachable at tools.php?page=nera-saw-demo but omitted from the Tools menu
+	 * (add under tools.php then remove_submenu_page — `null` parent 404s on modern WP).
 	 */
 	public static function menu() {
 		$title    = __( 'Strike A Win Demo', 'nera-strikeawin' );
@@ -75,12 +76,11 @@ class Nera_SAW_Seeder_Admin {
 		$cap      = 'manage_options';
 		$slug     = self::SLUG;
 
-		if ( Nera_SAW_Constants::demo_seeder_enabled() ) {
-			add_management_page( $title, $title, $cap, $slug, $callback );
-			return;
-		}
+		add_management_page( $title, $title, $cap, $slug, $callback );
 
-		add_submenu_page( null, $title, $title, $cap, $slug, $callback );
+		if ( ! Nera_SAW_Constants::demo_seeder_enabled() ) {
+			remove_submenu_page( 'tools.php', $slug );
+		}
 	}
 
 	/**
@@ -291,7 +291,13 @@ class Nera_SAW_Seeder_Admin {
 					'phase'    => 'questions',
 					'label'    => __( 'Question bank', 'nera-strikeawin' ),
 					/* translators: 1: questions seeded so far, 2: total questions */
-					'message'  => sprintf( __( '%1$d/%2$d seeded.', 'nera-strikeawin' ), $new_off, $total ),
+					'message'  => sprintf(
+						0 === (int) $offset
+							? __( 'Replaced demo bank — %1$d/%2$d seeded.', 'nera-strikeawin' )
+							: __( '%1$d/%2$d seeded.', 'nera-strikeawin' ),
+						$new_off,
+						$total
+					),
 					'progress' => array( 'current' => $new_off, 'total' => $total ),
 					'offset'   => $new_off,
 					'next'     => $done ? 'competitions' : 'questions',

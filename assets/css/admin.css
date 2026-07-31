@@ -322,3 +322,138 @@
 .saw-slot-tickets { margin-top: 10px; }
 .saw-slot-tickets__label { font-size: 12px; font-weight: 600; color: var(--saw-muted); margin-bottom: 6px; }
 .saw-ticket-summary .saw-tags { margin-top: 2px; }
+
+/* --- Question import modal ------------------------------------------- */
+.saw-import-toolbar {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 8px;
+	margin-right: 6px; /* same gap before WP's Filter button */
+	vertical-align: middle;
+}
+.saw-import-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 48px 16px;
+	background: rgba( 0, 0, 0, 0.45 );
+	overflow: hidden; /* one scroller only — the preview table wrap */
+}
+.saw-import-modal[hidden] { display: none !important; }
+.saw-import-modal__dialog {
+	background: #fff;
+	border-radius: 10px;
+	width: min( 1100px, 100% );
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.25 );
+	max-height: calc( 100vh - 96px );
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.saw-import-modal__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px;
+	border-bottom: 1px solid var(--saw-line, #dcdcde);
+	flex-shrink: 0;
+}
+.saw-import-modal__head h2 {
+	margin: 0;
+	font-size: 18px;
+}
+.saw-import-modal__close {
+	border: 0;
+	background: transparent;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	color: #646970;
+}
+.saw-import-modal__body {
+	padding: 16px 20px 22px;
+	overflow: hidden; /* footer stays put; table wrap scrolls */
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.saw-import-step[data-step="preview"]:not([hidden]) {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+.saw-import-preview-wrap {
+	/* Max = 16 rows incl. sticky header (15 body); shorter lists shrink to content. */
+	--saw-import-row-h: 2.5rem;
+	--saw-import-head-h: 2.75rem;
+	max-height: calc(var(--saw-import-head-h) + (var(--saw-import-row-h) * 15));
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	margin: 12px 0;
+	border: 1px solid var(--saw-line, #dcdcde);
+	border-radius: 8px;
+}
+.saw-import-preview {
+	margin: 0;
+	border: 0;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+.saw-import-preview thead th {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	background: #fff;
+	box-shadow: 0 1px 0 var(--saw-line, #dcdcde);
+}
+.saw-import-preview tbody td {
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.saw-import-row--ok td {
+	background: #edfaef;
+	color: #007017;
+}
+.saw-import-row--warn td {
+	background: #fcf9e8;
+	color: #996800;
+}
+.saw-import-row--reject td {
+	background: #fcf0f1;
+	color: #b32d2e;
+}
+.saw-import-summary { font-weight: 600; margin: 0 0 8px; flex-shrink: 0; }
+.saw-import-status-choice { flex-shrink: 0; }
+.saw-import-status-choice label { margin-right: 16px; }
+.saw-import-step[data-step="preview"] > p:last-of-type { flex-shrink: 0; }
+body.saw-import-open { overflow: hidden; }
+
+/* Inline export (and shared) progress above the list filter bar */
+.saw-job-progress {
+	clear: both; /* keep below WP's floated .subsubsub (All | Published) */
+	margin: 0 0 12px;
+	padding: 12px 14px;
+	background: #fff;
+	border: 1px solid var(--saw-line, #dcdcde);
+	border-radius: 8px;
+	max-width: 640px;
+}
+.saw-job-progress[hidden] { display: none !important; }
+.saw-job-progress__status {
+	margin: 0 0 8px;
+	font-weight: 600;
+	font-size: 13px;
+}
+.saw-job-progress.is-done .saw-job-progress__status { color: #1a7f37; }
+.saw-job-progress.is-error .saw-job-progress__status { color: #b32020; }
+.saw-import-step[data-step="running"] .saw-job-progress__status {
+	margin: 0 0 8px;
+	font-weight: 600;
+}

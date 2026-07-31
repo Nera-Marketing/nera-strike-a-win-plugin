@@ -61,6 +61,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-run-grants.php';
 		require_once $dir . 'class-question-cpt.php';
 		require_once $dir . 'class-question-bank.php';
+		require_once $dir . 'class-question-import.php';
 
 		// Question CPT (translatable) — register in all contexts.
 		Nera_SAW_Question_CPT::init();
@@ -81,12 +82,14 @@ class Nera_SAW_Plugin {
 			require_once $dir . 'admin/class-seeder-admin.php';
 			require_once $dir . 'admin/class-report-admin.php';
 			require_once $dir . 'admin/class-log-admin.php';
+			require_once $dir . 'admin/class-question-import-admin.php';
 			Nera_SAW_Ladder_Admin::init();
 			Nera_SAW_Settings_Admin::init();
 			Nera_SAW_Competition_Admin::init();
 			Nera_SAW_Seeder_Admin::init();
 			Nera_SAW_Report_Admin::init();
 			Nera_SAW_Log_Admin::init();
+			Nera_SAW_Question_Import_Admin::init();
 			// Question CRUD is now the native CPT editor (class-question-admin.php retired).
 		}
 

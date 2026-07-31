@@ -48,9 +48,13 @@ class Nera_SAW_Question_Bank {
 			);
 		}
 		update_post_meta( $post_id, Nera_SAW_Question_CPT::META_ANSWERS, $answers );
+		Nera_SAW_Question_CPT::sync_answers_text_mirror( $post_id, $answers );
 		update_post_meta( $post_id, Nera_SAW_Question_CPT::META_LEVEL, sanitize_key( (string) ( $data['level_key'] ?? '' ) ) );
 		if ( ! empty( $data['seed_batch_id'] ) ) {
 			update_post_meta( $post_id, Nera_SAW_Question_CPT::META_SEED, (string) $data['seed_batch_id'] );
+		}
+		if ( ! empty( $data['import_batch_id'] ) ) {
+			update_post_meta( $post_id, Nera_SAW_Question_CPT::META_IMPORT, (string) $data['import_batch_id'] );
 		}
 
 		if ( ! empty( $data['category'] ) && taxonomy_exists( 'product_cat' ) ) {
@@ -117,7 +121,19 @@ class Nera_SAW_Question_Bank {
 					self::query_level( $key, $cat_terms, (int) $user_id, $need - count( $fresh ), array_merge( $picked, $fresh ), true )
 				);
 			}
-			$fresh = array_map( 'intval', $fresh );
+			// Unique within this Run (and across levels already in $picked).
+			$fresh = array_values( array_unique( array_map( 'intval', $fresh ) ) );
+			$fresh = array_values(
+				array_filter(
+					$fresh,
+					static function ( $qid ) use ( $picked ) {
+						return $qid > 0 && ! in_array( (int) $qid, $picked, true );
+					}
+				)
+			);
+			if ( count( $fresh ) > $need ) {
+				$fresh = array_slice( $fresh, 0, $need );
+			}
 			foreach ( $fresh as $qid ) {
 				$picked[] = (int) $qid;
 			}
@@ -133,15 +149,21 @@ class Nera_SAW_Question_Bank {
 
 		$slots   = array();
 		$slot_no = 0;
+		$used_q  = array();
 		foreach ( $bag as $key ) {
 			$qid = array_shift( $per_level[ $key ]['ids'] );
 			if ( null === $qid ) {
 				continue;
 			}
-			$slots[] = array(
+			$qid = (int) $qid;
+			if ( isset( $used_q[ $qid ] ) ) {
+				continue;
+			}
+			$used_q[ $qid ] = true;
+			$slots[]        = array(
 				'slot_no'     => ++$slot_no,
 				'level_key'   => $key,
-				'question_id' => (int) $qid,
+				'question_id' => $qid,
 				'reward_base' => (int) $per_level[ $key ]['reward'],
 			);
 		}

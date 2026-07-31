@@ -32,9 +32,11 @@ GITHUB_REPO="Nera-Marketing/nera-strike-a-win-plugin"
 GITHUB_REMOTE="git@github.com:${GITHUB_REPO}.git"
 
 PID="$$"
-# Portable temp base: macOS sets TMPDIR; Linux often uses /tmp; Git Bash uses TMPDIR or /tmp.
-_RELEASE_TMP="${TMPDIR:-/tmp}"
-_RELEASE_TMP="${_RELEASE_TMP%/}"
+# Portable temp base. Git Bash/MSYS often maps bash `/tmp` and rsync's `/tmp` to
+# different Windows folders, so a release copy into TMPDIR=/tmp can look empty
+# to later steps. Prefer a plugin-local temp that both tools agree on.
+_RELEASE_TMP="${PLUGIN_DIR}/.release-tmp"
+mkdir -p "$_RELEASE_TMP"
 WORK_DIR="${_RELEASE_TMP}/${PLUGIN_SLUG}-release-${PID}"
 STAGE_ZIP_PARENT="${_RELEASE_TMP}/${PLUGIN_SLUG}-zipparent-${PID}"
 
@@ -103,13 +105,14 @@ if command -v rsync >/dev/null 2>&1; then
     --exclude='.git' \
     --exclude='node_modules' \
     --exclude='release.sh' \
+    --exclude='.release-tmp' \
     --exclude='.DS_Store' \
     --exclude='*.bak' \
     --exclude="${PLUGIN_SLUG}-*.zip" \
     "$PLUGIN_DIR/" "$WORK_DIR/"
 else
   cp -a "$PLUGIN_DIR"/. "$WORK_DIR"/
-  rm -rf "$WORK_DIR/.git" "$WORK_DIR/node_modules" 2>/dev/null || true
+  rm -rf "$WORK_DIR/.git" "$WORK_DIR/node_modules" "$WORK_DIR/.release-tmp" 2>/dev/null || true
   rm -f "$WORK_DIR/release.sh" "$WORK_DIR/.DS_Store" 2>/dev/null || true
   rm -f "$WORK_DIR/${PLUGIN_SLUG}"-*.zip 2>/dev/null || true
   find "$WORK_DIR" -name '*.bak' -type f -delete 2>/dev/null || true

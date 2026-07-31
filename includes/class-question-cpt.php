@@ -25,9 +25,13 @@ class Nera_SAW_Question_CPT {
 
 	const POST_TYPE = 'saw_question';
 
-	const META_ANSWERS = '_saw_answers';   // Serialized list of { text, correct }.
-	const META_LEVEL   = '_saw_level_key';
-	const META_SEED    = '_saw_seed_batch';
+	const META_ANSWERS      = '_saw_answers';       // Serialized list of { text, correct }.
+	const META_ANSWERS_TEXT = '_saw_answers_text';  // Derived plain-text mirror for list search (ADR 0016).
+	const META_LEVEL        = '_saw_level_key';
+	const META_SEED         = '_saw_seed_batch';
+	const META_IMPORT       = '_saw_import_batch';  // Import-batch stamp (CONTEXT.md → Import batch).
+
+	const OPTION_MIRROR_DONE = 'nera_saw_answers_mirror_done';
 
 	/**
 	 * When true, permanent deletion of a question is allowed (seeder wipe only).
@@ -49,14 +53,22 @@ class Nera_SAW_Question_CPT {
 		add_filter( 'post_row_actions', array( __CLASS__, 'row_actions' ), 10, 2 );
 		add_filter( 'bulk_actions-edit-' . self::POST_TYPE, array( __CLASS__, 'bulk_actions' ) );
 
-		// Question-bank listing: colour circle before the title + level filter.
+		// Question-bank listing: colour circle before the title + level/category filters
+		// + Level/Category columns + answer-text search (ADR 0016).
 		// The dot is injected client-side (the title column is escaped server-side,
 		// so an HTML span in the_title would render as literal text).
 		add_action( 'admin_footer-edit.php', array( __CLASS__, 'list_dot_script' ) );
 		add_action( 'restrict_manage_posts', array( __CLASS__, 'level_filter_dropdown' ) );
-		add_filter( 'parse_query', array( __CLASS__, 'apply_level_filter' ) );
+		add_action( 'restrict_manage_posts', array( __CLASS__, 'category_filter_dropdown' ) );
+		add_filter( 'parse_query', array( __CLASS__, 'apply_list_filters' ) );
+		add_filter( 'manage_' . self::POST_TYPE . '_posts_columns', array( __CLASS__, 'list_columns' ) );
+		add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( __CLASS__, 'render_list_column' ), 10, 2 );
+		add_filter( 'manage_edit-' . self::POST_TYPE . '_sortable_columns', array( __CLASS__, 'sortable_columns' ) );
+		add_filter( 'posts_clauses', array( __CLASS__, 'level_orderby_clauses' ), 10, 2 );
+		add_filter( 'posts_search', array( __CLASS__, 'extend_list_search' ), 10, 2 );
 
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'editor_assets' ) );
+		add_action( 'admin_init', array( __CLASS__, 'maybe_backfill_answers_mirror' ) );
 	}
 
 	/**
@@ -257,7 +269,71 @@ class Nera_SAW_Question_CPT {
 		}
 
 		update_post_meta( $post_id, self::META_ANSWERS, $answers );
+		self::sync_answers_text_mirror( $post_id, $answers );
 		update_post_meta( $post_id, self::META_LEVEL, isset( $_POST['saw_level'] ) ? sanitize_key( wp_unslash( $_POST['saw_level'] ) ) : '' );
+	}
+
+	/**
+	 * Rebuild the derived plain-text answers mirror used by list search (ADR 0016).
+	 * Call from every write path that touches answers.
+	 *
+	 * @param int        $post_id Post ID.
+	 * @param array|null $answers Answers list, or null to read from meta.
+	 */
+	public static function sync_answers_text_mirror( $post_id, $answers = null ) {
+		$post_id = (int) $post_id;
+		if ( $post_id < 1 ) {
+			return;
+		}
+		if ( null === $answers ) {
+			$answers = self::get_answers( $post_id );
+		}
+		$parts = array();
+		foreach ( (array) $answers as $a ) {
+			$text = isset( $a['text'] ) ? trim( (string) $a['text'] ) : '';
+			if ( '' !== $text ) {
+				$parts[] = $text;
+			}
+		}
+		update_post_meta( $post_id, self::META_ANSWERS_TEXT, implode( ' ', $parts ) );
+	}
+
+	/**
+	 * One-time chunked backfill of `_saw_answers_text` for existing Questions.
+	 */
+	public static function maybe_backfill_answers_mirror() {
+		if ( get_option( self::OPTION_MIRROR_DONE ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return;
+		}
+		$ids = get_posts(
+			array(
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'any',
+				'fields'                 => 'ids',
+				'posts_per_page'         => 100,
+				'no_found_rows'          => true,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => self::META_ANSWERS_TEXT,
+						'compare' => 'NOT EXISTS',
+					),
+				),
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+		if ( empty( $ids ) ) {
+			update_option( self::OPTION_MIRROR_DONE, 1, false );
+			return;
+		}
+		foreach ( $ids as $id ) {
+			self::sync_answers_text_mirror( (int) $id );
+		}
 	}
 
 	/**
@@ -401,30 +477,200 @@ class Nera_SAW_Question_CPT {
 	}
 
 	/**
-	 * Apply the difficulty-level filter to the question list query.
+	 * product_cat filter dropdown beside the level filter.
+	 *
+	 * @param string $post_type Current post type.
+	 */
+	public static function category_filter_dropdown( $post_type = '' ) {
+		if ( self::POST_TYPE !== $post_type || ! taxonomy_exists( 'product_cat' ) ) {
+			return;
+		}
+		$current = isset( $_GET['saw_product_cat'] ) ? (int) $_GET['saw_product_cat'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		wp_dropdown_categories(
+			array(
+				'show_option_all' => __( 'All categories', 'nera-strikeawin' ),
+				'taxonomy'        => 'product_cat',
+				'name'            => 'saw_product_cat',
+				'orderby'         => 'name',
+				'selected'        => $current,
+				'hierarchical'    => true,
+				'depth'           => 3,
+				'show_count'      => false,
+				'hide_empty'      => false,
+				'value_field'     => 'term_id',
+			)
+		);
+	}
+
+	/**
+	 * Apply level + category filters on the question list query.
 	 *
 	 * @param WP_Query $query Query.
 	 */
-	public static function apply_level_filter( $query ) {
-		global $pagenow;
-		if ( ! is_admin() || 'edit.php' !== $pagenow || ! $query->is_main_query() ) {
-			return;
-		}
-		if ( self::POST_TYPE !== ( $query->query_vars['post_type'] ?? '' ) ) {
+	public static function apply_list_filters( $query ) {
+		if ( ! self::is_bank_list_query( $query ) ) {
 			return;
 		}
 		$level = isset( $_GET['saw_level'] ) ? sanitize_key( wp_unslash( $_GET['saw_level'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( '' !== $level ) {
-			$query->set(
-				'meta_query',
-				array(
-					array(
-						'key'   => self::META_LEVEL,
-						'value' => $level,
-					),
-				)
+			$meta_query   = (array) $query->get( 'meta_query' );
+			$meta_query[] = array(
+				'key'   => self::META_LEVEL,
+				'value' => $level,
 			);
+			$query->set( 'meta_query', $meta_query );
 		}
+
+		$cat = isset( $_GET['saw_product_cat'] ) ? (int) $_GET['saw_product_cat'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $cat > 0 && taxonomy_exists( 'product_cat' ) ) {
+			$tax_query   = (array) $query->get( 'tax_query' );
+			$tax_query[] = array(
+				'taxonomy' => 'product_cat',
+				'field'    => 'term_id',
+				'terms'    => array( $cat ),
+			);
+			$query->set( 'tax_query', $tax_query );
+		}
+	}
+
+	/**
+	 * Add Level + Category columns to the question list.
+	 *
+	 * @param array $columns Columns.
+	 * @return array
+	 */
+	public static function list_columns( $columns ) {
+		$out = array();
+		foreach ( $columns as $key => $label ) {
+			$out[ $key ] = $label;
+			if ( 'title' === $key ) {
+				$out['saw_level']    = __( 'Level', 'nera-strikeawin' );
+				$out['saw_category'] = __( 'Category', 'nera-strikeawin' );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Render Level / Category column cells.
+	 *
+	 * @param string $column  Column key.
+	 * @param int    $post_id Post ID.
+	 */
+	public static function render_list_column( $column, $post_id ) {
+		if ( 'saw_level' === $column ) {
+			$key   = (string) get_post_meta( (int) $post_id, self::META_LEVEL, true );
+			$level = $key ? Nera_SAW_Constants::level( $key ) : null;
+			echo $level ? esc_html( $level['label'] ) : '&mdash;';
+			return;
+		}
+		if ( 'saw_category' === $column ) {
+			if ( ! taxonomy_exists( 'product_cat' ) ) {
+				echo '&mdash;';
+				return;
+			}
+			$terms = get_the_terms( (int) $post_id, 'product_cat' );
+			if ( empty( $terms ) || is_wp_error( $terms ) ) {
+				echo '&mdash;';
+				return;
+			}
+			$names = array();
+			foreach ( $terms as $term ) {
+				$names[] = $term->name;
+			}
+			echo esc_html( implode( ', ', $names ) );
+		}
+	}
+
+	/**
+	 * Make the Level column sortable (by ladder rank).
+	 *
+	 * @param array $columns Sortable columns.
+	 * @return array
+	 */
+	public static function sortable_columns( $columns ) {
+		$columns['saw_level'] = 'saw_level';
+		return $columns;
+	}
+
+	/**
+	 * ORDER BY ladder rank when sorting the Level column.
+	 *
+	 * @param array    $clauses Query clauses.
+	 * @param WP_Query $query   Query.
+	 * @return array
+	 */
+	public static function level_orderby_clauses( $clauses, $query ) {
+		global $wpdb;
+		if ( ! self::is_bank_list_query( $query ) ) {
+			return $clauses;
+		}
+		if ( 'saw_level' !== $query->get( 'orderby' ) ) {
+			return $clauses;
+		}
+		$order = ( 'DESC' === strtoupper( (string) $query->get( 'order' ) ) ) ? 'DESC' : 'ASC';
+		$cases = array( "WHEN '' THEN 9999" );
+		foreach ( Nera_SAW_Constants::ladder( true ) as $lv ) {
+			$cases[] = $wpdb->prepare( 'WHEN %s THEN %d', $lv['key'], (int) $lv['rank'] );
+		}
+		$join = " LEFT JOIN {$wpdb->postmeta} AS saw_lvl ON ({$wpdb->posts}.ID = saw_lvl.post_id AND saw_lvl.meta_key = '" . esc_sql( self::META_LEVEL ) . "') ";
+		if ( false === strpos( $clauses['join'], 'saw_lvl' ) ) {
+			$clauses['join'] .= $join;
+		}
+		$clauses['orderby'] = 'CASE saw_lvl.meta_value ' . implode( ' ', $cases ) . ' ELSE 9998 END ' . $order;
+		return $clauses;
+	}
+
+	/**
+	 * Extend the list search to also match the answers-text mirror (ADR 0016).
+	 *
+	 * @param string   $search Search SQL.
+	 * @param WP_Query $query  Query.
+	 * @return string
+	 */
+	public static function extend_list_search( $search, $query ) {
+		global $wpdb;
+		if ( ! self::is_bank_list_query( $query ) ) {
+			return $search;
+		}
+		$term = trim( (string) $query->get( 's' ) );
+		if ( '' === $term ) {
+			return $search;
+		}
+		$like = '%' . $wpdb->esc_like( $term ) . '%';
+		return $wpdb->prepare(
+			" AND (
+				{$wpdb->posts}.post_title LIKE %s
+				OR {$wpdb->posts}.post_content LIKE %s
+				OR EXISTS (
+					SELECT 1 FROM {$wpdb->postmeta} saw_ans
+					WHERE saw_ans.post_id = {$wpdb->posts}.ID
+					  AND saw_ans.meta_key = %s
+					  AND saw_ans.meta_value LIKE %s
+				)
+			)",
+			$like,
+			$like,
+			self::META_ANSWERS_TEXT,
+			$like
+		);
+	}
+
+	/**
+	 * Whether this is the main Questions list table query.
+	 *
+	 * @param WP_Query $query Query.
+	 * @return bool
+	 */
+	public static function is_bank_list_query( $query ) {
+		global $pagenow;
+		if ( ! is_admin() || ! $query instanceof WP_Query || ! $query->is_main_query() ) {
+			return false;
+		}
+		if ( 'edit.php' !== $pagenow ) {
+			return false;
+		}
+		return self::POST_TYPE === ( $query->get( 'post_type' ) ?: ( $query->query_vars['post_type'] ?? '' ) );
 	}
 
 	/**

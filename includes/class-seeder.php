@@ -27,6 +27,8 @@ class Nera_SAW_Seeder {
 	const OPTION_ORDERS   = 'nera_saw_demo_orders';
 	const OPTION_USERS    = 'nera_saw_demo_users';
 	const OPTION_SEED_OPTS = 'nera_saw_seed_opts';
+	/** Transient: question texts used during the in-progress seed run (dedupe). */
+	const TRANSIENT_USED  = 'nera_saw_seed_used_texts';
 
 	const QUESTIONS_PER_LEVEL     = 8;
 	const DEFAULT_PRODUCTS        = 1;
@@ -85,7 +87,9 @@ class Nera_SAW_Seeder {
 		$dist_min = min( $dist_min, $per_level );
 		$dist_max = min( $dist_max, $per_level );
 
+		self::begin_questions_seed();
 		$questions_created = self::seed_questions( $per_level );
+		delete_transient( self::used_transient_key() );
 		$messages          = array(
 			sprintf(
 				/* translators: %d: question count */
@@ -217,6 +221,7 @@ class Nera_SAW_Seeder {
 	 */
 	public static function phase_questions( array $opts ) {
 		$per_level = isset( $opts['questions_per_level'] ) ? max( 1, (int) $opts['questions_per_level'] ) : self::QUESTIONS_PER_LEVEL;
+		self::begin_questions_seed();
 		return (int) self::seed_questions( $per_level );
 	}
 
@@ -224,7 +229,7 @@ class Nera_SAW_Seeder {
 	 * Phase: seed a chunk of the question bank (browser-driven, resumable). The
 	 * offset is a linear cursor across the whole bank (levels × per_level); each
 	 * call inserts up to $limit questions and the caller loops until offset reaches
-	 * questions_total().
+	 * questions_total(). Offset 0 wipes prior demo questions and resets dedupe state.
 	 *
 	 * @param array $opts   Seed options.
 	 * @param int   $offset Questions already seeded this run.
@@ -233,7 +238,47 @@ class Nera_SAW_Seeder {
 	 */
 	public static function phase_questions_chunk( array $opts, $offset, $limit ) {
 		$per_level = isset( $opts['questions_per_level'] ) ? max( 1, (int) $opts['questions_per_level'] ) : self::QUESTIONS_PER_LEVEL;
-		return (int) self::seed_questions_slice( $per_level, (int) $offset, (int) $limit );
+		$offset    = (int) $offset;
+		if ( 0 === $offset ) {
+			self::begin_questions_seed();
+		}
+		$created = (int) self::seed_questions_slice( $per_level, $offset, (int) $limit );
+		if ( ( $offset + (int) $limit ) >= self::questions_total( $per_level ) ) {
+			delete_transient( self::used_transient_key() );
+		}
+		return $created;
+	}
+
+	/**
+	 * Start a fresh question-bank seed: remove prior demo questions and clear the
+	 * in-run dedupe map so Seed never stacks duplicates on top of an old bank.
+	 */
+	public static function begin_questions_seed() {
+		self::wipe_questions();
+		delete_transient( self::used_transient_key() );
+		set_transient( self::used_transient_key(), array(), HOUR_IN_SECONDS );
+	}
+
+	/**
+	 * @return string
+	 */
+	private static function used_transient_key() {
+		return self::TRANSIENT_USED . '_' . get_current_user_id();
+	}
+
+	/**
+	 * @return array<string,bool>
+	 */
+	private static function load_used_texts() {
+		$raw = get_transient( self::used_transient_key() );
+		return is_array( $raw ) ? $raw : array();
+	}
+
+	/**
+	 * @param array<string,bool> $used Used map.
+	 */
+	private static function save_used_texts( array $used ) {
+		set_transient( self::used_transient_key(), $used, HOUR_IN_SECONDS );
 	}
 
 	/**
@@ -389,10 +434,8 @@ class Nera_SAW_Seeder {
 	 * sequence of `count(ladder) × per_level` questions ordered level-by-level;
 	 * offset O maps to level intdiv(O, per_level), position O % per_level. Slicing
 	 * lets the admin seed large banks in chunks without a single request timing out
-	 * (each question is a full wp_insert_post + meta + term). Curated questions are
-	 * keyed by position so slicing never disturbs them; the in-memory dedupe for
-	 * generated overflow is per-chunk (rare cross-chunk repeats are acceptable for
-	 * demo data — ADR-free, matches the submissions-chunk approach).
+	 * (each question is a full wp_insert_post + meta + term). Question texts are
+	 * deduped across the whole seed run (all chunks and levels) via a transient map.
 	 *
 	 * @param int $per_level Questions per level.
 	 * @param int $offset    Linear start index (inclusive).
@@ -414,31 +457,31 @@ class Nera_SAW_Seeder {
 			return 0;
 		}
 
-		$pool          = self::trivia_pool();
-		$created       = 0;
-		$current_level = -1;
-		$used          = array(); // question text => true, dedupe within a level (per chunk).
+		$pool    = self::trivia_pool();
+		$created = 0;
+		$used    = self::load_used_texts();
 
 		for ( $o = $offset; $o < $end; $o++ ) {
-			$rank_i = intdiv( $o, $per_level );
-			$i      = $o % $per_level;
-			if ( $rank_i !== $current_level ) {
-				$current_level = $rank_i;
-				$used          = array();
-			}
-
+			$rank_i  = intdiv( $o, $per_level );
+			$i       = $o % $per_level;
 			$level   = $levels[ $rank_i ];
 			$curated = isset( $pool[ $rank_i ] ) ? $pool[ $rank_i ] : array();
 
+			$text  = '';
+			$built = array();
+
 			if ( isset( $curated[ $i ] ) ) {
-				// Curated trivia: keep the text, randomise the correct position.
-				$q     = $curated[ $i ];
-				$text  = (string) $q['q'];
-				$built = self::build_answers( $q['a'], (int) $q['c'] );
-			} else {
-				// Beyond the curated set: generate a real, unique question graded
-				// to this level's difficulty rank (no placeholder text).
-				$gen   = self::generate_question( $rank_i, $i, $used );
+				$q    = $curated[ $i ];
+				$cand = (string) $q['q'];
+				if ( '' !== $cand && ! isset( $used[ $cand ] ) ) {
+					$text  = $cand;
+					$built = self::build_answers( $q['a'], (int) $q['c'] );
+				}
+			}
+
+			if ( '' === $text ) {
+				// Generated (or curated text already used): unique across the whole run.
+				$gen   = self::generate_question( $rank_i, $o, $used );
 				$text  = (string) $gen['q'];
 				$built = self::build_answers( $gen['a'], (int) $gen['c'] );
 			}
@@ -456,6 +499,8 @@ class Nera_SAW_Seeder {
 			);
 			$created++;
 		}
+
+		self::save_used_texts( $used );
 		return $created;
 	}
 
@@ -493,18 +538,18 @@ class Nera_SAW_Seeder {
 	}
 
 	/**
-	 * Generate one real, unique question for a difficulty rank. Retries a few
-	 * times to avoid duplicating a question already used at this level, then
-	 * falls back to a wide-entropy arithmetic question guaranteed to be unique.
+	 * Generate one real, unique question for a difficulty rank. Retries to avoid
+	 * any text already used in this seed run, then falls back to a wide-entropy
+	 * arithmetic question guaranteed unique via the linear ordinal.
 	 *
 	 * @param int   $rank    0-based difficulty rank (0 = easiest).
-	 * @param int   $ordinal Position within the level (adds entropy).
+	 * @param int   $ordinal Global linear position (adds entropy + unique fallback).
 	 * @param array $used    Map of already-used question texts.
 	 * @return array { q, a: string[], c: int }
 	 */
 	private static function generate_question( $rank, $ordinal, array $used ) {
-		for ( $attempt = 0; $attempt < 12; $attempt++ ) {
-			$gen = self::gen_by_rank( (int) $rank, (int) $ordinal + $attempt );
+		for ( $attempt = 0; $attempt < 24; $attempt++ ) {
+			$gen = self::gen_by_rank( (int) $rank, (int) $ordinal + $attempt, $used );
 			if ( '' !== (string) $gen['q'] && ! isset( $used[ $gen['q'] ] ) ) {
 				return $gen;
 			}
@@ -516,11 +561,12 @@ class Nera_SAW_Seeder {
 	 * Dispatch to a generator appropriate for the rank, rotating by ordinal so a
 	 * level mixes question shapes.
 	 *
-	 * @param int $rank    Difficulty rank.
-	 * @param int $ordinal Rotation seed.
+	 * @param int   $rank    Difficulty rank.
+	 * @param int   $ordinal Rotation seed.
+	 * @param array $used    Already-used question texts (for pool-based gens).
 	 * @return array { q, a, c }
 	 */
-	private static function gen_by_rank( $rank, $ordinal ) {
+	private static function gen_by_rank( $rank, $ordinal, array $used = array() ) {
 		switch ( (int) $rank ) {
 			case 0:
 				$gens = array( 'gen_add', 'gen_subtract', 'gen_times_table' );
@@ -539,6 +585,9 @@ class Nera_SAW_Seeder {
 				break;
 		}
 		$method = $gens[ $ordinal % count( $gens ) ];
+		if ( in_array( $method, array( 'gen_capital', 'gen_element_symbol', 'gen_atomic_number' ), true ) ) {
+			return self::$method( $ordinal, $used );
+		}
 		return self::$method( $ordinal );
 	}
 
@@ -679,65 +728,76 @@ class Nera_SAW_Seeder {
 		return array( 'q' => sprintf( 'What is 2 to the power of %d (2^%d)?', $n, $n ), 'a' => $c['a'], 'c' => $c['c'] );
 	}
 
-	/** Hard/Very hard: capital of a country. */
-	private static function gen_capital( $ordinal ) {
+	/** Hard/Very hard: capital of a country (skips texts already used this seed). */
+	private static function gen_capital( $ordinal, array $used = array() ) {
 		$map  = self::capitals();
 		$keys = array_keys( $map );
-		$k    = $keys[ wp_rand( 0, count( $keys ) - 1 ) ];
-		$correct = $map[ $k ];
-
-		$others = array_values( array_diff( array_values( $map ), array( $correct ) ) );
-		shuffle( $others );
-		$distractors = array_slice( $others, 0, 3 );
-
-		return array(
-			'q' => sprintf( 'What is the capital of %s?', $k ),
-			'a' => array_merge( array( $correct ), $distractors ),
-			'c' => 0,
-		);
+		shuffle( $keys );
+		foreach ( $keys as $k ) {
+			$q = sprintf( 'What is the capital of %s?', $k );
+			if ( isset( $used[ $q ] ) ) {
+				continue;
+			}
+			$correct = $map[ $k ];
+			$others  = array_values( array_diff( array_values( $map ), array( $correct ) ) );
+			shuffle( $others );
+			return array(
+				'q' => $q,
+				'a' => array_merge( array( $correct ), array_slice( $others, 0, 3 ) ),
+				'c' => 0,
+			);
+		}
+		return array( 'q' => '', 'a' => array( '0', '1', '2', '3' ), 'c' => 0 );
 	}
 
 	/** Very hard/Expert: chemical symbol of an element. */
-	private static function gen_element_symbol( $ordinal ) {
+	private static function gen_element_symbol( $ordinal, array $used = array() ) {
 		$map  = self::elements();
-		$keys = array_keys( $map ); // element name.
-		$k    = $keys[ wp_rand( 0, count( $keys ) - 1 ) ];
-		$correct = $map[ $k ]['symbol'];
-
-		$others = array();
-		foreach ( $map as $name => $data ) {
-			if ( $data['symbol'] !== $correct ) {
-				$others[] = $data['symbol'];
+		$keys = array_keys( $map );
+		shuffle( $keys );
+		foreach ( $keys as $k ) {
+			$q = sprintf( 'What is the chemical symbol for %s?', $k );
+			if ( isset( $used[ $q ] ) ) {
+				continue;
 			}
+			$correct = $map[ $k ]['symbol'];
+			$others  = array();
+			foreach ( $map as $name => $data ) {
+				if ( $data['symbol'] !== $correct ) {
+					$others[] = $data['symbol'];
+				}
+			}
+			$others = array_values( array_unique( $others ) );
+			shuffle( $others );
+			return array(
+				'q' => $q,
+				'a' => array_merge( array( $correct ), array_slice( $others, 0, 3 ) ),
+				'c' => 0,
+			);
 		}
-		$others = array_values( array_unique( $others ) );
-		shuffle( $others );
-		$distractors = array_slice( $others, 0, 3 );
-
-		return array(
-			'q' => sprintf( 'What is the chemical symbol for %s?', $k ),
-			'a' => array_merge( array( $correct ), $distractors ),
-			'c' => 0,
-		);
+		return array( 'q' => '', 'a' => array( '0', '1', '2', '3' ), 'c' => 0 );
 	}
 
 	/** Expert: element by atomic number. */
-	private static function gen_atomic_number( $ordinal ) {
+	private static function gen_atomic_number( $ordinal, array $used = array() ) {
 		$map  = self::elements();
 		$keys = array_keys( $map );
-		$k    = $keys[ wp_rand( 0, count( $keys ) - 1 ) ];
-		$correct = $k;
-		$number  = $map[ $k ]['z'];
-
-		$others = array_values( array_diff( $keys, array( $correct ) ) );
-		shuffle( $others );
-		$distractors = array_slice( $others, 0, 3 );
-
-		return array(
-			'q' => sprintf( 'Which element has the atomic number %d?', (int) $number ),
-			'a' => array_merge( array( $correct ), $distractors ),
-			'c' => 0,
-		);
+		shuffle( $keys );
+		foreach ( $keys as $k ) {
+			$number = $map[ $k ]['z'];
+			$q      = sprintf( 'Which element has the atomic number %d?', (int) $number );
+			if ( isset( $used[ $q ] ) ) {
+				continue;
+			}
+			$others = array_values( array_diff( $keys, array( $k ) ) );
+			shuffle( $others );
+			return array(
+				'q' => $q,
+				'a' => array_merge( array( $k ), array_slice( $others, 0, 3 ) ),
+				'c' => 0,
+			);
+		}
+		return array( 'q' => '', 'a' => array( '0', '1', '2', '3' ), 'c' => 0 );
 	}
 
 	/** Expert: number to Roman numerals. */
@@ -764,12 +824,17 @@ class Nera_SAW_Seeder {
 		);
 	}
 
-	/** Guaranteed-unique wide-range arithmetic fallback. */
+	/** Guaranteed-unique wide-range arithmetic fallback (ordinal baked into operands). */
 	private static function gen_arithmetic_wide( $ordinal ) {
-		$a = wp_rand( 100, 999 );
-		$b = wp_rand( 100, 999 );
-		$c = self::numeric_choices( $a + $b, 30 );
-		return array( 'q' => sprintf( 'What is %d + %d?', $a, $b ), 'a' => $c['a'], 'c' => $c['c'] );
+		$ordinal = max( 0, (int) $ordinal );
+		$a       = 10000 + $ordinal;
+		$b       = 3 + ( $ordinal % 97 );
+		$c       = self::numeric_choices( $a + $b, 30 );
+		return array(
+			'q' => sprintf( 'What is %d + %d?', $a, $b ),
+			'a' => $c['a'],
+			'c' => $c['c'],
+		);
 	}
 
 	/**

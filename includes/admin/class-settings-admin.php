@@ -65,14 +65,11 @@ class Nera_SAW_Settings_Admin {
 		}
 		check_admin_referer( self::NONCE );
 
-		$hard_min = Nera_SAW_Constants::HARD_TIMER_MIN_SECONDS;
-		$hard_max = Nera_SAW_Constants::HARD_TIMER_MAX_SECONDS;
-
 		$timer_min = isset( $_POST['timer_min'] ) ? (int) $_POST['timer_min'] : Nera_SAW_Constants::TIMER_MIN_SECONDS;
 		$timer_max = isset( $_POST['timer_max'] ) ? (int) $_POST['timer_max'] : Nera_SAW_Constants::TIMER_MAX_SECONDS;
 		$timer_warn = isset( $_POST['timer_warn_seconds'] ) ? (int) $_POST['timer_warn_seconds'] : 3;
-		$timer_min = max( $hard_min, min( $hard_max, $timer_min ) );
-		$timer_max = max( $hard_min, min( $hard_max, $timer_max ) );
+		$timer_min = max( 1, $timer_min );
+		$timer_max = max( 1, $timer_max );
 		if ( $timer_max < $timer_min ) {
 			$timer_max = $timer_min;
 		}
@@ -158,27 +155,16 @@ class Nera_SAW_Settings_Admin {
 		// --- Timer bounds card ---------------------------------------------
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Per-question timer bounds', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html(
-			sprintf(
-				/* translators: %1$d hard min, %2$d hard max */
-				__( 'The window each competition\'s per-question timer may be set within. Fenced by the fixed safety clamp %1$d–%2$ds.', 'nera-strikeawin' ),
-				Nera_SAW_Constants::HARD_TIMER_MIN_SECONDS,
-				Nera_SAW_Constants::HARD_TIMER_MAX_SECONDS
-			)
-		) . '</p>';
+		echo '<p class="saw-muted">' . esc_html__( 'The window each competition\'s per-question timer may be set within. Minimum is at least 1 second; maximum must be greater than or equal to the minimum.', 'nera-strikeawin' ) . '</p>';
 		echo '<div class="saw-field-row">';
 		printf(
-			'<label class="saw-field"><span>%s</span><input type="number" name="timer_min" min="%d" max="%d" value="%d"></label>',
+			'<label class="saw-field"><span>%s</span><input type="number" name="timer_min" min="1" value="%d"></label>',
 			esc_html__( 'Minimum (s)', 'nera-strikeawin' ),
-			(int) Nera_SAW_Constants::HARD_TIMER_MIN_SECONDS,
-			(int) Nera_SAW_Constants::HARD_TIMER_MAX_SECONDS,
 			(int) $s['timer_min']
 		);
 		printf(
-			'<label class="saw-field"><span>%s</span><input type="number" name="timer_max" min="%d" max="%d" value="%d"></label>',
+			'<label class="saw-field"><span>%s</span><input type="number" name="timer_max" min="1" value="%d"></label>',
 			esc_html__( 'Maximum (s)', 'nera-strikeawin' ),
-			(int) Nera_SAW_Constants::HARD_TIMER_MIN_SECONDS,
-			(int) Nera_SAW_Constants::HARD_TIMER_MAX_SECONDS,
 			(int) $s['timer_max']
 		);
 		printf(

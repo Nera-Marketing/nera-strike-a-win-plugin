@@ -22,17 +22,23 @@ class Nera_SAW_Constants {
 	/* ---------------------------------------------------------------------
 	 * Per-question timer window (seconds).
 	 *
-	 * The WORKING bounds an admin may tune the per-question timer within are
-	 * configured on the Settings page (see settings()/timer_min()/timer_max()).
+	 * Working min/max live in admin Settings (see settings()/timer_min()/timer_max()).
 	 * TIMER_MIN/MAX below are only the DEFAULT working bounds used to seed those
-	 * settings the first time. The HARD_* clamp is a non-editable safety fence:
-	 * no admin setting or per-product timer may ever fall outside it (ADR 0005).
+	 * settings the first time. There is no separate hard code clamp — Settings
+	 * values are the authority (min ≥ 1, max ≥ min). See ADR 0005.
 	 * ------------------------------------------------------------------- */
 	const TIMER_MIN_SECONDS = 5;  // Default working min (seeds settings).
 	const TIMER_MAX_SECONDS = 12; // Default working max (seeds settings).
 
-	const HARD_TIMER_MIN_SECONDS = 3;  // Absolute floor; not editable anywhere.
-	const HARD_TIMER_MAX_SECONDS = 60; // Absolute ceiling; not editable anywhere.
+	/**
+	 * @deprecated No longer used as a fence; retained so older references do not fatals.
+	 */
+	const HARD_TIMER_MIN_SECONDS = 1;
+
+	/**
+	 * @deprecated No longer used as a fence; retained so older references do not fatals.
+	 */
+	const HARD_TIMER_MAX_SECONDS = 86400;
 
 	/**
 	 * Server-side allowance (seconds) so a buzzer-beater answer is not killed by
@@ -178,27 +184,25 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Admin-configured working timer minimum, fenced by the hard clamp.
+	 * Admin-configured working timer minimum (seconds). Floor is 1.
 	 *
 	 * @return int
 	 */
 	public static function timer_min() {
 		$s = self::settings();
 		$v = isset( $s['timer_min'] ) ? (int) $s['timer_min'] : self::TIMER_MIN_SECONDS;
-		return max( self::HARD_TIMER_MIN_SECONDS, min( self::HARD_TIMER_MAX_SECONDS, $v ) );
+		return max( 1, $v );
 	}
 
 	/**
-	 * Admin-configured working timer maximum, fenced by the hard clamp and never
-	 * below the working minimum.
+	 * Admin-configured working timer maximum (seconds). Never below the working minimum.
 	 *
 	 * @return int
 	 */
 	public static function timer_max() {
 		$s = self::settings();
 		$v = isset( $s['timer_max'] ) ? (int) $s['timer_max'] : self::TIMER_MAX_SECONDS;
-		$v = max( self::HARD_TIMER_MIN_SECONDS, min( self::HARD_TIMER_MAX_SECONDS, $v ) );
-		return max( self::timer_min(), $v );
+		return max( self::timer_min(), max( 1, $v ) );
 	}
 
 	/**
@@ -302,8 +306,7 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Clamp a proposed per-question timer to the working window (which is itself
-	 * fenced by the hard clamp).
+	 * Clamp a proposed per-question timer to the working Settings window.
 	 *
 	 * @param int $seconds Proposed timer.
 	 * @return int
