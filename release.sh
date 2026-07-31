@@ -55,6 +55,8 @@ msys_win_path() {
 
 cleanup() {
   rm -rf "$WORK_DIR" "$STAGE_ZIP_PARENT" 2>/dev/null || true
+  # Drop empty plugin-local temp root if nothing else is in it.
+  rmdir "$_RELEASE_TMP" 2>/dev/null || true
 }
 trap cleanup EXIT
 
