@@ -145,7 +145,10 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Default feature flags (admin-tunable on the demo page).
+	 * Default feature flags. Both are edited on the demo page (Tools → Strike A Win
+	 * Demo → Feature flags); Settings owns only the Answer reveal's hold duration.
+	 * save_feature_flags() is still a partial write, so a future second screen can
+	 * own a flag without resetting the others.
 	 *
 	 * @return array
 	 */

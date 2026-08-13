@@ -92,12 +92,14 @@ class Nera_SAW_Seeder_Admin {
 		}
 		check_admin_referer( self::FLAGS_NONCE );
 
-		// Partial write — only the flags this form renders. quiz_feedback moved to
-		// Settings → Answer reveal (this page is hidden outside non-production, so a
-		// live gameplay toggle was unreachable from here).
+		// Partial write — only the flags this form renders (see save_feature_flags()).
+		// Both flags live here by product decision; note this page is dropped from the
+		// Tools menu unless the demo seeder is enabled, so on a production site the
+		// quiz_feedback switch is reachable only by URL.
 		Nera_SAW_Constants::save_feature_flags(
 			array(
-				'frontend_ui' => isset( $_POST['frontend_ui'] ),
+				'frontend_ui'   => isset( $_POST['frontend_ui'] ),
+				'quiz_feedback' => isset( $_POST['quiz_feedback'] ),
 			)
 		);
 
@@ -513,8 +515,10 @@ class Nera_SAW_Seeder_Admin {
 		echo '<li><label><input type="checkbox" name="frontend_ui" value="1"' . checked( ! empty( $flags['frontend_ui'] ), true, false ) . '> ';
 		echo esc_html__( 'Frontend UI overrides', 'nera-strikeawin' ) . '</label>';
 		echo '<p class="description">' . esc_html__( 'Product tier widget, cart/checkout tier labels, and my-account order tier line.', 'nera-strikeawin' ) . '</p></li>';
+		echo '<li><label><input type="checkbox" name="quiz_feedback" value="1"' . checked( ! empty( $flags['quiz_feedback'] ), true, false ) . '> ';
+		echo esc_html__( 'Quiz answer feedback', 'nera-strikeawin' ) . '</label>';
+		echo '<p class="description">' . esc_html__( 'The Answer reveal: after a player submits, the question is held on screen with the correct option green and a wrong pick red, and the ticket total updates. Unticked, the quiz moves straight to the next question. Set how long it holds on Strike A Win → Settings → Answer reveal.', 'nera-strikeawin' ) . '</p></li>';
 		echo '</ul>';
-		echo '<p class="description">' . esc_html__( 'Looking for quiz answer feedback? It now lives on Strike A Win → Settings → Answer reveal, so it stays reachable on a production site.', 'nera-strikeawin' ) . '</p>';
 		submit_button( __( 'Save feature flags', 'nera-strikeawin' ), 'secondary', 'submit', false );
 		echo '</form></div>';
 

@@ -107,9 +107,8 @@ class Nera_SAW_Settings_Admin {
 			)
 		);
 
-		// Answer reveal on/off. Partial write: this form does not render the other
-		// feature flags, so it must not send them (see save_feature_flags()).
-		Nera_SAW_Constants::save_feature_flags( array( 'quiz_feedback' => isset( $_POST['quiz_feedback'] ) ) );
+		// No feature-flag write here: this form renders none of them. The Answer
+		// reveal on/off switch is a feature flag and lives on the demo page.
 
 		// Play page override (0 = revert to auto-created page).
 		if ( isset( $_POST['play_page_id'] ) ) {
@@ -189,9 +188,17 @@ class Nera_SAW_Settings_Admin {
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Answer reveal', 'nera-strikeawin' ) . '</h2>';
 		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated. The player can skip the wait with the Next button.', 'nera-strikeawin' ) . '</p>';
-		echo '<p><label><input type="checkbox" name="quiz_feedback" value="1"' . checked( Nera_SAW_Constants::quiz_feedback_enabled(), true, false ) . '> ';
-		echo esc_html__( 'Show the answer reveal after each question', 'nera-strikeawin' ) . '</label>';
-		echo '<span class="description"> — ' . esc_html__( 'unticked, the quiz moves straight to the next question and the player is never told whether they were right.', 'nera-strikeawin' ) . '</span></p>';
+		// The on/off switch lives with the other feature flags on the demo page; this
+		// card owns only the duration. If the reveal is not appearing, that switch is
+		// the first thing to check.
+		if ( ! Nera_SAW_Constants::quiz_feedback_enabled() ) {
+			echo '<p class="saw-muted"><strong>' . esc_html__( 'Answer feedback is currently switched off, so this hold does nothing.', 'nera-strikeawin' ) . '</strong> ';
+			printf(
+				'<a href="%s">%s</a></p>',
+				esc_url( admin_url( 'tools.php?page=' . Nera_SAW_Seeder_Admin::SLUG ) ),
+				esc_html__( 'Turn it on under Feature flags →', 'nera-strikeawin' )
+			);
+		}
 		echo '<div class="saw-field-row">';
 		printf(
 			'<label class="saw-field"><span>%s</span><input type="number" name="feedback_seconds" min="%d" max="%d" value="%d"></label>',

@@ -1,15 +1,15 @@
 {
 	"name": "Nera – Strike A Win",
 	"slug": "nera-strike-a-win-plugin",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"homepage": "https://github.com/Nera-Marketing/nera-strike-a-win-plugin",
-	"download_url": "https://github.com/Nera-Marketing/nera-strike-a-win-plugin/releases/download/v1.0.4/nera-strike-a-win-plugin-1.0.4.zip",
+	"download_url": "https://github.com/Nera-Marketing/nera-strike-a-win-plugin/releases/download/v1.0.5/nera-strike-a-win-plugin-1.0.5.zip",
 	"author": "Nera",
 	"author_homepage": "https://github.com/Nera-Marketing",
 	"requires": "6.0",
 	"tested": "6.8",
 	"requires_php": "7.4",
-	"last_updated": "2026-08-13 05:01:24",
+	"last_updated": "2026-08-13 05:57:16",
 	"upgrade_notice": "Update to the latest release for bug fixes and improvements.",
 	"sections": {
 		"description": "<p>Skill-based prize-competition quiz mechanic: paid entry, a timed increasing-difficulty quiz, and earned Lottery for WooCommerce tickets entered into the competition draw. Server-scored with a no-oversell reservation pool, compliance-locked for the Gambling Act 2005 skill exemption.</p><p>Requires <strong>WooCommerce</strong> (and <strong>Lottery for WooCommerce</strong> for ticket minting).</p>",
