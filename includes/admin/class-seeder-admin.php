@@ -92,10 +92,12 @@ class Nera_SAW_Seeder_Admin {
 		}
 		check_admin_referer( self::FLAGS_NONCE );
 
+		// Partial write — only the flags this form renders. quiz_feedback moved to
+		// Settings → Answer reveal (this page is hidden outside non-production, so a
+		// live gameplay toggle was unreachable from here).
 		Nera_SAW_Constants::save_feature_flags(
 			array(
-				'frontend_ui'   => isset( $_POST['frontend_ui'] ),
-				'quiz_feedback' => isset( $_POST['quiz_feedback'] ),
+				'frontend_ui' => isset( $_POST['frontend_ui'] ),
 			)
 		);
 
@@ -511,10 +513,8 @@ class Nera_SAW_Seeder_Admin {
 		echo '<li><label><input type="checkbox" name="frontend_ui" value="1"' . checked( ! empty( $flags['frontend_ui'] ), true, false ) . '> ';
 		echo esc_html__( 'Frontend UI overrides', 'nera-strikeawin' ) . '</label>';
 		echo '<p class="description">' . esc_html__( 'Product tier widget, cart/checkout tier labels, and my-account order tier line.', 'nera-strikeawin' ) . '</p></li>';
-		echo '<li><label><input type="checkbox" name="quiz_feedback" value="1"' . checked( ! empty( $flags['quiz_feedback'] ), true, false ) . '> ';
-		echo esc_html__( 'Quiz answer feedback', 'nera-strikeawin' ) . '</label>';
-		echo '<p class="description">' . esc_html__( 'Brief correct / wrong screen between questions during quiz play.', 'nera-strikeawin' ) . '</p></li>';
 		echo '</ul>';
+		echo '<p class="description">' . esc_html__( 'Looking for quiz answer feedback? It now lives on Strike A Win → Settings → Answer reveal, so it stays reachable on a production site.', 'nera-strikeawin' ) . '</p>';
 		submit_button( __( 'Save feature flags', 'nera-strikeawin' ), 'secondary', 'submit', false );
 		echo '</form></div>';
 

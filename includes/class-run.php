@@ -260,16 +260,23 @@ class Nera_SAW_Run {
 			}
 		}
 
+		// The player-facing face of the slot's difficulty Level: its name, and its
+		// ladder colour corrected for use as text (see level_text_color()). Safe to
+		// disclose — difficulty says nothing about which answer is correct.
+		$level_def = Nera_SAW_Constants::level( $slot->level_key );
+
 		return array(
-			'run_id'        => (int) $run_id,
-			'slot_no'       => (int) $slot->slot_no,
-			'total_slots'   => (int) self::count_slots( $run_id ),
-			'level'         => $slot->level_key,
-			'question'      => (string) $snapshot['question_text'],
-			'answers'       => $answers,
-			'timer_seconds' => (int) $timer,
-			'seconds_left'  => (int) $remaining,
-			'spins_so_far'  => (int) self::spins_so_far( $run_id ),
+			'run_id'           => (int) $run_id,
+			'slot_no'          => (int) $slot->slot_no,
+			'total_slots'      => (int) self::count_slots( $run_id ),
+			'level'            => $slot->level_key,
+			'level_label'      => $level_def ? (string) $level_def['label'] : '',
+			'level_text_color' => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+			'question'         => (string) $snapshot['question_text'],
+			'answers'          => $answers,
+			'timer_seconds'    => (int) $timer,
+			'seconds_left'     => (int) $remaining,
+			'spins_so_far'     => (int) self::spins_so_far( $run_id ),
 		);
 	}
 
@@ -400,6 +407,11 @@ class Nera_SAW_Run {
 			'correct'       => (bool) $correct,
 			'timed_out'     => (bool) $timed_out,
 			'spins_awarded' => (int) $awarded,
+			// The correct option, for the Answer reveal (ADR 0017). serve_slot()
+			// never sends this; it is disclosed only here, after the slot has been
+			// answered and locked, so it cannot be read before committing to a pick.
+			// -1 when the snapshot is unusable — the client then reveals nothing.
+			'correct_index' => (int) $correct_index,
 		);
 		return $state;
 	}

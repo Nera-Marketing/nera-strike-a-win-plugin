@@ -46,6 +46,19 @@ class Nera_SAW_Constants {
 	 */
 	const LATENCY_GRACE_SECONDS = 1.5;
 
+	/* ---------------------------------------------------------------------
+	 * Answer reveal hold (seconds).
+	 *
+	 * How long the question stays on screen after a submit, showing which option
+	 * was correct, before the next slot is served. Purely presentational — the
+	 * next slot's deadline is stamped when it is served, so the hold never eats
+	 * into a question's timer and carries no compliance weight. Admin-tunable on
+	 * the Settings page within the MIN/MAX fence.
+	 * ------------------------------------------------------------------- */
+	const FEEDBACK_SECONDS_DEFAULT = 5;
+	const FEEDBACK_SECONDS_MIN     = 1;
+	const FEEDBACK_SECONDS_MAX     = 10;
+
 	/**
 	 * Difficulty floor: the ordinal rank on the global ladder below which no
 	 * slot/question may be used in a live competition. 1 = lowest rung.
@@ -89,6 +102,14 @@ class Nera_SAW_Constants {
 	const DEFAULT_COLORS = array( '#2e7d32', '#7cb342', '#f9a825', '#ef6c00', '#c62828', '#6a1b9a' );
 
 	/**
+	 * Minimum contrast ratio a level colour must reach before it is used as text
+	 * on the white quiz card. 4.5:1 is the WCAG 2.1 AA floor for body text; the
+	 * question heading is held to it rather than the looser large-text 3:1, since
+	 * it is read once, quickly, under a countdown. See level_text_color().
+	 */
+	const TEXT_CONTRAST_TARGET = 4.5;
+
+	/**
 	 * Default global difficulty ladder + default per-level tickets-per-correct.
 	 * Admin-managed (add/rename/extend/soft-delete); tickets overridable per
 	 * competition. Ordered ascending (rank 1 = easiest). 'reward' = default
@@ -115,6 +136,7 @@ class Nera_SAW_Constants {
 			'timer_min'          => self::TIMER_MIN_SECONDS,
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,
+			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),
@@ -160,16 +182,25 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Persist feature flags from the demo admin page.
+	 * Persist feature flags — a PARTIAL update: only the keys present in $flags are
+	 * written, the rest keep their stored values.
 	 *
-	 * @param array $flags Raw flag values.
+	 * The flags are edited from two screens now (quiz_feedback on Settings,
+	 * frontend_ui on the demo page). A whole-array rewrite meant whichever form
+	 * saved last silently reset the flag it does not render — an unticked checkbox
+	 * and an absent one are indistinguishable in a POST. Callers must pass every
+	 * key their own form renders (as an explicit true/false), and no others.
+	 *
+	 * @param array $flags Flag values, keyed by flag name.
 	 * @return bool
 	 */
 	public static function save_feature_flags( array $flags ) {
-		$clean = array(
-			'frontend_ui'   => ! empty( $flags['frontend_ui'] ),
-			'quiz_feedback' => ! empty( $flags['quiz_feedback'] ),
-		);
+		$clean = self::feature_flags();
+		foreach ( array_keys( self::default_feature_flags() ) as $key ) {
+			if ( array_key_exists( $key, $flags ) ) {
+				$clean[ $key ] = ! empty( $flags[ $key ] );
+			}
+		}
 		return update_option( self::OPTION_FEATURE_FLAGS, $clean );
 	}
 
@@ -215,6 +246,18 @@ class Nera_SAW_Constants {
 		$v   = isset( $s['timer_warn_seconds'] ) ? (int) $s['timer_warn_seconds'] : 3;
 		$max = self::timer_max();
 		return max( 1, min( $max, $v ) );
+	}
+
+	/**
+	 * How long the Answer reveal holds the question on screen before the next
+	 * slot is served (global setting). Only used when quiz feedback is enabled.
+	 *
+	 * @return int
+	 */
+	public static function feedback_seconds() {
+		$s = self::settings();
+		$v = isset( $s['feedback_seconds'] ) ? (int) $s['feedback_seconds'] : self::FEEDBACK_SECONDS_DEFAULT;
+		return max( self::FEEDBACK_SECONDS_MIN, min( self::FEEDBACK_SECONDS_MAX, $v ) );
 	}
 
 	/**
@@ -306,7 +349,93 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Clamp a proposed per-question timer to the working Settings window.
+	 * A level's colour, made safe to use as TEXT on the white quiz card.
+	 *
+	 * Why this is not just level_color(): those colours are chosen to fill a small
+	 * circle in the admin (question bank, Report), where a pale fill reads fine.
+	 * As text on white they are a different problem — of the five default ladder
+	 * colours, three fall below the WCAG AA 4.5:1 minimum, and the amber used for
+	 * "Hard" sits at about 2.0:1, which is close to invisible on a phone in
+	 * daylight. Since the question is the one thing a player MUST read, and they
+	 * are reading it against a running clock, the colour is scaled toward black
+	 * (hue preserved) until it clears the target.
+	 *
+	 * Computed rather than a fixed lookup table, because the Ladder screen lets an
+	 * admin pick any hex — including a pale yellow that would otherwise make every
+	 * question of that level unreadable.
+	 *
+	 * @param string $key Level key.
+	 * @return string Hex colour, or '' if the level colour is unparseable (the
+	 *                caller should then fall back to its normal text colour).
+	 */
+	public static function level_text_color( $key ) {
+		$rgb = self::hex_to_rgb( self::level_color( $key ) );
+		if ( null === $rgb ) {
+			return '';
+		}
+		// Step toward black in 2% increments. Black is 21:1, so this always
+		// terminates; 2% keeps the overshoot past the target imperceptible.
+		for ( $pct = 100; $pct >= 0; $pct -= 2 ) {
+			$r = (int) round( $rgb[0] * $pct / 100 );
+			$g = (int) round( $rgb[1] * $pct / 100 );
+			$b = (int) round( $rgb[2] * $pct / 100 );
+			if ( self::contrast_with_white( $r, $g, $b ) >= self::TEXT_CONTRAST_TARGET ) {
+				return sprintf( '#%02x%02x%02x', $r, $g, $b );
+			}
+		}
+		return '#000000';
+	}
+
+	/**
+	 * Parse a 3- or 6-digit hex colour to [ r, g, b ].
+	 *
+	 * @param string $hex Hex colour, with or without leading '#'.
+	 * @return array|null
+	 */
+	private static function hex_to_rgb( $hex ) {
+		$hex = ltrim( (string) $hex, '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		}
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return null;
+		}
+		return array(
+			hexdec( substr( $hex, 0, 2 ) ),
+			hexdec( substr( $hex, 2, 2 ) ),
+			hexdec( substr( $hex, 4, 2 ) ),
+		);
+	}
+
+	/**
+	 * WCAG 2.1 contrast ratio of a colour against white.
+	 *
+	 * @param int $r Red 0-255.
+	 * @param int $g Green 0-255.
+	 * @param int $b Blue 0-255.
+	 * @return float Ratio between 1.0 and 21.0.
+	 */
+	private static function contrast_with_white( $r, $g, $b ) {
+		$lum = 0.2126 * self::linearise_channel( $r )
+			+ 0.7152 * self::linearise_channel( $g )
+			+ 0.0722 * self::linearise_channel( $b );
+		return ( 1.0 + 0.05 ) / ( $lum + 0.05 );
+	}
+
+	/**
+	 * Convert one 0-255 sRGB channel to its linear value (WCAG 2.1).
+	 *
+	 * @param int $channel Channel value 0-255.
+	 * @return float
+	 */
+	private static function linearise_channel( $channel ) {
+		$c = $channel / 255;
+		return $c <= 0.03928 ? $c / 12.92 : pow( ( $c + 0.055 ) / 1.055, 2.4 );
+	}
+
+	/**
+	 * Clamp a proposed per-question timer to the working window (which is itself
+	 * fenced by the hard clamp).
 	 *
 	 * @param int $seconds Proposed timer.
 	 * @return int

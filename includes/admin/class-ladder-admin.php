@@ -2,7 +2,8 @@
 /**
  * Strike A Win → Difficulty Ladder: manage the global levels.
  *
- * Each level has a display colour (picker), a label, and default tickets per
+ * Each level has a display colour (picker, player-facing — see level_text_color),
+ * a label, and default tickets per
  * correct answer. The level 'key' is a stable internal identifier — auto-
  * generated from the label on add and hidden from the admin. Levels are add /
  * remove-able; removing a level is a SOFT delete (retained, flagged) and prompts
@@ -207,7 +208,7 @@ class Nera_SAW_Ladder_Admin {
 		echo '<p class="saw-muted">' . esc_html(
 			sprintf(
 				/* translators: %1$d floor rank, %2$d min, %3$d max timer */
-				__( 'Levels run easy → hard by row order. Colour shows as a circle in the question bank. Tickets = default tickets per correct answer (before the tier multiplier). Compliance floor rank: %1$d. Timer window: %2$d–%3$ds.', 'nera-strikeawin' ),
+				__( 'Levels run easy → hard by row order. Colour shows as a circle in the question bank AND colours the question text players see during the quiz (darkened automatically if needed, so a pale colour never becomes unreadable). Tickets = default tickets per correct answer (before the tier multiplier). Compliance floor rank: %1$d. Timer window: %2$d–%3$ds.', 'nera-strikeawin' ),
 				Nera_SAW_Constants::DIFFICULTY_FLOOR_RANK,
 				Nera_SAW_Constants::timer_min(),
 				Nera_SAW_Constants::timer_max()

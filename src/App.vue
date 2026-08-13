@@ -24,9 +24,16 @@ function isAnswerFeedbackEnabled() {
 	return raw === true || raw === 1 || raw === '1';
 }
 
-const FEEDBACK_MS = 1100;
+// Answer reveal hold: how long the answered question stays on screen before the
+// next slot is served. Admin-tunable; the server clamps it to 1–10s.
+const FEEDBACK_SECONDS_FALLBACK = 5;
 
-const phase = ref( 'loading' ); // loading | question | feedback | end | error
+function feedbackHoldSeconds() {
+	const n = parseInt( window.NeraSAW && window.NeraSAW.feedbackSeconds, 10 );
+	return Number.isFinite( n ) && n > 0 ? n : FEEDBACK_SECONDS_FALLBACK;
+}
+
+const phase = ref( 'loading' ); // loading | question | reveal | end | error
 const errorMsg = ref( '' );
 const canRetry = ref( false ); // error screen: offer a "Try again" for the failed step.
 
@@ -37,6 +44,11 @@ const spinsSoFar = ref( 0 );
 const spinsFinal = ref( null );
 
 const selectedAnswer = ref( null );
+const submitting = ref( false ); // answer POST in flight (reveal can't paint until it lands).
+const revealCorrectIndex = ref( -1 ); // -1 = nothing to reveal (unusable snapshot).
+const revealSecondsLeft = ref( 0 );
+const revealIsFinal = ref( false ); // last slot: the hold leads to the results screen.
+const advancing = ref( false ); // past the reveal, waiting on the next slot / results.
 const ticketsLoading = ref( false );
 const ticketsError = ref( '' );
 const ticketNumbers = ref( [] );
@@ -47,16 +59,22 @@ const tierLabel = ref( '' );
 const slot = reactive( {
 	slot_no: 0,
 	level: '',
+	level_label: '',
+	level_text_color: '', // ladder colour, already contrast-corrected server-side.
 	question: '',
 	answers: [], // [ { index, text } ]
 	timer_seconds: 0,
 	seconds_left: 0,
 } );
 
-const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 0 } );
+const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 0, correct_index: -1 } );
 
 let ticker = null;
-let locked = false;
+let holdTicker = null;
+let holdAdvance = null; // closure that advances past the reveal (button or timeout).
+// Reactive: the template's disabled states (options, Submit) depend on it, so a
+// plain let would only repaint by luck, whenever some other ref happened to change.
+const locked = ref( false );
 let navGuardActive = false;
 let navListenersBound = false;
 let historyTrapDepth = 0;
@@ -128,7 +146,14 @@ const timerUrgent = computed( () => {
 	return left > 0 && left <= timerWarnThreshold();
 } );
 
-const canSubmit = computed( () => selectedAnswer.value !== null && ! locked );
+const canSubmit = computed( () => selectedAnswer.value !== null && ! locked.value && ! submitting.value );
+
+// The slot's difficulty colour, exposed as a custom property so the question text
+// and the head-bar level name pick it up from one place. Absent (unparseable
+// ladder colour) leaves the property unset and the CSS falls back to normal text.
+const levelStyle = computed( () =>
+	slot.level_text_color ? { '--saw-level': slot.level_text_color } : {}
+);
 
 const finalSpins = computed( () =>
 	spinsFinal.value !== null && spinsFinal.value !== undefined ? spinsFinal.value : spinsSoFar.value
@@ -150,7 +175,7 @@ const runsRemainingLine = computed( () => {
 } );
 
 function isPlaying() {
-	return quizSessionActive && ( phase.value === 'loading' || phase.value === 'question' || phase.value === 'feedback' );
+	return quizSessionActive && ( phase.value === 'loading' || phase.value === 'question' || phase.value === 'reveal' );
 }
 
 function shouldBlockLeave() {
@@ -162,6 +187,107 @@ function clearTicker() {
 		clearInterval( ticker );
 		ticker = null;
 	}
+}
+
+/* --- Answer reveal ---------------------------------------------------------
+ * After a submit we hold the answered question on screen: the picked option and
+ * the correct one are marked, the head tally moves, and the player either waits
+ * out the countdown or clicks through. Nothing is scored here — the server
+ * already did that — and the next slot's deadline is stamped when it is served,
+ * so the hold costs the player no answering time.
+ * ------------------------------------------------------------------------- */
+
+function clearHoldTicker() {
+	if ( holdTicker ) {
+		clearInterval( holdTicker );
+		holdTicker = null;
+	}
+}
+
+function clearHold() {
+	clearHoldTicker();
+	holdAdvance = null;
+}
+
+function startHold( state ) {
+	revealSecondsLeft.value = feedbackHoldSeconds();
+	holdAdvance = () => advanceAfterAnswer( state );
+	resumeHold();
+}
+
+function resumeHold() {
+	clearHoldTicker();
+	if ( phase.value !== 'reveal' || ! holdAdvance ) {
+		return;
+	}
+	holdTicker = setInterval( () => {
+		revealSecondsLeft.value -= 1;
+		if ( revealSecondsLeft.value <= 0 ) {
+			endHold();
+		}
+	}, 1000 );
+}
+
+// Paused while the leave dialog is up. Otherwise the hold would expire behind the
+// modal, serve the next slot, and let its server-side deadline drain on a question
+// the player cannot see — real seconds lost off a paid run.
+function pauseHold() {
+	clearHoldTicker();
+}
+
+// Advance past the reveal — the countdown reaching zero and the Next button are
+// the same action. Single-flight: whichever fires first wins.
+function endHold() {
+	clearHoldTicker();
+	if ( phase.value !== 'reveal' || ! holdAdvance ) {
+		return;
+	}
+	const advance = holdAdvance;
+	holdAdvance = null;
+	advancing.value = true;
+	advance();
+}
+
+const revealDelta = computed( () =>
+	phase.value === 'reveal' && lastResult.correct ? Math.max( 0, lastResult.spins_awarded ) : 0
+);
+
+const correctAnswerText = computed( () => {
+	const found = ( slot.answers || [] ).find( ( a ) => a.index === revealCorrectIndex.value );
+	return found ? found.text : '';
+} );
+
+// Screen-reader announcement: the visual reveal is colour alone, which assistive
+// tech cannot convey, so the outcome is also stated in words off-screen.
+const revealAnnouncement = computed( () => {
+	if ( phase.value !== 'reveal' ) {
+		return '';
+	}
+	if ( lastResult.correct ) {
+		return t( 'revealCorrect', 'Correct. %d tickets earned.' ).replace( '%d', String( lastResult.spins_awarded ) );
+	}
+	const answer = correctAnswerText.value;
+	if ( lastResult.timed_out ) {
+		return answer
+			? t( 'revealTimeout', 'Time up, no answer counted. The correct answer was: %s' ).replace( '%s', answer )
+			: t( 'revealTimeoutBare', 'Time up — no answer counted.' );
+	}
+	return answer
+		? t( 'revealWrong', 'Wrong. The correct answer was: %s' ).replace( '%s', answer )
+		: t( 'revealWrongBare', 'Wrong — no tickets.' );
+} );
+
+// Green on the correct option; red only on a pick the server actually scored. A
+// timed-out slot recorded no choice at all, so nothing goes red there even if the
+// browser still had something highlighted.
+function optionClass( answer ) {
+	if ( phase.value !== 'reveal' ) {
+		return { 'is-selected': selectedAnswer.value === answer.index };
+	}
+	return {
+		'is-correct': revealCorrectIndex.value >= 0 && answer.index === revealCorrectIndex.value,
+		'is-wrong': ! lastResult.correct && ! lastResult.timed_out && selectedAnswer.value === answer.index,
+	};
 }
 
 function fail( e ) {
@@ -196,7 +322,7 @@ function retry() {
 	if ( ! retryAction ) {
 		return;
 	}
-	locked = false;
+	locked.value = false;
 	errorMsg.value = '';
 	canRetry.value = false;
 	quizSessionActive = true;
@@ -258,6 +384,11 @@ function teardownNavigationGuards() {
 }
 
 function releaseNavigationGuard() {
+	// Every teardown path (error, results, confirmed leave) funnels through here,
+	// so this is where a pending reveal advance is dropped. Without it a hold that
+	// expires after we have abandoned would try to serve the next slot of a run
+	// that is already finalized.
+	clearHold();
 	navGuardActive = false;
 	disarmHistoryTrap();
 	teardownNavigationGuards();
@@ -385,6 +516,8 @@ function closeLeaveDialog( leave ) {
 
 function onLeaveStay() {
 	closeLeaveDialog( false );
+	// The only path back into play, so the only place the reveal hold resumes.
+	resumeHold();
 }
 
 function onLeaveConfirm() {
@@ -478,6 +611,9 @@ function onDocumentClick( e ) {
 }
 
 watch( leaveDialogOpen, ( open ) => {
+	if ( open ) {
+		pauseHold();
+	}
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
@@ -524,8 +660,7 @@ async function start() {
 
 async function loadSlot( slotNo ) {
 	clearTicker();
-	locked = false;
-	selectedAnswer.value = null;
+	clearHold();
 	retryAction = () => loadSlot( slotNo );
 	try {
 		const data = await api.getSlot( runId.value, slotNo );
@@ -536,6 +671,19 @@ async function loadSlot( slotNo ) {
 		Object.assign( slot, data );
 		spinsSoFar.value = data.spins_so_far || 0;
 		totalSlots.value = data.total_slots || totalSlots.value;
+
+		// Reset only now that the replacement question is in hand. Clearing earlier
+		// would blank the reveal — highlights gone, countdown at zero, options live
+		// again — for however long the fetch takes, on the screen the player is
+		// still looking at. locked must drop before the expired-slot path below, or
+		// its submit('') would no-op against the previous answer's lock.
+		locked.value = false;
+		submitting.value = false;
+		advancing.value = false;
+		selectedAnswer.value = null;
+		revealCorrectIndex.value = -1;
+		revealSecondsLeft.value = 0;
+		revealIsFinal.value = false;
 
 		if ( slot.seconds_left <= 0 ) {
 			return submit( '' );
@@ -554,7 +702,7 @@ function startCountdown() {
 		slot.seconds_left -= 1;
 		if ( slot.seconds_left <= 0 ) {
 			clearTicker();
-			if ( ! locked ) {
+			if ( ! locked.value ) {
 				submit( '' );
 			}
 		}
@@ -562,14 +710,14 @@ function startCountdown() {
 }
 
 function selectOption( index ) {
-	if ( locked ) {
+	if ( locked.value ) {
 		return;
 	}
 	selectedAnswer.value = index;
 }
 
 function confirmSubmit() {
-	if ( selectedAnswer.value === null || locked ) {
+	if ( selectedAnswer.value === null || locked.value || submitting.value ) {
 		return;
 	}
 	submit( selectedAnswer.value );
@@ -584,10 +732,11 @@ function advanceAfterAnswer( state ) {
 }
 
 async function submit( option ) {
-	if ( locked ) {
+	if ( locked.value ) {
 		return;
 	}
-	locked = true;
+	locked.value = true;
+	submitting.value = true;
 	clearTicker();
 	retryAction = () => submit( option );
 	try {
@@ -596,13 +745,18 @@ async function submit( option ) {
 		if ( state.result ) {
 			Object.assign( lastResult, state.result );
 		}
-		if ( isAnswerFeedbackEnabled() ) {
-			phase.value = 'feedback';
-			setTimeout( () => advanceAfterAnswer( state ), FEEDBACK_MS );
-		} else {
-			advanceAfterAnswer( state );
+		submitting.value = false;
+		if ( ! isAnswerFeedbackEnabled() ) {
+			return advanceAfterAnswer( state );
 		}
+		// Only the server knows which option was right (ADR 0017); it arrives with
+		// this response, so the reveal can only be painted now.
+		revealCorrectIndex.value = Number.isInteger( lastResult.correct_index ) ? lastResult.correct_index : -1;
+		revealIsFinal.value = ( 'finalized' === state.status || ! state.next_slot );
+		phase.value = 'reveal';
+		startHold( state );
 	} catch ( e ) {
+		submitting.value = false;
 		fail( e );
 	}
 }
@@ -682,24 +836,35 @@ onUnmounted( () => {
 			</template>
 		</div>
 
-		<div v-else-if="phase === 'question'" class="saw-play">
+		<div
+			v-else-if="phase === 'question' || phase === 'reveal'"
+			class="saw-play"
+			:class="{ 'is-revealing': phase === 'reveal' }"
+			:style="levelStyle"
+		>
 			<div class="saw-head">
-				<span class="saw-progress">Question {{ slot.slot_no }} / {{ totalSlots }}</span>
-				<span v-if="isAnswerFeedbackEnabled()" class="saw-tally">{{ spinsSoFar }} tickets</span>
+				<span class="saw-progress">Question {{ slot.slot_no }} / {{ totalSlots }}<template v-if="slot.level_label"> · <span class="saw-level">{{ slot.level_label }}</span></template></span>
+				<span v-if="isAnswerFeedbackEnabled()" class="saw-tallywrap">
+					<span v-if="revealDelta > 0" class="saw-delta">+{{ revealDelta }}</span>
+					<span class="saw-tally">{{ spinsSoFar }} tickets</span>
+				</span>
 			</div>
-			<div class="saw-timerbar" :class="{ 'is-urgent': timerUrgent }">
+			<div class="saw-timerbar" :class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }">
 				<div class="saw-timerfill" :style="{ width: timerPct + '%' }"></div>
 			</div>
-			<div class="saw-count" :class="{ 'is-urgent': timerUrgent }">{{ Math.max(0, slot.seconds_left) }}</div>
+			<div class="saw-count" :class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }">{{ Math.max(0, slot.seconds_left) }}</div>
 			<div class="saw-question">{{ slot.question }}</div>
-			<p class="saw-hint">{{ t('selectAnswer', 'Choose an answer, then confirm to lock it in.') }}</p>
+			<!-- Hidden, not removed, during the reveal: v-if here would collapse the
+			     line and shift every option up at the moment the player is reading. -->
+			<p class="saw-hint" :class="{ 'is-hidden': phase === 'reveal' }">{{ t('selectAnswer', 'Choose an answer, then confirm to lock it in.') }}</p>
+			<p class="saw-sr-only" role="status" aria-live="polite">{{ revealAnnouncement }}</p>
 			<div class="saw-options">
 				<button
 					v-for="a in slot.answers"
 					:key="a.index"
 					type="button"
 					class="saw-option"
-					:class="{ 'is-selected': selectedAnswer === a.index }"
+					:class="optionClass(a)"
 					:disabled="locked"
 					:aria-pressed="selectedAnswer === a.index"
 					@click="selectOption(a.index)"
@@ -709,23 +874,25 @@ onUnmounted( () => {
 			</div>
 			<div class="saw-submitwrap">
 				<button
+					v-if="phase === 'reveal'"
+					type="button"
+					class="saw-btn-submit saw-btn-next"
+					:disabled="advancing"
+					@click="endHold"
+				>
+					{{ revealIsFinal ? t('seeResults', 'See my results') : t('nextQuestion', 'Next question') }}
+					<span v-if="!advancing" class="saw-next-count" aria-hidden="true">{{ Math.max(0, revealSecondsLeft) }}</span>
+				</button>
+				<button
+					v-else
 					type="button"
 					class="saw-btn-submit"
 					:disabled="!canSubmit"
 					@click="confirmSubmit"
 				>
-					{{ t('submitAnswer', 'Submit answer') }}
+					{{ submitting ? t('checkingAnswer', 'Checking…') : t('submitAnswer', 'Submit answer') }}
 				</button>
 			</div>
-		</div>
-
-		<div v-else-if="phase === 'feedback'" class="saw-feedbackwrap">
-			<div class="saw-feedback" :class="lastResult.correct ? 'saw-correct' : 'saw-wrong'">
-				<template v-if="lastResult.correct">+{{ lastResult.spins_awarded }} tickets!</template>
-				<template v-else-if="lastResult.timed_out">Time up — 0 tickets</template>
-				<template v-else>Wrong — 0 tickets</template>
-			</div>
-			<div class="saw-tally">{{ spinsSoFar }} tickets so far</div>
 		</div>
 
 		<div v-else-if="phase === 'end'" class="saw-end">
@@ -785,12 +952,15 @@ onUnmounted( () => {
 		>
 			<button type="button" class="saw-leave__backdrop" aria-label="Keep playing" @click="onLeaveStay"></button>
 			<div class="saw-leave__panel">
-				<div class="saw-leave__clock" :class="{ 'is-urgent': timerUrgent }" aria-hidden="true">
+				<!-- No clock during the reveal: this question is already scored and the
+				     hold is paused, so there is nothing counting down to show. -->
+				<div v-if="phase !== 'reveal'" class="saw-leave__clock" :class="{ 'is-urgent': timerUrgent }" aria-hidden="true">
 					<span class="saw-leave__clock-num">{{ Math.max(0, slot.seconds_left) }}</span>
 					<span class="saw-leave__clock-label">sec left</span>
 				</div>
 				<h2 id="saw-leave-title" class="saw-leave__title">{{ t('leaveDialogTitle', 'Leave the quiz?') }}</h2>
-				<p class="saw-leave__body">{{ t('leaveDialogBody', 'The countdown keeps running on the server while you are away. Any question you have not submitted scores zero.') }}</p>
+				<p v-if="phase === 'reveal'" class="saw-leave__body">{{ t('leaveDialogBodyReveal', 'This answer is already saved. If you leave now, every question you have not reached scores zero.') }}</p>
+				<p v-else class="saw-leave__body">{{ t('leaveDialogBody', 'The countdown keeps running on the server while you are away. Any question you have not submitted scores zero.') }}</p>
 				<div class="saw-leave__actions">
 					<button
 						type="button"
@@ -818,6 +988,12 @@ onUnmounted( () => {
 	--saw-text-muted: var(--color-text-secondary, #64748b);
 	--saw-danger: #dc2626;
 	--saw-danger-soft: #fee2e2;
+	--saw-ok: #16a34a;
+	--saw-ok-soft: #dcfce7;
+	/* Height of a single-line answer option: 16px padding x2 + 2px border x2 +
+	   the ~20px line box at 16px. The mobile Submit / Next button matches it, so
+	   the two stay in step if this option's padding or font size ever changes. */
+	--saw-answer-min-h: 56px;
 	width: 100%;
 	max-width: none;
 	margin: 0;
@@ -830,19 +1006,46 @@ onUnmounted( () => {
 }
 .saw-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 12px; }
 .saw-progress { font-weight: 600; color: var(--saw-text-muted); }
+/* Difficulty Level, in its ladder colour. --saw-level is set per slot from the
+   server and is already contrast-corrected, so it is safe on 14px text. */
+.saw-level { color: var(--saw-level, var(--saw-text-muted)); font-weight: 700; }
+.saw-tallywrap { display: inline-flex; align-items: center; gap: 8px; }
 .saw-tally { font-weight: 700; color: var(--saw-brand); }
+/* Tickets just earned, held beside the running total for the length of the reveal. */
+.saw-delta {
+	font-weight: 800; font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1;
+	padding: 4px 8px; border-radius: 999px;
+	background: var(--saw-ok-soft); color: var(--saw-ok);
+	animation: saw-delta-in .28s ease-out;
+}
+@keyframes saw-delta-in {
+	from { opacity: 0; transform: translateY(-4px) scale(.9); }
+	to   { opacity: 1; transform: none; }
+}
 .saw-timerbar { height: 6px; background: var(--saw-surface); border-radius: 6px; overflow: hidden; margin-bottom: 6px; transition: background-color .25s ease; }
 .saw-timerbar.is-urgent { background: var(--saw-danger-soft); }
 .saw-timerfill { height: 100%; background: var(--saw-brand); transition: width 1s linear, background-color .25s ease; }
 .saw-timerbar.is-urgent .saw-timerfill { background: var(--saw-danger); }
 .saw-count { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; margin-bottom: 14px; color: var(--saw-brand); transition: color .25s ease; }
 .saw-count.is-urgent { color: var(--saw-danger); }
-.saw-question { font-size: 20px; line-height: 1.35; font-weight: 600; margin-bottom: 8px; }
+/* Reveal: the question timer is over. Both readouts freeze where the player
+   answered and go grey, so neither reads as time still available. */
+.saw-timerbar.is-spent .saw-timerfill { background: var(--saw-text-muted); }
+.saw-count.is-spent { color: var(--saw-text-muted); }
+.saw-sr-only {
+	position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+	overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+/* Question text carries the difficulty colour, through the Answer reveal too: the
+   outcome lives in the option boxes, the level lives here. */
+.saw-question { font-size: 20px; line-height: 1.35; font-weight: 600; margin-bottom: 8px; color: var(--saw-level, var(--saw-text)); }
 .saw-hint { font-size: 14px; color: var(--saw-text-muted); margin: 0 0 14px; }
+.saw-hint.is-hidden { visibility: hidden; }
 .saw-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 480px) { .saw-options { grid-template-columns: 1fr; } }
 .saw-option {
 	display: flex; align-items: center; gap: 12px; text-align: left; padding: 16px;
+	min-height: var(--saw-answer-min-h);
 	background: #fff; border: 2px solid var(--saw-surface); border-radius: 12px;
 	cursor: pointer; font-size: 16px; color: var(--saw-text);
 	transition: border-color .12s, transform .06s, box-shadow .12s, background .12s;
@@ -851,6 +1054,23 @@ onUnmounted( () => {
 .saw-option.is-selected { border-color: var(--saw-brand); background: color-mix(in srgb, var(--saw-brand) 6%, #fff); box-shadow: 0 0 0 1px var(--saw-brand); }
 .saw-option:active:not(:disabled) { transform: scale(0.99); }
 .saw-option:disabled { opacity: .6; cursor: default; }
+/* Answer reveal. Options are disabled throughout the hold, so these must beat the
+   :disabled dimming above or the highlight the whole feature rests on washes out. */
+.saw-option.is-correct,
+.saw-option.is-wrong { opacity: 1; }
+.saw-option.is-correct {
+	border-color: var(--saw-ok);
+	background: color-mix(in srgb, var(--saw-ok) 10%, #fff);
+	box-shadow: 0 0 0 1px var(--saw-ok);
+}
+.saw-option.is-wrong {
+	border-color: var(--saw-danger);
+	background: color-mix(in srgb, var(--saw-danger) 8%, #fff);
+	box-shadow: 0 0 0 1px var(--saw-danger);
+}
+/* Everything neither picked nor correct recedes further, so the two marked
+   options carry the eye. */
+.saw-play.is-revealing .saw-option:not(.is-correct):not(.is-wrong) { opacity: .45; }
 .saw-submitwrap {
 	margin-top: 14px;
 	display: flex;
@@ -884,13 +1104,30 @@ onUnmounted( () => {
 	outline-offset: 2px;
 }
 .saw-btn-submit:disabled { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+/* Reveal: the Submit button becomes Next in place, carrying the hold countdown, so
+   the layout does not shift under the player at the moment they are reading. */
+.saw-btn-next { gap: 10px; }
+.saw-next-count {
+	display: inline-flex; align-items: center; justify-content: center;
+	min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+	background: rgba(255, 255, 255, .22);
+	font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
 @media (max-width: 480px) {
 	.saw-submitwrap { justify-content: stretch; }
-	.saw-btn-submit { width: 100%; min-width: 0; }
+	/* Full-width and the same height as an answer, so the action reads as the last
+	   item in the stack rather than an afterthought below it. The type steps up to
+	   the options' 16px and the radius to their 12px for the same reason: at this
+	   width the button is the same shape of thing, so it should look like one. */
+	.saw-btn-submit {
+		width: 100%;
+		min-width: 0;
+		min-height: var(--saw-answer-min-h);
+		padding: 12px 18px;
+		font-size: 16px;
+		border-radius: 12px;
+	}
 }
-.saw-feedback { text-align: center; font-size: 26px; font-weight: 800; padding: 28px 0 8px; }
-.saw-correct { color: #16a34a; }
-.saw-wrong { color: #dc2626; }
 .saw-endtitle { margin: 0 0 8px; font-size: 1.5rem; }
 .saw-end { text-align: center; }
 .saw-endspins { font-size: 30px; font-weight: 800; color: var(--saw-brand); margin-bottom: 12px; }
@@ -908,6 +1145,7 @@ onUnmounted( () => {
 @keyframes saw-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
 	.saw-spinner { animation: none; border-top-color: var(--saw-brand); opacity: .7; }
+	.saw-delta { animation: none; }
 }
 .saw-mint-error { margin-bottom: 14px; color: #dc2626; }
 .saw-mint-error p { margin: 0 0 10px; }

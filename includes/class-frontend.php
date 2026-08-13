@@ -139,15 +139,29 @@ class Nera_SAW_Frontend {
 			// wp_localize_script string-casts scalars (false → ""), so use 1/0.
 			'showAnswerFeedback' => $feedback_on ? 1 : 0,
 			'timerWarnSeconds'   => Nera_SAW_Constants::timer_warn_seconds(),
+			'feedbackSeconds'    => Nera_SAW_Constants::feedback_seconds(),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => __( 'View competition', 'nera-strikeawin' ),
 				'playAgain'          => __( 'Play again', 'nera-strikeawin' ),
 				'selectAnswer'       => __( 'Choose an answer, then confirm to lock it in.', 'nera-strikeawin' ),
 				'submitAnswer'       => __( 'Submit answer', 'nera-strikeawin' ),
+				'checkingAnswer'     => __( 'Checking…', 'nera-strikeawin' ),
+				'nextQuestion'       => __( 'Next question', 'nera-strikeawin' ),
+				'seeResults'         => __( 'See my results', 'nera-strikeawin' ),
+				// Screen-reader-only announcements for the Answer reveal (the visual
+				// reveal is colour alone, which assistive tech cannot convey).
+				'revealCorrect'      => __( 'Correct. %d tickets earned.', 'nera-strikeawin' ),
+				'revealWrong'        => __( 'Wrong. The correct answer was: %s', 'nera-strikeawin' ),
+				'revealTimeout'      => __( 'Time up, no answer counted. The correct answer was: %s', 'nera-strikeawin' ),
+				'revealWrongBare'    => __( 'Wrong — no tickets.', 'nera-strikeawin' ),
+				'revealTimeoutBare'  => __( 'Time up — no answer counted.', 'nera-strikeawin' ),
 				'leaveWarning'       => __( 'Leave this page? The timer keeps running and unanswered questions score zero.', 'nera-strikeawin' ),
 				'leaveDialogTitle'   => __( 'Leave the quiz?', 'nera-strikeawin' ),
 				'leaveDialogBody'    => __( 'The countdown keeps running on the server while you are away. Any question you have not submitted scores zero.', 'nera-strikeawin' ),
+				// Shown instead of the above during the Answer reveal, where the
+				// current question is already scored and no clock is running.
+				'leaveDialogBodyReveal' => __( 'This answer is already saved. If you leave now, every question you have not reached scores zero.', 'nera-strikeawin' ),
 				'stayOnQuiz'         => __( 'Keep playing', 'nera-strikeawin' ),
 				'leaveQuiz'          => __( 'Leave anyway', 'nera-strikeawin' ),
 				'mintingTickets'     => __( 'Adding your tickets to the draw…', 'nera-strikeawin' ),

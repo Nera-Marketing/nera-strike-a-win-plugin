@@ -75,6 +75,9 @@ class Nera_SAW_Settings_Admin {
 		}
 		$timer_warn = max( 1, min( $timer_max, $timer_warn ) );
 
+		$feedback_seconds = isset( $_POST['feedback_seconds'] ) ? (int) $_POST['feedback_seconds'] : Nera_SAW_Constants::FEEDBACK_SECONDS_DEFAULT;
+		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
+
 		$tiers = array();
 		foreach ( (array) ( $_POST['tier'] ?? array() ) as $row ) {
 			$key = isset( $row['key'] ) ? sanitize_key( $row['key'] ) : '';
@@ -99,9 +102,14 @@ class Nera_SAW_Settings_Admin {
 				'timer_min'          => $timer_min,
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
+				'feedback_seconds'   => $feedback_seconds,
 				'tiers'              => $tiers,
 			)
 		);
+
+		// Answer reveal on/off. Partial write: this form does not render the other
+		// feature flags, so it must not send them (see save_feature_flags()).
+		Nera_SAW_Constants::save_feature_flags( array( 'quiz_feedback' => isset( $_POST['quiz_feedback'] ) ) );
 
 		// Play page override (0 = revert to auto-created page).
 		if ( isset( $_POST['play_page_id'] ) ) {
@@ -175,6 +183,25 @@ class Nera_SAW_Settings_Admin {
 		);
 		echo '</div>';
 		echo '<p class="saw-muted">' . esc_html__( 'When a question has this many seconds or fewer left, the countdown bar and number turn red.', 'nera-strikeawin' ) . '</p>';
+		echo '</div>';
+
+		// --- Answer reveal card --------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Answer reveal', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated. The player can skip the wait with the Next button.', 'nera-strikeawin' ) . '</p>';
+		echo '<p><label><input type="checkbox" name="quiz_feedback" value="1"' . checked( Nera_SAW_Constants::quiz_feedback_enabled(), true, false ) . '> ';
+		echo esc_html__( 'Show the answer reveal after each question', 'nera-strikeawin' ) . '</label>';
+		echo '<span class="description"> — ' . esc_html__( 'unticked, the quiz moves straight to the next question and the player is never told whether they were right.', 'nera-strikeawin' ) . '</span></p>';
+		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="feedback_seconds" min="%d" max="%d" value="%d"></label>',
+			esc_html__( 'Hold for (s)', 'nera-strikeawin' ),
+			(int) Nera_SAW_Constants::FEEDBACK_SECONDS_MIN,
+			(int) Nera_SAW_Constants::FEEDBACK_SECONDS_MAX,
+			(int) Nera_SAW_Constants::feedback_seconds()
+		);
+		echo '</div>';
+		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
 		echo '</div>';
 
 		// --- Global tiers card ---------------------------------------------
