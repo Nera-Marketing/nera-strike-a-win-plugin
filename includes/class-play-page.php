@@ -137,7 +137,21 @@ class Nera_SAW_Play_Page {
 			$args[ self::QV_TIER ] = sanitize_key( $tier_key );
 		}
 
-		return empty( $args ) ? $base : add_query_arg( $args, $base );
+		$url = empty( $args ) ? $base : add_query_arg( $args, $base );
+
+		/**
+		 * Filter where a run is played.
+		 *
+		 * Standalone answers with its own page, so a link built anywhere in the
+		 * plugin lands inside the section instead of on the mix-mode play page.
+		 * Every caller already goes through here, which is why this is one filter
+		 * rather than a search for every place a play link is made.
+		 *
+		 * @param string $url            Resolved play URL.
+		 * @param int    $competition_id Competition product ID, or 0.
+		 * @param string $tier_key       Tier key, or ''.
+		 */
+		return (string) apply_filters( 'nera_saw_play_url', $url, (int) $competition_id, (string) $tier_key );
 	}
 
 	/**

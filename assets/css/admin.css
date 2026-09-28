@@ -457,3 +457,55 @@ body.saw-import-open { overflow: hidden; }
 	margin: 0 0 8px;
 	font-weight: 600;
 }
+
+/* Behaviour settings — the three gates (StrikeAWin Method, Quiz Method,
+   Language Scope). Radios stacked rather than inline: each option carries a
+   full sentence, and inline radios wrap those sentences into each other. */
+.saw-field-block {
+  margin: 0 0 18px;
+}
+.saw-field-block:last-child {
+  margin-bottom: 0;
+}
+.saw-field-block__label {
+  margin: 0 0 2px;
+}
+.saw-field-block .saw-muted {
+  margin: 0 0 8px;
+  max-width: 70ch;
+}
+.saw-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  max-width: 70ch;
+  cursor: pointer;
+}
+.saw-radio input {
+  margin: 2px 0 0;
+}
+
+/* --- Shortcode box (Strike A Win product tab) -------------------------- */
+.saw-shortcode-box {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	background: #fff;
+	border: 1px solid var(--saw-line, #dcdcde);
+	border-radius: 6px;
+	cursor: pointer;
+}
+.saw-shortcode-box:hover {
+	border-color: #8c8f94;
+}
+.saw-shortcode-box .dashicons-clipboard {
+	color: var(--saw-muted, #646970);
+}
+.saw-shortcode-box code {
+	background: none;
+	padding: 0;
+	font-size: 13px;
+	color: var(--saw-accent-ink, #b8440a);
+}

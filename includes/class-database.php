@@ -5,7 +5,12 @@
  * All Strikeawin state lives in indexed custom tables (not CPT/postmeta):
  *  - questions        : the global question bank
  *  - question_seen    : per-user non-repeat ledger
- *  - runs             : one paid playthrough (holds the config snapshot)
+ *  - runs             : one paid playthrough (holds the config snapshot). `expires_at`
+ *                       is the whole run's wall clock, and the only thing the
+ *                       abandoned-run sweep may key on — a per-slot deadline
+ *                       cannot express "this run is over", because the slots that
+ *                       would prove it are the ones that were never served
+ *                       (ADR 0020). Indexed with `status` for exactly that query.
  *  - run_slots        : per-slot drip/timer/answer audit + fail-rate raw data
  *  - spin_pool        : per-competition available/reserved/confirmed counters
  *  - reservations     : the no-oversell reservation ledger (ADR 0001)
@@ -20,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Nera_SAW_Database {
 
-	const DB_VERSION = '0.5.0';
+	const DB_VERSION = '0.6.0';
 	const OPTION_KEY = 'nera_saw_db_version';
 
 	/**
@@ -111,12 +116,14 @@ CREATE TABLE {$runs} (
   created_at datetime NOT NULL,
   started_at datetime DEFAULT NULL,
   finalized_at datetime DEFAULT NULL,
+  expires_at datetime DEFAULT NULL,
   PRIMARY KEY (id),
   KEY user_id (user_id),
   KEY competition_id (competition_id),
   KEY order_id (order_id),
   KEY status (status),
-  KEY seed_batch_id (seed_batch_id)
+  KEY seed_batch_id (seed_batch_id),
+  KEY sweep (status, expires_at)
 ) {$charset_collate};
 
 CREATE TABLE {$run_slots} (

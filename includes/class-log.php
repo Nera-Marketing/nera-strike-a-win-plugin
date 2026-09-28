@@ -25,6 +25,7 @@ class Nera_SAW_Log {
 		'run_complete',
 		'run_abandon',
 		'run_restored',
+		'run_finalize_race_avoided',
 		'error',
 		'client_error',
 		'client_stall',

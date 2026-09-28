@@ -2,8 +2,14 @@
 /**
  * Quiz run engine: server-authoritative scoring, drip delivery, timer, finalize.
  *
- * A run is single-shot and non-resumable. The server owns each slot's deadline;
- * the answer key never leaves the server. Sudden death is removed — wrong/timeout
+ * A run IS resumable: start() finds an active run and returns it. The server owns
+ * the clock end to end — the run has a wall-clock `expires_at` stamped when it
+ * starts, and each slot's deadline is chained forward from the moment the previous
+ * slot ended, so the clock keeps running while the player is disconnected. A
+ * player who reconnects lands on whichever question is live and scores zero for
+ * the ones that lapsed meanwhile (ADR 0020).
+ *
+ * The answer key never leaves the server. Sudden death is removed — wrong/timeout
  * score zero and the run continues through all slots.
  *
  * @package Nera_Strikeawin
@@ -25,7 +31,7 @@ class Nera_SAW_Run {
 	 * @param int    $user_id        Acting user ID.
 	 * @return array|WP_Error Run state payload, or WP_Error.
 	 */
-	public static function start( $competition_id, $tier_key, $user_id ) {
+	public static function start( $competition_id, $tier_key, $user_id, $language = '' ) {
 		$competition_id = (int) $competition_id;
 		$user_id        = (int) $user_id;
 		$tier_key       = (string) $tier_key;
@@ -35,6 +41,9 @@ class Nera_SAW_Run {
 		}
 
 		// Resume an in-progress run for this competition (do not consume another).
+		// A language requested on a resume is not honoured — the run already has
+		// one, and self::redraw_run_slots() (inside resume_active_run()) is what
+		// keeps a redraw in it rather than re-resolving.
 		$resumed = self::resume_active_run( $competition_id, $user_id );
 		if ( is_wp_error( $resumed ) ) {
 			return $resumed;
@@ -52,6 +61,13 @@ class Nera_SAW_Run {
 		// Always draw from the competition's live config so admin distribution
 		// updates apply to the next run (grant snapshots are for purchase audit only).
 		$config = Nera_SAW_Competition_Config::get( $competition_id );
+
+		// Freeze the language and the Quiz Method this run is actually drawn under,
+		// so nothing downstream — the draw, the stage display, a later resume — has
+		// to ask a live setting again and risk disagreeing with how the run was
+		// built. See resolve_run_language() and Nera_SAW_Question_Bank::draw_for_run().
+		$config['language']    = self::resolve_run_language( $competition_id, $language );
+		$config['quiz_method'] = Nera_SAW_Mode::quiz_method( $competition_id );
 
 		$draw = Nera_SAW_Question_Bank::draw_for_run( $config, $user_id, $competition_id );
 		if ( empty( $draw['slots'] ) ) {
@@ -75,14 +91,105 @@ class Nera_SAW_Run {
 			)
 		);
 
-		$question_ids = array();
 		foreach ( $draw['slots'] as $slot ) {
 			self::insert_slot( $run_id, $slot );
-			$question_ids[] = $slot['question_id'];
 		}
-		Nera_SAW_Question_Bank::mark_seen( $user_id, $question_ids );
+
+		// Questions are marked seen when a slot is SERVED, not here. A run that is
+		// abandoned before question 3 must not burn questions 4-10 out of that
+		// player's bank forever — see serve_slot() and ADR 0020.
+		self::start_clock( $run_id, count( $draw['slots'] ), $config );
 
 		return self::state( self::get( $run_id ) );
+	}
+
+	/**
+	 * Settle which language a NEW run is drawn in.
+	 *
+	 * First hit wins:
+	 *   1. An explicit request, if that language is actually playable for this
+	 *      competition (declared in Polylang AND the bank has enough at every
+	 *      level the distribution asks for) — see playable_languages().
+	 *   2. Polylang's own current-language resolution, unvalidated — a player who
+	 *      never saw a language screen (nothing to choose from, or the request
+	 *      skipped it) gets what the site was already showing them, which is
+	 *      today's behaviour and must not change under them.
+	 *   3. '' — no explicit language at all. draw_for_run() reads this as "leave
+	 *      the query at Polylang's ambient scope", which is a no-op without
+	 *      Polylang and identical to (2) with it.
+	 *
+	 * NEVER Nera_SAW_Competition_Config::get()'s bare 'en' default: that default
+	 * exists so the config array always has the key, not as a claim that this run
+	 * is in English. Trusting it here would hard-lock every run to English on any
+	 * multi-language site, silently overriding whatever language the player was
+	 * actually looking at the site in.
+	 *
+	 * @param int    $competition_id Competition product ID.
+	 * @param string $requested      What the player asked for, or ''.
+	 * @return string Language code, or '' when nothing can be resolved.
+	 */
+	private static function resolve_run_language( $competition_id, $requested ) {
+		$requested = sanitize_key( (string) $requested );
+
+		if ( '' !== $requested && in_array( $requested, self::playable_languages( $competition_id ), true ) ) {
+			return $requested;
+		}
+
+		if ( class_exists( 'Nera_SAW_Language' ) && Nera_SAW_Language::engine_present() ) {
+			$current = Nera_SAW_Language::current();
+			if ( '' !== $current ) {
+				return $current;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Which languages this competition can actually be played in: declared in
+	 * Polylang, AND the bank has enough questions at every level the competition's
+	 * distribution asks for. The second half is what stops a language screen
+	 * offering a choice that would immediately reuse already-seen questions or
+	 * fall short of the run's length — see CONTEXT.md "Bank health".
+	 *
+	 * With no multilingual engine this returns empty, not `[ 'en' ]` — there is no
+	 * *choice* to speak of on a monolingual site, which is what
+	 * `Nera_SAW_Language_Switcher`-style callers use to decide whether a language
+	 * screen has anything to show at all.
+	 *
+	 * @param int $competition_id Competition product ID.
+	 * @return array<int, string>
+	 */
+	public static function playable_languages( $competition_id ) {
+		$competition_id = (int) $competition_id;
+
+		if ( ! class_exists( 'Nera_SAW_Language' ) || ! Nera_SAW_Language::is_multilingual() ) {
+			return array();
+		}
+
+		$config       = Nera_SAW_Competition_Config::get( $competition_id );
+		$distribution = array_filter( (array) $config['distribution'] );
+		if ( empty( $distribution ) ) {
+			return array();
+		}
+
+		$cat_terms = Nera_SAW_Question_Bank::product_category_ids( $competition_id );
+		$offerable = array();
+
+		foreach ( Nera_SAW_Language::codes() as $code ) {
+			$healthy = true;
+			foreach ( $distribution as $level_key => $need ) {
+				if ( Nera_SAW_Question_Bank::count_available( $level_key, $cat_terms, $code ) < (int) $need ) {
+					$healthy = false;
+					break;
+				}
+			}
+			if ( $healthy ) {
+				$offerable[] = $code;
+			}
+		}
+
+		return $offerable;
 	}
 
 	/**
@@ -143,13 +250,33 @@ class Nera_SAW_Run {
 	 */
 	private static function redraw_run_slots( $run, array $config, $user_id, $competition_id ) {
 		$run_id = (int) $run->id;
-		$draw   = Nera_SAW_Question_Bank::draw_for_run( $config, $user_id, $competition_id );
+
+		/*
+		 * Freeze the same two things start() does, but the language comes from the
+		 * run itself rather than being re-resolved: this player is already playing
+		 * in it, nothing has been answered yet (the only condition under which a
+		 * redraw happens), and a redraw must not change the language out from under
+		 * them just because the site's ambient language has since moved on. The
+		 * Quiz Method IS re-resolved — "always draw from live config" already
+		 * applies to distribution, and nothing has been shown yet for it to disagree
+		 * with.
+		 */
+		$config['language']    = (string) $run->language;
+		$config['quiz_method'] = Nera_SAW_Mode::quiz_method( $competition_id );
+
+		$draw = Nera_SAW_Question_Bank::draw_for_run( $config, $user_id, $competition_id );
 		if ( empty( $draw['slots'] ) ) {
 			return new WP_Error( 'saw_no_questions', __( 'No questions are available for this competition.', 'nera-strikeawin' ) );
 		}
 
 		global $wpdb;
 		$slots_table = Nera_SAW_Database::table( 'run_slots' );
+
+		// All or nothing. Deleting then re-inserting without a transaction can
+		// leave a run with zero slots and a grant already consumed, which is
+		// unplayable and unrefundable (ADR 0020).
+		$wpdb->query( 'START TRANSACTION' );
+
 		$wpdb->delete( $slots_table, array( 'run_id' => $run_id ), array( '%d' ) );
 
 		self::update_run(
@@ -160,12 +287,24 @@ class Nera_SAW_Run {
 			)
 		);
 
-		$question_ids = array();
+		$inserted = 0;
 		foreach ( $draw['slots'] as $slot ) {
-			self::insert_slot( $run_id, $slot );
-			$question_ids[] = $slot['question_id'];
+			if ( self::insert_slot( $run_id, $slot ) ) {
+				$inserted++;
+			}
 		}
-		Nera_SAW_Question_Bank::mark_seen( $user_id, $question_ids );
+
+		if ( $inserted !== count( $draw['slots'] ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'saw_redraw_failed', __( 'The quiz could not be prepared. Please try again.', 'nera-strikeawin' ) );
+		}
+
+		$wpdb->query( 'COMMIT' );
+
+		// The redrawn run may be a different length, so the wall clock restarts
+		// with it. Nothing was answered — resume_active_run() only redraws in that
+		// case — so no earned time is lost.
+		self::start_clock( $run_id, $inserted, $config );
 
 		return self::get_run( $run_id );
 	}
@@ -213,6 +352,11 @@ class Nera_SAW_Run {
 		if ( is_wp_error( $run ) ) {
 			return $run;
 		}
+
+		// Settle anything that lapsed while the player was away before deciding
+		// what to serve. This is what makes a reconnect land on the live question.
+		$run = self::catch_up( $run );
+
 		if ( 'active' !== $run->status ) {
 			return self::state( $run );
 		}
@@ -236,11 +380,24 @@ class Nera_SAW_Run {
 		}
 
 		if ( ! $slot->served_at ) {
-			$served   = current_time( 'mysql' );
-			$deadline = gmdate( 'Y-m-d H:i:s', self::ts( $served ) + $timer );
-			self::update_slot( $slot->id, array( 'served_at' => $served, 'deadline_at' => $deadline ) );
-			$slot->served_at   = $served;
-			$slot->deadline_at = $deadline;
+			$served = current_time( 'mysql' );
+			$fields = array( 'served_at' => $served );
+
+			// The deadline is normally already set: start_clock() stamps slot 1 and
+			// every answer chains the next one. Fetching a slot does NOT restart its
+			// clock — that is the whole point of the server owning it. This branch
+			// only covers a slot that somehow has no deadline at all.
+			if ( ! $slot->deadline_at ) {
+				$fields['deadline_at'] = gmdate( 'Y-m-d H:i:s', self::ts( $served ) + $timer );
+				$slot->deadline_at     = $fields['deadline_at'];
+			}
+
+			self::update_slot( $slot->id, $fields );
+			$slot->served_at = $served;
+
+			// Seen is stamped HERE, on first sight, not when the slot was drawn.
+			// A drawn-but-never-served question stays available to this player.
+			Nera_SAW_Question_Bank::mark_seen( (int) $run->user_id, array( (int) $slot->question_id ) );
 		}
 
 		$remaining = max( 0, ( self::ts( $slot->deadline_at ) - self::ts( current_time( 'mysql' ) ) ) );
@@ -264,19 +421,96 @@ class Nera_SAW_Run {
 		// ladder colour corrected for use as text (see level_text_color()). Safe to
 		// disclose — difficulty says nothing about which answer is correct.
 		$level_def = Nera_SAW_Constants::level( $slot->level_key );
+		$stage     = self::stage_of( $run_id, $config, (int) $slot->slot_no );
 
 		return array(
-			'run_id'           => (int) $run_id,
-			'slot_no'          => (int) $slot->slot_no,
-			'total_slots'      => (int) self::count_slots( $run_id ),
-			'level'            => $slot->level_key,
-			'level_label'      => $level_def ? (string) $level_def['label'] : '',
-			'level_text_color' => Nera_SAW_Constants::level_text_color( $slot->level_key ),
-			'question'         => (string) $snapshot['question_text'],
-			'answers'          => $answers,
-			'timer_seconds'    => (int) $timer,
-			'seconds_left'     => (int) $remaining,
-			'spins_so_far'     => (int) self::spins_so_far( $run_id ),
+			'run_id'             => (int) $run_id,
+			'slot_no'            => (int) $slot->slot_no,
+			'total_slots'        => (int) self::count_slots( $run_id ),
+			'level'              => $slot->level_key,
+			'level_label'        => $level_def ? (string) $level_def['label'] : '',
+			'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+			'question'           => (string) $snapshot['question_text'],
+			'answers'            => $answers,
+			'timer_seconds'      => (int) $timer,
+			'seconds_left'       => (int) $remaining,
+			'spins_so_far'       => (int) self::spins_so_far( $run_id ),
+			// What THIS question is worth if answered correctly — the "Worth N
+			// tickets" pill. Same multiplier submit_answer() actually pays out with,
+			// so the promise shown here is never higher than what lands.
+			'reward'             => (int) $slot->reward_base * self::tier_multiplier( $run ),
+			'quiz_method'        => isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::QUIZ_RANDOM,
+			// 'Stage' is only meaningful in ladder mode (CONTEXT.md). In random mode
+			// every question is its own stage, purely for the "Stage N of M" numbering
+			// the head-bar shows — nothing groups and no stage-break screen fires.
+			'stage_no'           => $stage['stage_no'],
+			'stage_count'        => $stage['stage_count'],
+			'is_first_of_stage'  => $stage['is_first_of_stage'],
+			'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
+		);
+	}
+
+	/**
+	 * Where a slot sits in the run's stages.
+	 *
+	 * Ladder mode: a stage is a consecutive run of slots sharing one level_key —
+	 * draw_for_run() already leaves the ladder ascending and grouped, so "new
+	 * level_key" is exactly "new stage". Random mode: every slot is its own stage,
+	 * by definition (Quiz Method distinguishes the two — see CONTEXT.md).
+	 *
+	 * @param int   $run_id  Run ID.
+	 * @param array $config  Decoded config_snapshot (already carries the frozen
+	 *                       quiz_method — see Nera_SAW_Run::start()).
+	 * @param int   $slot_no The slot being asked about.
+	 * @return array{stage_no:int, stage_count:int, is_first_of_stage:bool}
+	 */
+	private static function stage_of( $run_id, array $config, $slot_no ) {
+		global $wpdb;
+		$t    = Nera_SAW_Database::table( 'run_slots' );
+		$rows = $wpdb->get_results(
+			$wpdb->prepare( "SELECT slot_no, level_key FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC", (int) $run_id )
+		);
+
+		$is_ladder = isset( $config['quiz_method'] ) && Nera_SAW_Mode::QUIZ_LADDER === $config['quiz_method'];
+
+		if ( ! $is_ladder ) {
+			foreach ( $rows as $i => $row ) {
+				if ( (int) $row->slot_no === (int) $slot_no ) {
+					return array(
+						'stage_no'          => $i + 1,
+						'stage_count'       => count( $rows ),
+						'is_first_of_stage' => true,
+					);
+				}
+			}
+			return array( 'stage_no' => 1, 'stage_count' => max( 1, count( $rows ) ), 'is_first_of_stage' => true );
+		}
+
+		$stage_no     = 0;
+		$prev_level   = null;
+		$found        = null;
+		$first_in_run = array(); // stage_no => the slot_no that opens it.
+		foreach ( $rows as $row ) {
+			if ( $row->level_key !== $prev_level ) {
+				$stage_no++;
+				$prev_level                  = $row->level_key;
+				$first_in_run[ $stage_no ]   = (int) $row->slot_no;
+			}
+			if ( (int) $row->slot_no === (int) $slot_no ) {
+				$found = $stage_no;
+			}
+		}
+
+		if ( null === $found ) {
+			// Slot not found (shouldn't happen — caller already loaded it). Answer
+			// safely rather than divide-by-zero the caller's percentage math.
+			return array( 'stage_no' => 1, 'stage_count' => max( 1, $stage_no ), 'is_first_of_stage' => true );
+		}
+
+		return array(
+			'stage_no'          => $found,
+			'stage_count'       => $stage_no,
+			'is_first_of_stage' => isset( $first_in_run[ $found ] ) && $first_in_run[ $found ] === (int) $slot_no,
 		);
 	}
 
@@ -350,6 +584,11 @@ class Nera_SAW_Run {
 		$deadline  = self::ts( $slot->deadline_at ) + Nera_SAW_Constants::LATENCY_GRACE_SECONDS;
 		$timed_out = $now_ts > $deadline;
 
+		$run_config     = json_decode( $run->config_snapshot, true );
+		$timer_seconds  = Nera_SAW_Constants::clamp_timer(
+			isset( $run_config['timer_seconds'] ) ? $run_config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
+		);
+
 		// Score against the slot snapshot (stable across later question edits).
 		$snapshot = self::ensure_slot_snapshot( $slot );
 		$answers  = $snapshot ? (array) $snapshot['answers'] : array();
@@ -389,6 +628,11 @@ class Nera_SAW_Run {
 				'spins_awarded' => $awarded,
 			)
 		);
+
+		// The next slot's clock starts the moment this one ended — not when the
+		// client gets around to asking for it. Without this the run pauses between
+		// questions, which is precisely what ADR 0020 rejects.
+		self::chain_next_slot( $run_id, (int) $slot_no, self::ts( current_time( 'mysql' ) ), $timer_seconds );
 
 		$next = self::next_unanswered_slot( $run_id );
 		if ( ! $next ) {
@@ -444,28 +688,101 @@ class Nera_SAW_Run {
 	 * @return bool
 	 */
 	public static function finalize_scoring( $run_id, $end_reason = 'completed' ) {
-		$run = self::get( $run_id );
-		if ( ! $run || 'finalized' === $run->status ) {
-			return false;
+		global $wpdb;
+		$t = Nera_SAW_Database::table( 'runs' );
+
+		/*
+		 * Claim this run before touching anything else: lock its row for the
+		 * whole critical section (score + pool confirm + write) inside one
+		 * transaction, so a double-submit from the client or an overlapping
+		 * cron sweep (finalize_stale()) cannot both pass the status check and
+		 * both call Nera_SAW_Spin_Pool::confirm_clamped() for the same run.
+		 * A plain read-then-write here (as this used to be) left exactly that
+		 * window open.
+		 */
+		$wpdb->query( 'START TRANSACTION' );
+		$settled = false;
+		try {
+			$run = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d FOR UPDATE", (int) $run_id ) );
+
+			if ( ! $run || 'active' !== $run->status ) {
+				$wpdb->query( 'ROLLBACK' );
+				$settled = true;
+				if ( $run ) {
+					Nera_SAW_Log::add(
+						'run_finalize_race_avoided',
+						array(
+							'message'        => sprintf( 'finalize_scoring() found run #%d already %s — another call already claimed it.', (int) $run_id, (string) $run->status ),
+							'run_id'         => (int) $run_id,
+							'competition_id' => (int) $run->competition_id,
+							'tier_key'       => (string) $run->tier_key,
+							'user_id'        => (int) $run->user_id,
+							'order_id'       => (int) $run->order_id,
+						)
+					);
+				}
+				return false;
+			}
+
+			$correct = (int) self::count_correct( $run_id );
+			$spins   = (int) self::spins_so_far( $run_id );
+
+			/*
+			 * Confirm against the pool BEFORE writing spins_confirmed, and write back
+			 * whatever the pool actually backed — never the raw score regardless. In
+			 * the normal case (this run's worst case was reserved at grant time, and
+			 * nothing has since sold past what Nera_SAW_Cart_Entry's checkout gate
+			 * allows) confirmed === $spins and nothing here changes behaviour. See
+			 * Nera_SAW_Spin_Pool::confirm_clamped() for why a run's recorded ticket
+			 * count must never be allowed to exceed what was actually reserved for it.
+			 */
+			$reserved_slice  = (int) $run->max_possible_spins;
+			$confirmed_spins = $spins;
+			if ( $reserved_slice > 0 || $spins > 0 ) {
+				$confirmed_spins = Nera_SAW_Spin_Pool::confirm_clamped( (int) $run->competition_id, $reserved_slice, $spins );
+			}
+
+			self::update_run(
+				$run_id,
+				array(
+					'status'          => 'finalized',
+					'end_reason'      => (string) $end_reason,
+					'correct_count'   => $correct,
+					'spins_confirmed' => $confirmed_spins,
+					'finalized_at'    => current_time( 'mysql' ),
+				)
+			);
+
+			$wpdb->query( 'COMMIT' );
+			$settled = true;
+		} finally {
+			if ( ! $settled ) {
+				$wpdb->query( 'ROLLBACK' );
+			}
 		}
 
-		$correct = (int) self::count_correct( $run_id );
-		$spins   = (int) self::spins_so_far( $run_id );
-
-		self::update_run(
-			$run_id,
-			array(
-				'status'          => 'finalized',
-				'end_reason'      => (string) $end_reason,
-				'correct_count'   => $correct,
-				'spins_confirmed' => $spins,
-				'finalized_at'    => current_time( 'mysql' ),
-			)
-		);
-
-		$reserved_slice = (int) $run->max_possible_spins;
-		if ( $reserved_slice > 0 ) {
-			Nera_SAW_Spin_Pool::confirm( (int) $run->competition_id, $reserved_slice, $spins );
+		if ( $confirmed_spins < $spins ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf(
+					'Ticket pool short at finalize: run earned %1$d but the pool could only confirm %2$d for competition #%3$d. Player was awarded %2$d, not %1$d.',
+					$spins,
+					$confirmed_spins,
+					(int) $run->competition_id
+				),
+				array(
+					'run_id'         => (int) $run_id,
+					'competition_id' => (int) $run->competition_id,
+					'tier_key'       => (string) $run->tier_key,
+					'user_id'        => (int) $run->user_id,
+					'order_id'       => (int) $run->order_id,
+					'context'        => array(
+						'earned'    => $spins,
+						'confirmed' => $confirmed_spins,
+						'reserved'  => $reserved_slice,
+					),
+				)
+			);
 		}
 
 		return true;
@@ -541,6 +858,109 @@ class Nera_SAW_Run {
 			'ticket_numbers'        => $numbers,
 			'runs_remaining_total'  => Nera_SAW_Run_Grants::balance_total( (int) $user_id, (int) $run->competition_id ),
 			'runs_remaining_tier'   => isset( $balances[ $tier_key ] ) ? (int) $balances[ $tier_key ] : 0,
+			'slot_results'          => self::slot_results( (int) $run_id ),
+			// The results screen's "Draw: <date>" line. Reused from the standalone
+			// result-overlay clone rather than re-implemented — one place reads the
+			// LFW product's end date, in both modes.
+			'draw_date'             => class_exists( 'Nera_SAW_Standalone_Result_Screen' )
+				? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
+				: '',
+		) + self::purchase_position( $run );
+	}
+
+	/**
+	 * Per-question outcome for a finished run, in slot order — the results
+	 * screen's row of chips ("+2", "0", "–"). Safe to disclose in full: the run is
+	 * over, so every one of these is history, not an answer key still in play.
+	 *
+	 * @param int $run_id Run ID.
+	 * @return array<int, array{slot_no:int, outcome:string, spins_awarded:int}>
+	 */
+	private static function slot_results( $run_id ) {
+		global $wpdb;
+		$t    = Nera_SAW_Database::table( 'run_slots' );
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT slot_no, outcome, spins_awarded FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC",
+				(int) $run_id
+			)
+		);
+
+		$out = array();
+		foreach ( $rows as $row ) {
+			$out[] = array(
+				'slot_no'       => (int) $row->slot_no,
+				// A slot the run never reached (an early finalize) has no outcome
+				// stamped at all; that is a timeout in every way that matters here —
+				// no answer was ever counted for it.
+				'outcome'       => $row->outcome ? (string) $row->outcome : 'timeout',
+				'spins_awarded' => (int) $row->spins_awarded,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Where this run sits in the purchase that paid for it — "run 2 of 3".
+	 *
+	 * Counted within one order line rather than across the player's whole balance,
+	 * because that is the promise the customer was sold: they bought three runs on
+	 * this competition at this tier, and this is the second of those three. A player
+	 * who then buys three more starts again at one, which is what they expect.
+	 *
+	 * Returns zeroes rather than omitting the keys when the purchase cannot be
+	 * identified — a seeded run, or one whose order has since been deleted — so a
+	 * template can test `total > 1` without first testing that the keys exist.
+	 *
+	 * @param object $run Run row.
+	 * @return array { purchase_run_no: int, purchase_run_total: int }
+	 */
+	private static function purchase_position( $run ) {
+		$none = array(
+			'purchase_run_no'    => 0,
+			'purchase_run_total' => 0,
+		);
+
+		$order_id = (int) $run->order_id;
+		if ( $order_id < 1 ) {
+			return $none;
+		}
+
+		global $wpdb;
+		$grants = Nera_SAW_Database::table( 'run_grants' );
+		$runs   = Nera_SAW_Database::table( 'runs' );
+
+		$total = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE( SUM( qty ), 0 ) FROM {$grants}
+				 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND order_id = %d",
+				(int) $run->user_id,
+				(int) $run->competition_id,
+				(string) $run->tier_key,
+				$order_id
+			)
+		);
+		if ( $total < 1 ) {
+			return $none;
+		}
+
+		// Position by id: runs are created in the order they are played, so the
+		// count of same-purchase runs up to and including this one is its number.
+		$position = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$runs}
+				 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND order_id = %d AND id <= %d",
+				(int) $run->user_id,
+				(int) $run->competition_id,
+				(string) $run->tier_key,
+				$order_id,
+				(int) $run->id
+			)
+		);
+
+		return array(
+			'purchase_run_no'    => max( 1, $position ),
+			'purchase_run_total' => max( $total, $position ),
 		);
 	}
 
@@ -778,26 +1198,63 @@ class Nera_SAW_Run {
 	/**
 	 * Finalize runs whose last slot deadline has passed (abandoned). Cron-driven.
 	 */
-	public static function finalize_stale() {
+	/**
+	 * @param bool $force_resume Settle under the resume policy whatever the setting
+	 *                           says. Used when the policy is being switched: the
+	 *                           backlog belongs to the policy that was in force when
+	 *                           those runs were played, so it is settled under that
+	 *                           one rather than retroactively re-judged.
+	 */
+	public static function finalize_stale( $force_resume = false ) {
 		global $wpdb;
 		$runs  = Nera_SAW_Database::table( 'runs' );
 		$slots = Nera_SAW_Database::table( 'run_slots' );
 		$now   = current_time( 'mysql' );
 
-		// Active runs with no unanswered slot still within its deadline.
+		/*
+		 * Active runs whose own wall clock has passed.
+		 *
+		 * The previous form of this query asked for runs with no unanswered slot
+		 * still within its deadline, and counted `deadline_at IS NULL` — a slot
+		 * that was never served — as "within deadline". A player who stopped at
+		 * question 5 left slots 6-10 unserved, so the run never qualified and the
+		 * only runs it could ever close were those where every slot was served and
+		 * none answered. See ADR 0020.
+		 *
+		 * `expires_at` is NULL only on runs that predate that column and have not
+		 * been back-filled; those are skipped here rather than guessed at, and the
+		 * migration screen exists to give them a value.
+		 *
+		 * `errored` runs are excluded. An errored run is still `status = active` by
+		 * design — that is how the Report finds it and offers Restore — so without
+		 * this clause the sweep would close it, mint its tickets, and remove the
+		 * marker before any administrator saw it.
+		 */
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT r.id FROM {$runs} r
-				 WHERE r.status = 'active'
-				 AND NOT EXISTS (
-				   SELECT 1 FROM {$slots} s
-				   WHERE s.run_id = r.id AND s.answered_at IS NULL
-				   AND ( s.deadline_at IS NULL OR s.deadline_at >= %s )
-				 )",
-				$now
+				"SELECT id FROM {$runs}
+				 WHERE status = 'active'
+				 AND end_reason <> 'errored'
+				 AND expires_at IS NOT NULL
+				 AND expires_at < %s
+				 LIMIT 200",
+				gmdate( 'Y-m-d H:i:s', self::ts( $now ) - Nera_SAW_Constants::LATENCY_GRACE_SECONDS )
 			)
 		);
+		$closes = ! $force_resume && ! Nera_SAW_Mode::allows_resume();
+
 		foreach ( (array) $ids as $rid ) {
+			if ( $closes ) {
+				// Resume is off: a run that went silent is an interruption, and
+				// interruptions are an administrator's call, not an automatic
+				// score of zero. Nothing is minted.
+				$row = self::get_run( (int) $rid );
+				if ( $row ) {
+					self::close_interrupted( $row );
+				}
+				continue;
+			}
+
 			// Mark unanswered, past-deadline slots as timeouts. These runs went
 			// silent (no leave captured), so the run ends as 'expired' (ADR 0010).
 			$wpdb->query(
@@ -909,7 +1366,8 @@ class Nera_SAW_Run {
 	 */
 	private static function state( $run ) {
 		$next = self::next_unanswered_slot( (int) $run->id );
-		return array(
+
+		$out = array(
 			'run_id'       => (int) $run->id,
 			'status'       => $run->status,
 			'total_slots'  => (int) self::count_slots( (int) $run->id ),
@@ -920,6 +1378,38 @@ class Nera_SAW_Run {
 			'tier_key'     => (string) $run->tier_key,
 			'order_id'     => (int) $run->order_id,
 		);
+
+		/*
+		 * A look at the NEXT slot's stage, without serving it. This is what lets the
+		 * client show the stage-break screen BEFORE the next question's clock starts
+		 * rather than after — serve_slot() stamps served_at/deadline_at on first
+		 * fetch, so fetching early to decide whether to show a break would burn the
+		 * player's answering time behind that screen. Reading level_key off the
+		 * already-drawn run_slots row costs nothing and starts nothing.
+		 */
+		if ( $next ) {
+			$config = json_decode( $run->config_snapshot, true );
+			if ( is_array( $config ) ) {
+				$stage      = self::stage_of( (int) $run->id, $config, (int) $next->slot_no );
+				$level_def  = Nera_SAW_Constants::level( $next->level_key );
+
+				$out['next_stage'] = array(
+					'is_first_of_stage' => (bool) $stage['is_first_of_stage'],
+					'stage_no'          => (int) $stage['stage_no'],
+					'stage_count'       => (int) $stage['stage_count'],
+					'quiz_method'       => isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::QUIZ_RANDOM,
+					'level_label'       => $level_def ? (string) $level_def['label'] : '',
+					// The break screen's own colour, not the slot's — it is shown
+					// BEFORE that slot is fetched (see the note above this block), so
+					// slot.level_text_color on the client still holds the previous
+					// stage's colour at that moment.
+					'level_text_color'  => Nera_SAW_Constants::level_text_color( $next->level_key ),
+					'reward_label'      => Nera_SAW_Competition_Config::reward_label( $config, $next->level_key ),
+				);
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -1022,7 +1512,7 @@ class Nera_SAW_Run {
 	private static function insert_slot( $run_id, array $slot ) {
 		global $wpdb;
 		$t = Nera_SAW_Database::table( 'run_slots' );
-		$wpdb->insert(
+		return (bool) $wpdb->insert(
 			$t,
 			array(
 				'run_id'      => (int) $run_id,
@@ -1033,6 +1523,349 @@ class Nera_SAW_Run {
 			),
 			array( '%d', '%d', '%s', '%d', '%d' )
 		);
+	}
+
+	/* =====================================================================
+	 * The run clock (ADR 0020)
+	 *
+	 * Three pieces, and each exists because the other two cannot do its job:
+	 *
+	 *  - `runs.expires_at` is the wall clock for the whole run. It is the only
+	 *    thing the sweep can key on, because a run that was abandoned early has
+	 *    no served slots left to prove it is over.
+	 *  - Each slot's `deadline_at` is chained forward from the moment the
+	 *    previous slot ended, so the clock runs while nobody is looking.
+	 *  - catch_up() settles whatever lapsed before anything is served or scored,
+	 *    which is what makes a reconnect land on the live question.
+	 * ================================================================== */
+
+	/**
+	 * Per-question timer for a run's config, clamped.
+	 *
+	 * @param array $config Config snapshot.
+	 * @return int Seconds.
+	 */
+	private static function timer_for( array $config ) {
+		return Nera_SAW_Constants::clamp_timer(
+			isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
+		);
+	}
+
+	/**
+	 * How long a run of this shape may take, end to end.
+	 *
+	 * One timer per question plus a single grace allowance. Deliberately an upper
+	 * bound rather than a tight fit: it decides when a silent run is swept, and
+	 * sweeping a run a player is still in would take tickets off them.
+	 *
+	 * @param array $config     Config snapshot.
+	 * @param int   $slot_count Number of slots.
+	 * @return int Seconds.
+	 */
+	public static function run_window_seconds( array $config, $slot_count ) {
+		$slot_count = max( 1, (int) $slot_count );
+
+		// Whole seconds. The latency grace is a float, and PHP 8.1 deprecates
+		// handing a fractional float to anything expecting an int — which every
+		// caller here does, via gmdate(). Round up so the grace is never lost.
+		return (int) ceil( ( $slot_count * self::timer_for( $config ) ) + Nera_SAW_Constants::LATENCY_GRACE_SECONDS );
+	}
+
+	/**
+	 * Stamp the run's wall clock and start slot 1's.
+	 *
+	 * Slot 1's deadline is set here rather than when it is first fetched, so the
+	 * clock is the server's from the first second. A player who buys a run, never
+	 * opens it and comes back tomorrow has an expired run, not a fresh one.
+	 *
+	 * @param int   $run_id     Run ID.
+	 * @param int   $slot_count Number of slots drawn.
+	 * @param array $config     Config snapshot.
+	 */
+	private static function start_clock( $run_id, $slot_count, array $config ) {
+		$now   = current_time( 'mysql' );
+		$timer = self::timer_for( $config );
+
+		$fields = array(
+			'expires_at' => gmdate( 'Y-m-d H:i:s', self::ts( $now ) + self::run_window_seconds( $config, $slot_count ) ),
+		);
+
+		// insert_run() already stamps started_at. Only fill it if it is somehow
+		// absent — a redraw restarts the *clock*, but the run still began when it
+		// began, and the Report reads started_at as "played at".
+		$existing = self::get_run( (int) $run_id );
+		if ( $existing && empty( $existing->started_at ) ) {
+			$fields['started_at'] = $now;
+		}
+
+		self::update_run( (int) $run_id, $fields );
+
+		$first = self::get_slot( (int) $run_id, 1 );
+		if ( $first && ! $first->deadline_at ) {
+			self::update_slot( $first->id, array( 'deadline_at' => gmdate( 'Y-m-d H:i:s', self::ts( $now ) + $timer ) ) );
+		}
+	}
+
+	/**
+	 * Give the next slot its deadline, measured from when this one ended.
+	 *
+	 * Does not touch `served_at` — that still means "the player saw it", and is
+	 * what marks a question seen. A slot can therefore have a running deadline it
+	 * was never shown for, which is exactly the abandoned case.
+	 *
+	 * @param int $run_id  Run ID.
+	 * @param int $slot_no The slot that just ended.
+	 * @param int $from_ts Unix time the slot ended (answered or lapsed).
+	 * @param int $timer   Seconds per question.
+	 */
+	private static function chain_next_slot( $run_id, $slot_no, $from_ts, $timer ) {
+		$next = self::get_slot( (int) $run_id, (int) $slot_no + 1 );
+		if ( ! $next || $next->answered_at || $next->deadline_at ) {
+			return;
+		}
+		self::update_slot( $next->id, array( 'deadline_at' => gmdate( 'Y-m-d H:i:s', (int) $from_ts + (int) $timer ) ) );
+	}
+
+	/**
+	 * Settle every slot whose window closed while nobody was watching.
+	 *
+	 * Walks the unanswered slots in order, scoring each lapsed one as a timeout
+	 * and chaining the next one's deadline from the moment this one *should* have
+	 * ended — not from now, or a player could gain time by disconnecting. Stops at
+	 * the first slot still inside its window: that is the live question.
+	 *
+	 * @param object $run Run row.
+	 * @return object The run, refreshed (its status may have changed).
+	 */
+	private static function catch_up( $run ) {
+		if ( ! $run || 'active' !== $run->status ) {
+			return $run;
+		}
+
+		global $wpdb;
+		$t      = Nera_SAW_Database::table( 'run_slots' );
+		$now_ts = self::ts( current_time( 'mysql' ) );
+		$grace  = Nera_SAW_Constants::LATENCY_GRACE_SECONDS;
+		$config = json_decode( $run->config_snapshot, true );
+		$config = is_array( $config ) ? $config : array();
+		$timer  = self::timer_for( $config );
+
+		$pending = $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$t} WHERE run_id = %d AND answered_at IS NULL ORDER BY slot_no ASC", (int) $run->id )
+		);
+		if ( ! $pending ) {
+			return $run;
+		}
+
+		$run_over = $run->expires_at && ( self::ts( $run->expires_at ) + $grace ) < $now_ts;
+		$changed  = false;
+
+		/*
+		 * Under the "close the run" policy an interruption is not something the
+		 * player plays through — it ends the run and an administrator decides what
+		 * to do with it. Detected here because this is the one place that knows a
+		 * question went by with nobody answering it.
+		 *
+		 * A deliberate leave does not come through here: abandon() handles the
+		 * confirm dialog, and confirming it is a choice under either policy.
+		 */
+		if ( ! Nera_SAW_Mode::allows_resume() ) {
+			$first   = $pending[0];
+			$missed  = $first->deadline_at && ( self::ts( $first->deadline_at ) + $grace ) < $now_ts;
+			if ( $missed || $run_over ) {
+				return self::close_interrupted( $run );
+			}
+			return $run; // Nothing lapsed — a reload inside the current question.
+		}
+
+		foreach ( $pending as $slot ) {
+			$lapsed = $slot->deadline_at && ( self::ts( $slot->deadline_at ) + $grace ) < $now_ts;
+
+			if ( ! $run_over && ! $lapsed ) {
+				break; // The live question. Everything after it is still to come.
+			}
+
+			$ended_ts = $slot->deadline_at ? self::ts( $slot->deadline_at ) : $now_ts;
+			self::update_slot(
+				$slot->id,
+				array(
+					'answered_at'   => gmdate( 'Y-m-d H:i:s', min( $ended_ts, $now_ts ) ),
+					'is_correct'    => 0,
+					'outcome'       => 'timeout',
+					'spins_awarded' => 0,
+				)
+			);
+			self::chain_next_slot( (int) $run->id, (int) $slot->slot_no, $ended_ts, $timer );
+			$changed = true;
+		}
+
+		if ( ! $changed ) {
+			return $run;
+		}
+
+		// Everything settled? Then the run is finished, and how it finished is the
+		// difference the Report cares about (ADR 0010): a run whose wall clock ran
+		// out is `expired`; one whose last question simply lapsed is `abandoned`.
+		if ( ! self::next_unanswered_slot( (int) $run->id ) ) {
+			self::finalize( (int) $run->id, $run_over ? 'expired' : 'abandoned' );
+		}
+
+		$fresh = self::get_run( (int) $run->id );
+		return $fresh ? $fresh : $run;
+	}
+
+	/**
+	 * Settle the runs left over from the previous resume policy.
+	 *
+	 * Called when an administrator switches to "close the run". Everything already
+	 * stuck was played while the old policy was in force, so it is finished under
+	 * the old policy — the tickets those players earned are issued and the runs are
+	 * closed properly — rather than being reclassified as somebody's problem after
+	 * the fact.
+	 *
+	 * Capped, because minting is heavy: it creates every earned ticket, confirms it
+	 * and emails the player (ADR 0011). A few thousand runs inside one settings save
+	 * would time out, so the cap stops and the caller says what is left.
+	 *
+	 * @param int $limit Maximum runs to back-fill in this pass.
+	 * @return array { settled: int, remaining: int }
+	 */
+	public static function settle_legacy_runs( $limit = 500 ) {
+		global $wpdb;
+		$t = Nera_SAW_Database::table( 'runs' );
+
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT id FROM {$t}
+				 WHERE status = 'active' AND end_reason <> 'errored' AND expires_at IS NULL
+				 ORDER BY id ASC LIMIT %d",
+				max( 1, (int) $limit )
+			)
+		);
+
+		$settled = 0;
+		foreach ( (array) $ids as $id ) {
+			if ( self::backfill_expires_at( (int) $id ) ) {
+				$settled++;
+			}
+		}
+
+		// Sweep them now, under the policy they were played under. The sweep is
+		// itself capped per pass, so loop until it stops finding work.
+		$guard = 0;
+		do {
+			// current_time( 'mysql' ), not UTC_TIMESTAMP(): expires_at is written in
+			// the site's own time (start_clock()), so comparing it against MySQL's
+			// UTC would be off by the site's offset.
+			$before = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$t} WHERE status = 'active' AND end_reason <> 'errored' AND expires_at IS NOT NULL AND expires_at < %s",
+					current_time( 'mysql' )
+				)
+			);
+			if ( $before < 1 ) {
+				break;
+			}
+			self::finalize_stale( true );
+			$guard++;
+		} while ( $guard < 20 );
+
+		$remaining = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'active' AND end_reason <> 'errored' AND expires_at IS NULL" );
+
+		return array(
+			'settled'   => $settled,
+			'remaining' => $remaining,
+		);
+	}
+
+	/**
+	 * End a run that was interrupted, and leave it for an administrator.
+	 *
+	 * Marked `errored` rather than `expired` on purpose. `errored` is the existing
+	 * "stuck, a human should look" state (ADR 0013) and it deliberately does NOT
+	 * finalize — so nothing is minted, the Report surfaces it, and Restore refunds
+	 * the run to the player. Under this policy that is the fair outcome: the player
+	 * did not get the run they paid for, so they get the run back rather than a
+	 * partial score.
+	 *
+	 * @param object $run Run row.
+	 * @return object The run, refreshed.
+	 */
+	private static function close_interrupted( $run ) {
+		$run_id = (int) $run->id;
+
+		if ( 'active' !== $run->status || 'errored' === (string) $run->end_reason ) {
+			return $run;
+		}
+
+		self::update_run( $run_id, array( 'end_reason' => 'errored' ) );
+
+		if ( class_exists( 'Nera_SAW_Log' ) ) {
+			Nera_SAW_Log::error(
+				'run_interrupted',
+				__( 'The run was interrupted — the connection was lost or the browser was closed mid-quiz. Resume is switched off, so the run was closed for review.', 'nera-strikeawin' ),
+				array(
+					'run_id'  => $run_id,
+					'user_id' => (int) $run->user_id,
+				)
+			);
+		}
+
+		$fresh = self::get_run( $run_id );
+		return $fresh ? $fresh : $run;
+	}
+
+	/**
+	 * Give a pre-`expires_at` run a wall clock, derived from what it holds.
+	 *
+	 * Used by the migration screen, never automatically: these runs were left
+	 * `active` by a sweep that has never run, so back-filling them is what makes
+	 * the first sweep close them — and closing them mints the tickets their
+	 * players earned. That is correct, and it is not something to do to a live
+	 * site without looking first.
+	 *
+	 * @param object $run Run row (expires_at NULL).
+	 * @return string|null The computed datetime, or null if it cannot be derived.
+	 */
+	public static function derive_expires_at( $run ) {
+		if ( ! $run ) {
+			return null;
+		}
+
+		$config = json_decode( $run->config_snapshot, true );
+		$config = is_array( $config ) ? $config : array();
+		$count  = (int) self::count_slots( (int) $run->id );
+		if ( $count < 1 ) {
+			$count = 1;
+		}
+
+		// started_at is the honest origin. Runs that never started fall back to
+		// created_at, which is never later, so the window can only be generous.
+		$origin = $run->started_at ? $run->started_at : $run->created_at;
+		if ( ! $origin ) {
+			return null;
+		}
+
+		return gmdate( 'Y-m-d H:i:s', self::ts( $origin ) + self::run_window_seconds( $config, $count ) );
+	}
+
+	/**
+	 * Persist a derived wall clock onto one run.
+	 *
+	 * @param int $run_id Run ID.
+	 * @return bool Whether a value was written.
+	 */
+	public static function backfill_expires_at( $run_id ) {
+		$run = self::get_run( (int) $run_id );
+		if ( ! $run || $run->expires_at ) {
+			return false;
+		}
+		$value = self::derive_expires_at( $run );
+		if ( ! $value ) {
+			return false;
+		}
+		self::update_run( (int) $run_id, array( 'expires_at' => $value ) );
+		return true;
 	}
 
 	/**

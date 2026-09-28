@@ -31,6 +31,13 @@ class Nera_SAW_Competition_Config {
 			'language'       => 'en',
 			'categories'     => array(), // empty = whole bank.
 			'quiz_type'      => 'per_question', // per_question (live) | whole_period (hidden, future).
+			// Per-competition Quiz Method. Blank = inherit the global setting;
+			// resolve through Nera_SAW_Mode::quiz_method(), never read directly.
+			'quiz_method'    => Nera_SAW_Mode::INHERIT,
+			// Free text, not a number: the prototype prints it verbatim ("£28,000")
+			// and different competitions word it differently. Formatting it here
+			// would take that choice away from whoever writes the competition.
+			'cash_alternative' => '',
 			'timer_seconds'  => Nera_SAW_Constants::TIMER_MAX_SECONDS, // per-question (Type 1).
 			'total_time'     => 0, // whole-quiz minutes (Type 2, future).
 			'distribution'   => array(), // level_key => count.
@@ -213,6 +220,16 @@ class Nera_SAW_Competition_Config {
 		// Compliance-locked clamps.
 		$config['timer_seconds'] = Nera_SAW_Constants::clamp_timer( $config['timer_seconds'] );
 
+		// Blank stays blank: "inherit" is a legal answer here, so the plain
+		// sanitiser's fall back to `random` would silently pin every competition.
+		$config['quiz_method'] = Nera_SAW_Mode::sanitize_quiz_method_override(
+			isset( $config['quiz_method'] ) ? $config['quiz_method'] : Nera_SAW_Mode::INHERIT
+		);
+
+		$config['cash_alternative'] = sanitize_text_field(
+			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''
+		);
+
 		// Drop distribution entries below the difficulty floor.
 		$config['distribution'] = self::filter_distribution_by_floor( $config['distribution'] );
 
@@ -284,6 +301,24 @@ class Nera_SAW_Competition_Config {
 		}
 		$level = Nera_SAW_Constants::level( $level_key );
 		return $level ? (int) $level['reward'] : 0;
+	}
+
+	/**
+	 * "2 tickets per correct answer" — the reward line the stage-break screen and
+	 * the per-question badge both read. One place for the wording, not two.
+	 *
+	 * @param array  $config    Config.
+	 * @param string $level_key Level key.
+	 * @return string
+	 */
+	public static function reward_label( array $config, $level_key ) {
+		$reward = self::effective_reward( $config, $level_key );
+
+		return sprintf(
+			/* translators: %d: tickets per correct answer at this level. */
+			_n( '%d ticket per correct answer', '%d tickets per correct answer', $reward, 'nera-strikeawin' ),
+			$reward
+		);
 	}
 
 	/**

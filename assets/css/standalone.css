@@ -1,0 +1,3583 @@
+/*
+ * Strike A Win — standalone section.
+ *
+ * The design's artboards carry inline styles because they were exported one
+ * screen at a time. Here the same values are tokens: the ramp and the surfaces
+ * repeat across every screen, and a card that is 1px off from the one beside it
+ * is the difference between "built to the design" and "close enough".
+ *
+ * One responsive layout, not two. The design ships a 430px artboard and a wide
+ * one; this is the single layout that becomes each at the 900px breakpoint.
+ *
+ * STRUCTURE
+ *   .saw-shell        the page. 430px on mobile, full width on desktop.
+ *   .saw-header       the logo bar. Hidden on mobile below the list screen.
+ *   .saw-screen-head  back button and title. Every screen below the list.
+ *   .saw-screen       a content column: 600px for reading screens, 1200px wide.
+ */
+
+.saw-app {
+  --saw-bg: #f7ebe3;
+  --saw-card: #fffaf4;
+  --saw-tint: #fcf4ec;
+  --saw-rule: #e9d9ca;
+  --saw-control: #e2ccba;
+  --saw-connector: #efe4d8;
+
+  --saw-ink: #211a14;
+  --saw-body: #5b4f45;
+  --saw-muted: #8a7b6d;
+
+  /* On the one dark block on the site. */
+  --saw-on-dark: #fffaf4;
+  --saw-on-dark-muted: #c9b6a4;
+
+  --saw-primary: #eb580c;
+  --saw-link: #bf4509;
+  --saw-eyebrow: #a03a07;
+  --saw-pill-edge: #f27929;
+
+  --saw-ok: #2f7d57;
+  --saw-bad: #c0432a;
+
+  /* Difficulty by position, easiest first — see Competition_Spec::ramp(). */
+  --saw-l1: #3f7fb8;
+  --saw-l2: #6a5099;
+  --saw-l3: #a1418a;
+  --saw-l4: #c4483f;
+  --saw-l5: #eb580c;
+
+  --saw-r-control: 14px;
+  --saw-r-button: 16px;
+  --saw-r-card: 20px;
+  --saw-r-hero: 24px;
+
+}
+
+/*
+ * Page properties, not token properties. The quiz app's own root also carries
+ * `saw-app`, so anything declared above would apply twice — a second full-height
+ * ground nested inside the first. Tokens are meant to be inherited; a background
+ * is not.
+ */
+body.saw-app {
+  background: var(--saw-bg);
+  color: var(--saw-body);
+  font-family: Figtree, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.saw-app *,
+.saw-app *::before,
+.saw-app *::after { box-sizing: border-box; }
+
+.saw-app img { max-width: 100%; }
+
+.saw-shell {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- content columns ---------------------------------------------------- */
+
+/*
+ * The shell is the page; a screen decides its own measure inside it. The design
+ * gives reading screens 600px and the card grid 1200px, and the sticky bar spans
+ * the window regardless — which is why the width lives here and not on the shell.
+ */
+.saw-screen {
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 900px) {
+  .saw-screen { max-width: 1200px; }
+  .saw-screen--narrow { max-width: 600px; }
+}
+
+/* ---- header ------------------------------------------------------------- */
+
+/*
+ * One element, two layouts. On mobile the logo is centred with the link and the
+ * account pinned to the edges; on desktop it becomes a sticky three-column grid.
+ * The logo stays centred at both sizes — which is what an ordinary responsive
+ * header loses when it collapses to flex-start.
+ */
+/*
+ * A real three-column grid at every width, not only from the desktop media
+ * query down below — the mobile version used to flex-center the logo while
+ * pinning the link and the tools cluster to the edges with `position:
+ * absolute`, which takes them out of the flex layout entirely, so the
+ * centered logo has no idea how wide either edge actually is and can run
+ * straight into the language toggle at phone width. A grid's outer columns
+ * reserve real space for whatever they hold, so the middle one centers
+ * inside what is actually left over, exactly as the desktop override below
+ * already relies on for its own three columns.
+ */
+.saw-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 20px 8px;
+}
+
+.saw-header__link {
+  justify-self: start;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--saw-eyebrow);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.saw-header__link:hover { text-decoration: underline; }
+
+.saw-header__logo {
+  display: block;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--saw-ink);
+  white-space: nowrap;
+}
+/* The logo text allows <em> for the accented word, exactly as the headings do. */
+.saw-header__logo em,
+.saw-header__logo span { font-style: normal; color: var(--saw-primary); }
+
+/* The design leads with the logo on mobile and shrinks it once the desktop bar
+   has a fixed 76px height to sit inside. */
+.saw-header__logo--image img {
+  height: 110px;
+  width: auto;
+  display: block;
+}
+
+.saw-header__tools {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.saw-header__walk {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--saw-card);
+  color: var(--saw-link);
+  border: 2px solid var(--saw-control);
+  text-decoration: none;
+  flex: none;
+}
+
+.saw-header__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--saw-primary);
+  color: var(--saw-on-dark);
+  font-weight: 800;
+  font-size: 15px;
+  text-decoration: none;
+  flex: none;
+}
+
+.saw-header__signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 12px;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 16px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.saw-header__signin:hover { border-color: var(--saw-primary); }
+
+@media (max-width: 899px) {
+  /*
+   * Below the list screen the design drops this bar entirely on mobile: 430px
+   * cannot hold a 110px logo, a title and the screen itself, and the back button
+   * is the more useful of the two headers there.
+   */
+  .saw-header--inner { display: none; }
+
+  /* At 430px a labelled button and a centred logo cannot both fit. */
+  .saw-header__signin span { display: none; }
+  .saw-header__signin {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+  }
+  .saw-header__walk { display: none; }
+}
+
+/* ---- a screen's own header ---------------------------------------------- */
+
+.saw-screen-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px 8px;
+}
+
+.saw-screen-head__back {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  display: grid;
+  place-items: center;
+  flex: none;
+  text-decoration: none;
+}
+.saw-screen-head__back:hover { border-color: var(--saw-primary); }
+
+.saw-screen-head__title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1.2;
+  color: var(--saw-ink);
+}
+.saw-screen-head__title em { font-style: normal; color: var(--saw-primary); }
+
+.saw-screen-head__sub {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+
+/* ---- page intro (the list screen) --------------------------------------- */
+
+.saw-intro { padding: 16px 20px 4px; }
+
+.saw-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--saw-eyebrow);
+}
+
+.saw-h1 {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--saw-ink);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.saw-h1 em { font-style: normal; color: var(--saw-primary); }
+
+.saw-lede { margin: 6px 0 0; color: var(--saw-body); }
+
+/* ---- the card list ------------------------------------------------------ */
+
+.saw-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px 24px;
+  list-style: none;
+  margin: 0;
+}
+
+.saw-card {
+  overflow: hidden;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  box-shadow: 0 4px 6px -1px rgba(33, 26, 20, 0.05);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.saw-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 20px -8px rgba(33, 26, 20, 0.16);
+}
+.saw-card--sold-out { opacity: 0.55; }
+.saw-card--sold-out:hover { transform: none; }
+
+.saw-card__media { position: relative; height: 190px; background: rgba(127, 127, 127, 0.08); }
+.saw-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.saw-card__price {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  background: rgba(255, 250, 244, 0.95);
+  backdrop-filter: blur(8px);
+  border: 2px solid var(--saw-pill-edge);
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.saw-card__pill {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  border-radius: 9999px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--saw-bad);
+  color: var(--saw-card);
+}
+
+.saw-card__body {
+  padding: 16px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saw-card__title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--saw-ink);
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-decoration: none;
+  display: block;
+}
+a.saw-card__title:hover { color: var(--saw-link); }
+
+.saw-card__dates { font-size: 13px; color: var(--saw-muted); }
+
+/*
+ * The ticket stub. Two notches punched out of the card edge where the perforation
+ * runs — the detail that makes the card read as a ticket rather than a panel, and
+ * the one thing in this design most easily lost in translation.
+ */
+.saw-card__perf {
+  position: relative;
+  height: 0;
+  border-top: 1.5px dashed var(--saw-control);
+  margin-top: 4px;
+}
+.saw-card__perf::before,
+.saw-card__perf::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--saw-bg);
+  border: 1px solid var(--saw-rule);
+}
+.saw-card__perf::before { left: -11px; }
+.saw-card__perf::after { right: -11px; }
+
+.saw-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 16px;
+}
+
+.saw-dots { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.saw-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.saw-dot--last { width: 10px; height: 10px; }
+
+.saw-card__shape {
+  font-size: 12px;
+  color: var(--saw-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- panels, empty states, footer --------------------------------------- */
+
+.saw-panel {
+  margin: 4px 20px 24px;
+  padding: 18px;
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+.saw-panel h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+.saw-panel p { margin: 6px 0 0; font-size: 14px; }
+
+.saw-empty {
+  margin: 24px 20px;
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--saw-muted);
+  border: 1.5px dashed var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+
+/*
+ * One paragraph of continuous small print, as the design sets it. Only the first
+ * sentence is editable; the rest is required on every page.
+ */
+.saw-footer {
+  margin-top: auto;
+  /* Extra right padding below 900px only: the walkthrough FAB is `position:
+   * fixed` there (see .saw-fab), so on a short page its screen position can
+   * land on top of the footer's own text underneath. Reserving its footprint
+   * keeps this required legal copy readable regardless of scroll position;
+   * the desktop breakpoint below fully replaces this padding once the FAB
+   * itself is hidden. */
+  padding: 8px 84px 24px 24px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--saw-muted);
+}
+.saw-footer a { color: var(--saw-muted); text-decoration: underline; }
+
+/* ---- the floating walkthrough button ------------------------------------ */
+
+.saw-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--saw-card);
+  color: var(--saw-link);
+  border: 2px solid var(--saw-control);
+  box-shadow: 0 10px 20px -8px rgba(33, 26, 20, 0.3);
+  text-decoration: none;
+}
+/* On desktop the same button sits in the header, so this one would be a
+   duplicate rather than a shortcut. */
+@media (min-width: 900px) {
+  .saw-fab { display: none; }
+}
+
+/* ========================================================================
+   Competition detail — one vertical path, joined by connector strokes
+   ======================================================================== */
+
+.saw-path {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 20px 40px;
+}
+
+.saw-connector {
+  align-self: center;
+  width: 3px;
+  height: 26px;
+  background: var(--saw-connector);
+  flex: none;
+}
+
+/* ---- the prize ---------------------------------------------------------- */
+
+.saw-hero {
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-hero);
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(33, 26, 20, 0.05);
+}
+
+.saw-hero__media { position: relative; height: 240px; background: rgba(127, 127, 127, 0.08); }
+.saw-hero__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.saw-hero__facts {
+  margin: 0;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  font-size: 13px;
+}
+.saw-hero__facts dt {
+  color: var(--saw-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.saw-hero__facts dd {
+  margin: 0;
+  color: var(--saw-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-hero__terms {
+  margin: 0;
+  padding: 0 20px 16px;
+  font-size: 13px;
+  color: var(--saw-body);
+}
+
+/* ---- the spec: the only dark block on the site -------------------------- */
+
+.saw-spec {
+  background: var(--saw-ink);
+  border-radius: var(--saw-r-card);
+  padding: 18px 20px;
+  color: var(--saw-bg);
+}
+
+.saw-spec__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-control);
+}
+.saw-spec__bullet {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--saw-primary);
+  flex: none;
+}
+
+.saw-spec__nums {
+  display: flex;
+  gap: 18px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.saw-spec__nums strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.saw-spec__nums span {
+  font-size: 12px;
+  color: var(--saw-on-dark-muted);
+  font-weight: 600;
+}
+
+/*
+ * The 1px gaps are the hairlines between rows: the container's own colour shows
+ * through, so there is no border to go half a pixel wrong at the rounded corners.
+ */
+.saw-spec__levels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  background: rgba(247, 235, 227, 0.14);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.saw-spec__levels li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--saw-ink);
+  padding: 11px 13px;
+}
+.saw-spec__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.saw-spec__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  min-width: 64px;
+}
+.saw-spec__count,
+.saw-spec__each {
+  font-size: 13px;
+  color: var(--saw-on-dark-muted);
+  font-variant-numeric: tabular-nums;
+}
+.saw-spec__each { margin-left: auto; white-space: nowrap; }
+
+.saw-spec__perfects {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.saw-spec__perfects li {
+  flex: 1;
+  background: rgba(247, 235, 227, 0.09);
+  border-radius: 12px;
+  padding: 11px 13px;
+}
+.saw-spec__perfects li.is-accent { background: rgba(235, 88, 12, 0.18); }
+.saw-spec__perfect-label {
+  display: block;
+  font-size: 11px;
+  color: var(--saw-on-dark-muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.saw-spec__perfects li.is-accent .saw-spec__perfect-label { color: #f0c3a3; }
+.saw-spec__perfects strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-spec__note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--saw-on-dark-muted);
+}
+.saw-spec__note--light { color: var(--saw-muted); }
+
+/* ---- buying ------------------------------------------------------------- */
+
+.saw-buy {
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  padding: 16px 18px;
+}
+
+.saw-buy__eyebrow,
+.saw-run__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+  text-align: center;
+}
+.saw-run__eyebrow span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.saw-tiers {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  gap: 10px;
+}
+.saw-tiers > li { flex: 1; }
+
+.saw-tier {
+  /* Positioned so the visually hidden radio inside is offset from the card and
+     not from the page -- an absolutely positioned input with no positioned
+     ancestor lands at the top of the document and can scroll it on focus. */
+  position: relative;
+  display: block;
+  height: 100%;
+  padding: 14px;
+  border: 2px solid var(--saw-control);
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+}
+.saw-tier__body { display: block; }
+.saw-tier:focus-within { outline: 2px solid var(--saw-primary); outline-offset: 2px; }
+/* The radio is the accessible control; the card is what is actually looked at. */
+.saw-tier input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.saw-tier:has(input:checked) {
+  border-color: var(--saw-primary);
+  background: var(--saw-tint);
+}
+.saw-tier__label { display: block; font-size: 15px; font-weight: 800; color: var(--saw-ink); }
+.saw-tier__price {
+  display: block;
+  font-size: 13px;
+  color: var(--saw-body);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.saw-tier__perfect { display: block; font-size: 12px; color: var(--saw-muted); margin-top: 2px; }
+
+/* The play page's Start card: same shape as a buy tier, but nothing to select —
+   the button inside it is the only control, so the card itself is not a target. */
+.saw-tier--start { cursor: default; }
+.saw-tier--start .saw-cta { margin-top: 12px; }
+
+.saw-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--saw-rule);
+}
+.saw-qty__label { display: flex; flex-direction: column; gap: 2px; }
+.saw-qty__label span { font-weight: 700; color: var(--saw-ink); font-size: 14px; }
+.saw-qty__label small { font-size: 12.5px; color: var(--saw-muted); }
+.saw-qty__input {
+  width: 84px;
+  flex: none;
+  padding: 10px 12px;
+  /* 16px, not smaller: iOS zooms the whole page when a smaller input takes
+     focus, and the player never gets it back without pinching. */
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+}
+
+.saw-cta {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 16px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 0;
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+.saw-cta:hover { background: var(--saw-link); }
+
+/* The play page's Start card offers three outcomes per tier, not just "buy" —
+   played, bought, or not offered — so the button reads differently for each. */
+.saw-cta--ghost {
+  color: var(--saw-ink);
+  background: transparent;
+  border: 1.5px solid var(--saw-control);
+}
+.saw-cta--ghost:hover { background: var(--saw-tint); border-color: var(--saw-primary); }
+.saw-cta--disabled {
+  color: var(--saw-muted);
+  background: var(--saw-tint);
+  cursor: default;
+}
+
+.saw-buy__risk { margin: 10px 0 0; font-size: 12.5px; color: var(--saw-muted); }
+
+/* ---- the run ------------------------------------------------------------ */
+
+/*
+ * A route, not a list. Ten questions laid out in a row read as ten separate
+ * things; walked down a spine they read as one run with a start and an end, which
+ * is what the player is being asked to picture before paying.
+ *
+ * No card around it, unlike the blocks above: the design runs the path straight
+ * on the page background so the spine has nothing to butt against.
+ */
+.saw-run__eyebrow {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+  text-align: center;
+}
+
+.saw-map {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Behind the nodes, running the full height of the map. The nodes sit on it
+   rather than beside it, which is what makes the zig-zag read as one line. */
+.saw-map__spine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--saw-connector);
+  transform: translateX(-50%);
+}
+
+.saw-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 18px;
+}
+
+.saw-stage__pill {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--saw-on-dark);
+  border-radius: 9999px;
+  padding: 5px 14px;
+  text-align: center;
+}
+
+.saw-map__slots,
+.saw-map__bag {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.saw-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  animation: sawRise 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--saw-node-delay, 0ms);
+}
+
+/* 18% rather than a fixed offset: the swing has to stay proportional to the
+   column, which is 430px on a phone and 600px on a monitor. */
+.saw-node--left  { align-self: flex-start; padding-left: 18%; }
+.saw-node--right { align-self: flex-end; padding-right: 18%; }
+
+.saw-node__n {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--saw-node-colour, var(--saw-control));
+  background: var(--saw-card);
+  color: var(--saw-node-colour, var(--saw-ink));
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 17px;
+  /* Slightly faded: these are questions not yet answered, and at full strength
+     they compete with the stage pills for the eye. */
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-node__t {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--saw-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Random has no spine and no swing. A path is a claim about order and the draw
+ * shuffles, so the composition is shown as a group with nothing implying sequence.
+ */
+.saw-map__bag {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 0;
+}
+.saw-node--blind { animation: none; }
+.saw-node--blind .saw-node__n { width: 44px; height: 44px; font-size: 15px; }
+
+.saw-map__note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--saw-muted);
+  text-align: center;
+}
+
+@keyframes sawRise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.saw-result-teaser {
+  padding: 14px 16px;
+  background: var(--saw-tint);
+  border-radius: var(--saw-r-card);
+}
+.saw-result-teaser__title { margin: 0; font-weight: 800; color: var(--saw-ink); font-size: 14px; }
+.saw-result-teaser__note { margin: 2px 0 0; font-size: 13px; color: var(--saw-body); }
+
+.saw-footnote {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  color: var(--saw-muted);
+}
+
+/* ========================================================================
+   How it works
+   ======================================================================== */
+
+.saw-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 20px 32px;
+}
+
+.saw-steps {
+  list-style: none;
+  margin: 0;
+  padding: 18px 20px;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+}
+/* The number runs inline with the sentence, so a wrapped line returns to the
+   left edge instead of indenting under the text — which is how the design reads. */
+.saw-step__n { font-weight: 800; color: var(--saw-ink); }
+
+.saw-callout {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--saw-tint);
+  border-radius: var(--saw-r-button);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ink);
+}
+
+.saw-secondary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-button);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.saw-secondary-cta:hover { border-color: var(--saw-primary); color: var(--saw-link); }
+
+.saw-legal-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
+.saw-legal-line a { color: var(--saw-link); }
+
+/* ========================================================================
+   Before you pay
+   ======================================================================== */
+
+.saw-summary {
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  padding: 18px 20px;
+}
+
+.saw-summary__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.saw-summary__name,
+.saw-summary__price {
+  margin: 0;
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-size: 16px;
+}
+.saw-summary__price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.saw-summary__line {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
+
+.saw-summary__rule {
+  height: 1px;
+  background: var(--saw-rule);
+  margin: 14px 0;
+}
+
+.saw-summary__facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  font-size: 13px;
+}
+.saw-summary__facts dt {
+  color: var(--saw-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.saw-summary__facts dd {
+  margin: 0;
+  color: var(--saw-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-summary__risk {
+  margin: 0;
+  font-size: 14px;
+  color: var(--saw-ink);
+}
+
+/* ---- consent ------------------------------------------------------------ */
+
+.saw-consent {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.saw-check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 13px;
+}
+/*
+ * A real checkbox, not a styled span. It carries `required`, so the browser
+ * refuses to submit until both are ticked — and a custom control would have to
+ * reimplement that gate in script, which fails open the moment anything above it
+ * on the page throws.
+ */
+.saw-check input {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--saw-primary);
+  flex: none;
+}
+.saw-check a { color: var(--saw-link); }
+
+.saw-consent .saw-cta { margin-top: 0; padding: 18px; }
+
+.saw-methods {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.saw-methods li {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--saw-muted);
+  border: 1px solid var(--saw-rule);
+  border-radius: 9999px;
+  padding: 5px 12px;
+}
+
+/* ========================================================================
+   Checkout — WooCommerce's own markup, wearing the section's clothes
+   ======================================================================== */
+
+/*
+ * Scoped to .saw-woo so none of it can reach the main site's checkout. The rules
+ * are deliberately shallow: WooCommerce and each gateway own this markup and both
+ * change it between releases, so anything more specific than surface and spacing
+ * is a rule that breaks on an update nobody connected to it.
+ */
+.saw-woo {
+  color: var(--saw-body);
+}
+
+.saw-woo h2,
+.saw-woo h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+
+.saw-woo .woocommerce-checkout-review-order,
+.saw-woo .woocommerce-billing-fields,
+.saw-woo .woocommerce-additional-fields,
+.saw-woo #payment {
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  padding: 18px 20px;
+}
+
+/*
+ * WooCommerce core's own show/hide-password toggle on the login form. Its icon
+ * comes from woocommerce-layout.css, which this section never loads, so the
+ * button rendered as a bare browser-default control — functional (the click
+ * handler is in core's own JS, unaffected) but with no icon and no positioning
+ * at all. Copied from that stylesheet's own `.show-password-input` rule rather
+ * than invented, so it matches core's icon exactly.
+ */
+.saw-woo .password-input { position: relative; display: block; }
+.saw-woo .show-password-input {
+  background-color: transparent;
+  border-radius: 0;
+  border: 0;
+  color: var(--saw-body);
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  right: 0.7em;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.saw-woo .show-password-input::before {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 22px;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-image: url('data:image/svg+xml,<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.3 3.3C16.9 2.9 16.2 2.9 15.7 3.3L13.3 5.7C12.2437 5.3079 11.1267 5.1048 10 5.1C6.2 5.2 2.8 7.2 1 10.5C1.2 10.9 1.5 11.3 1.8 11.7C2.6 12.8 3.6 13.7 4.7 14.4L3 16.1C2.6 16.5 2.5 17.2 3 17.7C3.4 18.1 4.1 18.2 4.6 17.7L17.3 4.9C17.7 4.4 17.7 3.7 17.3 3.3ZM6.7 12.3L5.4 13.6C4.2 12.9 3.1 11.9 2.3 10.7C3.5 9 5.1 7.8 7 7.2C5.7 8.6 5.6 10.8 6.7 12.3ZM10.1 9C9.6 8.5 9.7 7.7 10.2 7.2C10.7 6.8 11.4 6.8 11.9 7.2L10.1 9ZM18.3 9.5C17.8 8.8 17.2 8.1 16.5 7.6L15.5 8.6C16.3 9.2 17 9.9 17.6 10.8C15.9 13.4 13 15 9.9 15H9.1L8.1 16C8.8 15.9 9.4 16 10 16C13.3 16 16.4 14.4 18.3 11.7C18.6 11.3 18.8 10.9 19.1 10.5C18.8 10.2 18.6 9.8 18.3 9.5ZM14 10L10 14C12.2 14 14 12.2 14 10Z" fill="%23111111"/></svg>');
+}
+.saw-woo .show-password-input.display-password::before {
+  background-image: url('data:image/svg+xml,<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.3 9.49999C15 4.89999 8.50002 3.79999 3.90002 7.19999C2.70002 8.09999 1.70002 9.29999 0.900024 10.6C1.10002 11 1.40002 11.4 1.70002 11.8C5.00002 16.4 11.3 17.4 15.9 14.2C16.8 13.5 17.6 12.8 18.3 11.8C18.6 11.4 18.8 11 19.1 10.6C18.8 10.2 18.6 9.79999 18.3 9.49999ZM10.1 7.19999C10.6 6.69999 11.4 6.69999 11.9 7.19999C12.4 7.69999 12.4 8.49999 11.9 8.99999C11.4 9.49999 10.6 9.49999 10.1 8.99999C9.60003 8.49999 9.60003 7.69999 10.1 7.19999ZM10 14.9C6.90002 14.9 4.00002 13.3 2.30002 10.7C3.50002 8.99999 5.10002 7.79999 7.00002 7.19999C6.30002 7.99999 6.00002 8.89999 6.00002 9.89999C6.00002 12.1 7.70002 14 10 14C12.2 14 14.1 12.3 14.1 9.99999V9.89999C14.1 8.89999 13.7 7.89999 13 7.19999C14.9 7.79999 16.5 8.99999 17.7 10.7C16 13.3 13.1 14.9 10 14.9Z" fill="%23111111"/></svg>');
+}
+
+.saw-woo label { font-size: 13px; font-weight: 600; color: var(--saw-ink); }
+
+.saw-woo input[type="text"],
+.saw-woo input[type="email"],
+.saw-woo input[type="tel"],
+.saw-woo input[type="password"],
+.saw-woo textarea,
+.saw-woo select {
+  width: 100%;
+  padding: 12px 14px;
+  /* 16px so iOS does not zoom the page when a field takes focus. */
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+}
+.saw-woo input:focus,
+.saw-woo textarea:focus,
+.saw-woo select:focus {
+  outline: 2px solid var(--saw-primary);
+  outline-offset: 1px;
+}
+
+.saw-woo table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.saw-woo table th,
+.saw-woo table td {
+  padding: 10px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--saw-rule);
+}
+.saw-woo table tr:last-child th,
+.saw-woo table tr:last-child td { border-bottom: 0; }
+.saw-woo .order-total th,
+.saw-woo .order-total td {
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-woo #payment ul.payment_methods {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.saw-woo #payment ul.payment_methods > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--saw-rule);
+}
+.saw-woo #payment ul.payment_methods > li:last-child { border-bottom: 0; }
+
+.saw-woo #payment ul.payment_methods label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.saw-woo #payment ul.payment_methods input[type="radio"] {
+  accent-color: var(--saw-primary);
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+}
+
+/*
+ * A gateway's icon is whatever the gateway ships, at whatever size it ships it.
+ * Cashflows sends an SVG with no intrinsic limit, which filled the column with a
+ * bank-card illustration. Capped rather than hidden: the mark is how a shopper
+ * recognises the method.
+ */
+.saw-woo #payment ul.payment_methods img {
+  max-height: 22px;
+  width: auto;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/*
+ * A clearly separate surface. The tint alone sat one step from the card behind it
+ * and read as a rendering fault rather than a panel.
+ */
+.saw-woo #payment .payment_box {
+  position: relative;
+  margin: 8px 0 2px 26px;
+  background: var(--saw-bg);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-control);
+  padding: 13px 15px;
+  font-size: 13.5px;
+  color: var(--saw-body);
+}
+.saw-woo #payment .payment_box > :first-child { margin-top: 0; }
+.saw-woo #payment .payment_box > :last-child { margin-bottom: 0; }
+.saw-woo #payment .payment_box p { margin: 0 0 8px; }
+.saw-woo #payment .payment_box strong,
+.saw-woo #payment .payment_box .amount { color: var(--saw-ink); font-weight: 700; }
+
+/*
+ * The two wallet rows are the theme's markup, opted into on purpose: the
+ * part-wallet control is a feature, not a skin, and the code that splits the
+ * payment is still running. See templates/woocommerce/checkout/payment.php.
+ *
+ * They are laid out with utility classes from a stylesheet this section does not
+ * load, so the structure is restated here. The selectors use the theme's data
+ * hooks and its own semantic class names -- `data-nera-wallet-partial`,
+ * `.ncs-payment-method` -- and never its framework's utility names, which are
+ * build output and change without notice.
+ */
+.saw-woo .ncs-payment-method > div:not(.payment_box),
+.saw-woo [data-nera-wallet-partial] > div:not(.payment_box) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.saw-woo .ncs-payment-method label,
+.saw-woo [data-nera-wallet-partial] label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-height: 44px;
+}
+
+/* The icon chip. Material Symbols still loads -- it comes from Google, not the
+   theme's directory -- so the glyph renders; only its frame was missing. */
+.saw-woo .ncs-payment-method label > span:first-child,
+.saw-woo [data-nera-wallet-partial] label > span:first-child {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--saw-bg);
+  color: var(--saw-ink);
+}
+.saw-woo .material-symbols-outlined { font-size: 20px; line-height: 1; }
+
+.saw-woo .gateway-title { flex: 1; }
+
+/* The amount row inside the part-wallet box: "£ [ 2.50 ] of £5.00". */
+.saw-woo [data-nera-wallet-partial] .payment_box > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.saw-woo [data-nera-wallet-partial] .payment_box > div > span {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-woo [data-nera-wallet-flash] { font-size: 12.5px; color: var(--saw-muted); margin: 6px 0 0; }
+
+/* The part-wallet gateway asks for an amount inline, mid-sentence. */
+.saw-woo #payment .payment_box input[type="number"],
+.saw-woo #payment .payment_box input[type="text"] {
+  width: auto;
+  min-width: 96px;
+  max-width: 140px;
+  display: inline-block;
+  padding: 9px 11px;
+  margin: 2px 4px;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+}
+.saw-woo #payment .payment_box label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+
+/*
+ * WooCommerce puts `.button` on several unrelated things: the place-order submit,
+ * the coupon apply, "Return to shop", and the Pay / Cancel links on a received
+ * order. Only a form's own submit wants the full width of its column. Giving that
+ * width to every `.button` turned Pay and Cancel into two full-width slabs stacked
+ * on top of each other, which read as one broken control rather than two choices.
+ */
+.saw-woo .button {
+  display: inline-block;
+  width: auto;
+  padding: 11px 20px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 1.5px solid transparent;
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+.saw-woo #place_order,
+.saw-woo button[type="submit"] {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 800;
+  border: 0;
+}
+.saw-woo #place_order:hover,
+.saw-woo .button:hover,
+.saw-woo button[type="submit"]:hover {
+  background: var(--saw-link);
+  color: var(--saw-on-dark);
+}
+
+/* ---- language: the header toggle and the entry pop-up -------------------- */
+
+/*
+ * Both controls are plain links and a plain form. Nothing here depends on
+ * JavaScript, because the language has to be settled before the page is rendered —
+ * see §5 of docs/LANGUAGE-PLAN.md.
+ */
+.saw-lang {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--saw-tint);
+  border: 1px solid var(--saw-control);
+  border-radius: 999px;
+}
+.saw-lang__option {
+  display: inline-block;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--saw-muted);
+  text-decoration: none;
+  border-radius: 999px;
+}
+.saw-lang__option:hover { color: var(--saw-ink); }
+.saw-lang__option.is-current {
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+}
+
+/* The pop-up. */
+.saw-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(33, 26, 20, 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.saw-gate__card {
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px 26px 24px;
+  text-align: center;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  box-shadow: 0 24px 60px rgba(33, 26, 20, 0.28);
+}
+.saw-gate__title {
+  margin: 0 0 18px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+.saw-gate__label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+
+.saw-gate__languages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 20px;
+}
+.saw-gate__language {
+  display: block;
+  padding: 12px 10px;
+  text-decoration: none;
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+}
+.saw-gate__language:hover { border-color: var(--saw-primary); }
+.saw-gate__language.is-current {
+  border-color: var(--saw-primary);
+  background: var(--saw-card);
+}
+.saw-gate__language-code {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+.saw-gate__language-name {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+
+.saw-gate__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 16px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--saw-ink);
+  cursor: pointer;
+}
+.saw-gate__check input { margin-top: 3px; flex: 0 0 auto; }
+
+/*
+ * The statement that replaces the age question once age-shield has recorded it.
+ * Deliberately not a ticked checkbox: a tick the player did not make cannot
+ * evidence a choice they made. §8.2 of the plan.
+ */
+.saw-gate__verified {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--saw-ink);
+}
+.saw-gate__tick {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--saw-on-dark);
+  background: var(--saw-ok);
+}
+
+.saw-gate__note {
+  margin: -8px 0 16px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+
+.saw-gate__enter {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 20px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 0;
+  border-radius: var(--saw-r-button);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.saw-gate__enter:hover { background: var(--saw-link); color: var(--saw-on-dark); }
+
+/* While the pop-up is up, the page behind it does not scroll. */
+body.saw-app:has(.saw-gate) { overflow: hidden; }
+
+/* ---- the result overlay -------------------------------------------------- */
+
+/*
+ * A clone of the Lottery for WooCommerce result screen, in the section's palette.
+ * See `Nera_SAW_Standalone_Result_Screen` for why the section draws its own.
+ *
+ * Everything is scoped under `.lty-rs-overlay`, and the button rules are written
+ * with enough weight to beat that stylesheet's `all: unset` on any anchor or button
+ * inside the overlay — which is still loaded, because its script is what closes
+ * this dialog.
+ */
+.saw-result {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(33, 26, 20, 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.saw-result .saw-result__card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 32px 28px 26px;
+  text-align: center;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  box-shadow: 0 24px 60px rgba(33, 26, 20, 0.28);
+  animation: saw-result-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes saw-result-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.saw-result .saw-result__mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  color: var(--saw-on-dark);
+}
+.saw-result .saw-result__mark--draw { background: var(--saw-ok); }
+.saw-result .saw-result__mark--none {
+  color: var(--saw-eyebrow);
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+}
+
+.saw-result .saw-result__heading {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--saw-ink);
+}
+
+.saw-result .saw-result__text {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--saw-body);
+}
+
+.saw-result .saw-result__badge {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-eyebrow);
+  background: var(--saw-tint);
+  border: 1px solid var(--saw-control);
+  border-radius: 999px;
+}
+
+.saw-result .saw-result__cheer {
+  margin: 0 0 22px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-primary);
+}
+
+/* Beats `.lty-rs-overlay button { all: unset }`, which would otherwise strip this. */
+.saw-result .saw-result__btn {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 20px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 0;
+  border-radius: var(--saw-r-button);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.saw-result .saw-result__btn:hover { background: var(--saw-link); color: var(--saw-on-dark); }
+
+.saw-result .saw-result__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--saw-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.saw-result .saw-result__close:hover { color: var(--saw-ink); background: var(--saw-tint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .saw-result .saw-result__card { animation: none; }
+}
+
+/*
+ * The mu-plugin's script puts this class on `body` while the dialog is open, but
+ * nothing in its stylesheet acts on it, so the page went on scrolling behind a
+ * modal. Honoured here, for the section only — the main site's behaviour is the
+ * mu-plugin's to decide.
+ */
+body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
+
+/* ---- order received ------------------------------------------------------ */
+
+/*
+ * The play card is shared with the main site's product page, where it colours
+ * itself from the theme's `--color-primary`. The section drops the theme's
+ * stylesheet, so that variable resolved to nothing and the card fell back to
+ * WordPress blue on a cream page. Pointing the same variable at the section's own
+ * primary keeps one card serving both sites; the few colours it hardcodes are
+ * corrected below rather than duplicated there.
+ */
+.saw-app { --color-primary: var(--saw-primary); }
+.saw-app .saw-runs-cta {
+  border-color: var(--saw-control);
+  background: var(--saw-card);
+}
+.saw-app .saw-runs-cta:hover { border-color: var(--saw-primary); }
+.saw-app .saw-runs-cta__count {
+  background: var(--saw-primary);
+  color: var(--saw-on-dark);
+}
+.saw-app .saw-runs-cta__runs { color: var(--saw-ink); }
+.saw-app .saw-runs-cta__action { color: var(--saw-primary); }
+
+/*
+ * The entry's tier and run counters.
+ *
+ * `order.css` already styles these for the main site, at the same specificity and
+ * loading after this file, so it wins on equal terms — which is why the counters
+ * arrived as three boxes drawn with `--saw-surface` and `--saw-brand`, two tokens
+ * the section does not define. Everything here is scoped to `.saw-app` to outrank
+ * it inside the section and nowhere else; the main site keeps its own version.
+ */
+.saw-app .saw-order-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+/*
+ * The tier name and its price are separate elements with no whitespace between
+ * them, which ran together as "Standard\00a35.00 / run" once the theme's spacing
+ * was gone. A badge gives them a shape of their own.
+ */
+.saw-app .saw-order-tier-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--saw-tint);
+  border: 1px solid var(--saw-rule);
+  font-size: 13px;
+}
+.saw-app .saw-order-tier-badge__label {
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-app .saw-order-tier-badge__price {
+  color: var(--saw-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Label-and-figure pairs on one line: three short facts, not three panels. */
+.saw-app .saw-order-runs {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.saw-app .saw-order-runs__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+}
+.saw-app .saw-order-runs__stat dt {
+  color: var(--saw-muted);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.saw-app .saw-order-runs__stat dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+}
+.saw-app .saw-order-runs__stat--remaining dd { color: var(--saw-primary); }
+.saw-app .saw-order-runs__note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+
+/*
+ * The confirmation screen borrows the summary card from Before you pay rather than
+ * inventing a second visual language for the same job: a short list of facts about
+ * one purchase. The order of the screen follows what the player does next — what
+ * happened, play the runs, enter another, then the detail if they want it.
+ */
+.saw-order {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.saw-order__hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+.saw-order__tick {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: var(--saw-on-dark);
+  background: var(--saw-ok);
+}
+.saw-order__hero--bad .saw-order__tick { background: var(--saw-bad); }
+.saw-order__hero--wait .saw-order__tick {
+  color: var(--saw-eyebrow);
+  background: transparent;
+  border: 2px solid var(--saw-control);
+}
+
+.saw-order .woocommerce-thankyou-order-received,
+.saw-order__lead {
+  margin: 0;
+  align-self: center;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+.saw-order__hero--bad .saw-order__lead {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The facts grid is the one from the summary card; only the wide row is new. */
+.saw-order__facts .saw-fact--wide { grid-column: 1 / -1; }
+.saw-order__facts dd { word-break: break-word; }
+
+.saw-order__title {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+
+.saw-order__items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.saw-order__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.saw-order__item-name {
+  font-weight: 700;
+  color: var(--saw-ink);
+  font-size: 15px;
+}
+.saw-order__item-name a { color: inherit; text-decoration: none; }
+.saw-order__item-name a:hover { text-decoration: underline; }
+.saw-order__qty { font-weight: 700; color: var(--saw-muted); }
+.saw-order__item-total {
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Item meta is where the tier a run was bought at appears. */
+.saw-order__item-main .wc-item-meta,
+.saw-order__item-main .wc-item-meta li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saw-order__item-main .wc-item-meta {
+  margin-top: 3px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
+.saw-order__item-main .wc-item-meta strong,
+.saw-order__item-main .wc-item-meta p { display: inline; margin: 0; font-weight: 700; }
+
+.saw-order__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
+
+.saw-order__totals { margin: 0; }
+.saw-order__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 14px;
+}
+.saw-order__total + .saw-order__total { margin-top: 8px; }
+.saw-order__total dt {
+  flex: 0 0 auto;
+  color: var(--saw-muted);
+}
+.saw-order__total dd {
+  margin: 0;
+  color: var(--saw-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.saw-order__total--grand { font-size: 16px; }
+.saw-order__total--grand dt,
+.saw-order__total--grand dd { color: var(--saw-ink); font-weight: 800; }
+
+.saw-order__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.saw-order__actions-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+.saw-order__actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/*
+ * The way on from a finished order. It sits under the play card, which is the
+ * louder of the two on purpose: playing the runs just bought is the thing to do
+ * now, entering another competition is the thing to do after.
+ */
+.saw-order__next {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+.saw-order__next-link {
+  display: inline-block;
+  padding: 11px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--saw-ink);
+  background: transparent;
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-button);
+  text-decoration: none;
+}
+.saw-order__next-link:hover {
+  background: var(--saw-tint);
+  border-color: var(--saw-muted);
+}
+
+.saw-order__address {
+  margin: 0;
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--saw-ink);
+}
+.saw-order__address span { display: block; color: var(--saw-muted); }
+
+/*
+ * Pay and Cancel are not a pair of equals — one of them finishes the purchase and
+ * the other throws it away. Two identical orange blocks gave them the same weight,
+ * so Cancel is quiet and sits beside Pay rather than under it.
+ */
+.saw-woo .order-actions--heading {
+  font-weight: 700;
+  color: var(--saw-ink);
+  text-align: left;
+  white-space: nowrap;
+}
+.saw-woo .order-actions-button {
+  margin: 0 8px 8px 0;
+}
+.saw-woo .order-actions-button:last-child {
+  margin-right: 0;
+}
+.saw-woo .order-actions-button.cancel {
+  color: var(--saw-ink);
+  background: transparent;
+  border-color: var(--saw-control);
+}
+.saw-woo .order-actions-button.cancel:hover {
+  color: var(--saw-ink);
+  background: var(--saw-tint);
+  border-color: var(--saw-muted);
+}
+
+/*
+ * The account screen as one flat accordion — My Wallet, Orders, Payment
+ * methods, Account details, Addresses, Support — each row's own content
+ * inline underneath it, not a link to a second page for it. Built by the
+ * plugin's own templates/woocommerce/myaccount/my-account.php, which replaces
+ * WooCommerce's stock nav-then-content layout entirely (order-details.php
+ * above is a separate plugin template covering a different screen, the order
+ * a row's own panel can link to). Whichever row matches the page's own URL
+ * opens without a click, same as the plain-link nav before it.
+ */
+.saw-account-nav {
+  margin: 0 0 24px;
+}
+
+/* ---- the two kinds of row that are not an accordion item ---- */
+.saw-account-link {
+  display: block;
+  margin: 0 0 6px;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  text-decoration: none;
+}
+.saw-account-link:hover {
+  border-color: var(--saw-muted);
+}
+.saw-account-link.is-active {
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border-color: transparent;
+}
+.saw-account-link--logout {
+  margin-top: 18px;
+  text-align: center;
+  color: var(--saw-muted);
+  background: transparent;
+  border-style: dashed;
+}
+
+/* ---- a row that opens to show its own content ---- */
+.saw-account-acc {
+  margin: 0 0 6px;
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  overflow: hidden;
+}
+.saw-account-acc.is-active {
+  border-color: var(--saw-primary);
+}
+.saw-account-acc__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  cursor: pointer;
+  list-style: none;
+}
+.saw-account-acc__label::-webkit-details-marker {
+  display: none;
+}
+.saw-account-acc__label::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: 10px;
+  border-right: 2px solid var(--saw-muted);
+  border-bottom: 2px solid var(--saw-muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.saw-account-acc[open] > .saw-account-acc__label::after {
+  transform: rotate(-135deg);
+}
+.saw-account-acc__panel {
+  padding: 4px 14px 16px;
+  border-top: 1.5px solid var(--saw-control);
+}
+.saw-account-acc__panel > *:first-child {
+  margin-top: 12px;
+}
+.saw-account-acc__panel > *:last-child {
+  margin-bottom: 0;
+}
+
+.saw-woo .woocommerce-MyAccount-content > p:first-child {
+  margin-top: 0;
+}
+
+/*
+ * Login / Register on the standalone entry page (templates/woocommerce/
+ * myaccount/form-login.php): the same saw-account-acc accordion row as the
+ * logged-in My Account screen below 900px, so a mobile visitor sees one
+ * collapsible section at a time instead of both forms stacked in full. Both
+ * render `open` in the markup (no JS to decide a breakpoint at request
+ * time), so this is only ever a case of a panel a mobile visitor can choose
+ * to collapse — never one that starts hidden. At 900px and up the toggle is
+ * disabled and the two panels sit side by side exactly as this screen has
+ * always looked at that width.
+ */
+.saw-loginreg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 24px;
+}
+@media (min-width: 900px) {
+  .saw-loginreg {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 40px;
+  }
+  .saw-loginreg__panel {
+    flex: 1 1 0;
+    border: 0;
+  }
+  .saw-loginreg__panel > .saw-account-acc__label {
+    padding: 0 0 16px;
+    font-size: 18px;
+    font-weight: 700;
+    background: transparent;
+    cursor: default;
+    pointer-events: none;
+  }
+  .saw-loginreg__panel > .saw-account-acc__label::after {
+    display: none;
+  }
+  .saw-loginreg__panel > .saw-account-acc__panel {
+    padding: 0;
+    border-top: 0;
+  }
+}
+
+/*
+ * The Spending limit card on Account details (nera-spending-amount-limit-plugin)
+ * has its own stylesheet, `spending-limit.css` — the icon-in-a-field look and
+ * the Save button's icon+label row are both already built there, correctly.
+ * It never reaches this page, though: it only enqueues when
+ * `is_wc_endpoint_url( 'edit-account' )` is true (class-assets.php), which is
+ * never the case here — every row's panel renders on this screen's one URL
+ * regardless of which endpoint the address bar names, so the plugin's own
+ * "am I on the Account details page" check never passes. Confirmed absent
+ * from this page's own <head>, not assumed.
+ *
+ * Rebuilt here rather than force-enqueueing the plugin's stylesheet, so it
+ * uses this screen's own tokens instead of the plugin's own purple. The
+ * first pass at this (now corrected) used bare class selectors
+ * (`.nera-sl-select`) and only half-worked: `.saw-woo select` two sections
+ * up is one class *and* one element type, which outranks a single class on
+ * specificity, so it kept winning the padding this rule was meant to set —
+ * confirmed in a real browser via computed styles, not guessed from reading
+ * the CSS. Prefixed with `.saw-woo` here so every declaration in this block
+ * outranks it on the same terms.
+ */
+.saw-woo .nera-sl-select-wrap {
+  position: relative;
+}
+.saw-woo .nera-sl-select-icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: var(--saw-muted);
+  font-size: 19px;
+  pointer-events: none;
+}
+.saw-woo .nera-sl-select {
+  display: block;
+  width: 100%;
+  padding: 10px 14px 10px 40px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  appearance: none;
+}
+.saw-woo #nera-sl-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+}
+/*
+ * Every field label in this card (Amount limit, Limit type, Custom period)
+ * carries `mb-2` for the gap under it — a Tailwind margin utility, inert
+ * here like the rest of this card's spacing. `.saw-woo label` two sections
+ * up sets weight/size/colour only, no margin, on purpose (labels elsewhere
+ * in the section sit right against their field already), so this card
+ * needs its own. `display: block` matters as much as the margin itself: a
+ * `<label>` is inline by default, and margin-bottom on an inline element
+ * does not push the next line down.
+ */
+.saw-woo #nera-sl-root label {
+  display: block;
+  margin-bottom: 8px;
+}
+/*
+ * The card's own header row (the icon, "Spending limit" + its one-line
+ * description, and the enable switch docked to the right) is the one part
+ * of this card spending-limit.css does not style — markup and stylesheet
+ * came from two different eras of the same plugin, and this whole row was
+ * built as inline Tailwind compositions (`flex items-center gap-3`,
+ * `w-10 h-10 bg-gradient-to-br … rounded-lg`, `text-white text-xl`, …)
+ * rather than classes of its own the way the rest of the card was.
+ * Confirmed by reading class-account.php directly: three of these wrapper
+ * elements carry no custom class at all, so `.gap-3.min-w-0` etc. below are
+ * matched on the exact Tailwind combination in that file — each checked for
+ * uniqueness there, not assumed — since there is nothing else to hook.
+ */
+.saw-woo #nera-sl-root .justify-between.gap-4.mb-6.pb-4.border-b {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--saw-control);
+}
+.saw-woo #nera-sl-root .gap-3.min-w-0 {
+  display: flex;
+  /* Back to centred (see the tighter title/description spacing right below):
+     flex-start read as "aligned with the title" but ignored the
+     description entirely; with the gap between the two lines cut down,
+     centred now sits the icon between them both, as asked for. */
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.saw-woo #nera-sl-root .gap-3.min-w-0 h3 {
+  margin-bottom: 2px;
+}
+.saw-woo #nera-sl-root .gap-3.min-w-0 p {
+  /* The browser's own default <p> margin (~1em) was stacking with the h3's
+     bottom margin above — nothing in this file had reset it, since no other
+     paragraph in this widget sits directly under a heading like this one
+     does. */
+  margin: 0;
+}
+.saw-woo #nera-sl-root div:has(> .material-symbols-outlined.text-white.text-xl) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--saw-r-control);
+  background: var(--saw-primary);
+}
+.saw-woo #nera-sl-root .material-symbols-outlined.text-white.text-xl {
+  color: var(--saw-on-dark);
+  font-size: 20px;
+}
+
+/*
+ * The status line under the switch ("Your spending limit is turned off." /
+ * "Your limit is …") is the same story again: a real class of its own
+ * (`.nera-sl-status-empty` / `.nera-sl-status-set`, built in PHP by
+ * status_html()) with no rule for either in spending-limit.css, laid out by
+ * Tailwind's `flex items-center gap-2` alone.
+ */
+.saw-woo #nera-sl-root .nera-sl-status-empty,
+.saw-woo #nera-sl-root .nera-sl-status-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  border-radius: var(--saw-r-control);
+  border: 1.5px solid var(--saw-control);
+}
+.saw-woo #nera-sl-root .nera-sl-status-empty {
+  color: var(--saw-muted);
+  background: var(--saw-tint);
+}
+.saw-woo #nera-sl-root .nera-sl-status-empty .material-symbols-outlined {
+  flex: none;
+  font-size: 18px;
+}
+.saw-woo #nera-sl-root .nera-sl-status-set {
+  color: var(--saw-ok);
+  background: var(--saw-tint);
+  font-weight: 700;
+}
+.saw-woo #nera-sl-root .nera-sl-status-set .material-symbols-outlined {
+  flex: none;
+  font-size: 18px;
+  color: var(--saw-ok);
+}
+
+/*
+ * My Wallet (woo-wallet's own stock template — see
+ * Nera_SAW_Standalone_Chrome::unoverride_wallet_template()): its balance card
+ * and tab bar ship with the plugin's own default colours, a blue gradient and
+ * plain greys, neither of which is a token this site defines. Recoloured with
+ * the same ones every other card and button on this screen use, rather than
+ * left in the plugin's own palette.
+ *
+ * Every selector below repeats `.woo-wallet-my-wallet-container` on purpose,
+ * matching not beating it: the plugin's own stylesheet qualifies almost every
+ * rule the same way (`.woo-wallet-my-wallet-container .woo-wallet-x`), so a
+ * `.saw-woo .woo-wallet-x` override (two classes) ties its specificity (also
+ * two) rather than beating it, and loses the tie by loading first in the
+ * page. Three classes wins outright regardless of load order — found by
+ * comparing both stylesheets' matched rules for the one element in a real
+ * browser rather than assuming specificity from reading the CSS alone.
+ */
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-balance-card {
+  padding: 22px;
+  text-align: center;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border-radius: var(--saw-r-control);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-balance-card h3 {
+  margin: 0 0 6px;
+  color: var(--saw-on-dark-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-price {
+  margin: 0;
+  color: var(--saw-on-dark);
+  font-size: 30px;
+  font-weight: 800;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-nav-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  background: none;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-nav-item-wrapper {
+  flex: 1 1 auto;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-nav-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 14px;
+  color: var(--saw-ink);
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-nav-tab:hover {
+  background: var(--saw-tint);
+  color: var(--saw-ink);
+  border-color: var(--saw-muted);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-nav-tab.active {
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border-color: transparent;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-header h2 {
+  margin: 0 0 4px;
+  color: var(--saw-ink);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-header p {
+  margin: 0 0 16px;
+  color: var(--saw-muted);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-content-area,
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-list {
+  background: var(--saw-card);
+  box-shadow: none;
+  border: 1.5px solid var(--saw-control);
+}
+/*
+ * .woo-wallet-top-section itself is left with no border of its own on
+ * purpose. It used to carry the same tan outline as the two rules above,
+ * and the balance card inside it (radius from --saw-r-control) sits only a
+ * 1px border-width short of that outline's own radius — enough of a mismatch
+ * at the corners, with the plugin's own `overflow: visible` on this
+ * container, to show as a thin sliver of orange escaping the card's own
+ * curve. The card and the tab row underneath already read as complete
+ * shapes on their own; the wrapper's outline was adding a second, barely
+ * different one rather than framing anything.
+ */
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-top-section {
+  background: none;
+  box-shadow: none;
+  border: 0;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+}
+/*
+ * The table's own three columns (Date / Description / Amount) don't reflow at
+ * narrow widths and simply run past the edge of the screen at 390px, clipping
+ * "Description" to "DESCRIPTIO" and cutting transaction text off mid-word with
+ * no way to read the rest. Scoped to the wrapping list, not the table itself,
+ * so the rounded card around it keeps its own edges while only the table
+ * inside scrolls.
+ */
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-list {
+  overflow-x: auto;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table {
+  min-width: 480px;
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table th {
+  background: var(--saw-tint);
+  color: var(--saw-muted);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td {
+  color: var(--saw-ink);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table .amount.credit {
+  color: var(--saw-ok);
+}
+.saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table .amount.debit {
+  color: var(--saw-bad);
+}
+
+/*
+ * The self-exclusion plugin's own three action buttons (Pause / Suspend /
+ * Permanently close, on the Support row) render with no styling of their own
+ * at all here, not just the wrong one: its stylesheet only enqueues when
+ * `is_wc_endpoint_url( 'account-status' )` is true, which only ever happens
+ * on the real /my-account/account-status/ URL. This accordion renders every
+ * row's panel on the section's one page regardless of which endpoint the
+ * address bar names, so that check is never true here and the plugin's own
+ * CSS never loads — confirmed by its absence from the page's own <head>,
+ * not assumed. Rebuilt here rather than force-enqueueing the plugin's
+ * stylesheet, so these three match this screen's own buttons on this
+ * screen's own tokens instead of carrying the plugin's blue/red defaults
+ * (themselves a fallback for a theme colour this page does not define
+ * either).
+ */
+.saw-woo .nera-se__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  border: 0;
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+}
+.saw-woo .nera-se__submit--pause,
+.saw-woo .nera-se__submit--suspend {
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+}
+.saw-woo .nera-se__submit--pause:hover:not(:disabled),
+.saw-woo .nera-se__submit--suspend:hover:not(:disabled) {
+  background: var(--saw-link);
+}
+.saw-woo .nera-se__submit--close {
+  color: var(--saw-on-dark);
+  background: var(--saw-bad);
+}
+.saw-woo .nera-se__submit--close:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.saw-woo .nera-se__submit:disabled,
+.saw-woo .nera-se__submit[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.saw-woo .woocommerce-error,
+.saw-woo .woocommerce-message,
+.saw-woo .woocommerce-info {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--saw-r-control);
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+  font-size: 13.5px;
+  color: var(--saw-ink);
+}
+.saw-woo .woocommerce-error { border-color: var(--saw-bad); }
+
+/* ========================================================================
+   The walkthrough — a modal in the design, four addresses in the build
+   ======================================================================== */
+
+.saw-wt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 14px 40px;
+  flex: 1;
+}
+
+.saw-wt__card {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(33, 26, 20, 0.25);
+  overflow: hidden;
+}
+
+.saw-wt__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  z-index: 1;
+}
+.saw-wt__close:hover { border-color: var(--saw-primary); color: var(--saw-primary); }
+
+.saw-wt__body {
+  padding: 32px 28px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.saw-wt__count {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+
+.saw-wt__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--saw-ink);
+}
+
+.saw-wt__lede { margin: 0; font-size: 15px; color: var(--saw-body); }
+.saw-wt__note { margin: 0; font-size: 13px; color: var(--saw-muted); }
+.saw-wt__note a { color: var(--saw-link); }
+
+.saw-wt__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+
+/* ---- step 1: the path ---------------------------------------------------- */
+
+.saw-wt__path { position: relative; height: 56px; margin: 10px 4px 0; }
+
+.saw-wt__rail {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: var(--saw-connector);
+}
+
+.saw-wt__dots {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  list-style: none;
+  margin: 0;
+}
+.saw-wt__dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+/* Alternating above and below the rail: the same walk the competition page
+   draws vertically, laid on its side to fit a card. */
+.saw-wt__dot.is-high { transform: translateY(-9px); }
+.saw-wt__dot.is-low  { transform: translateY(9px); }
+.saw-wt__dot--final { width: 16px; height: 16px; transform: none; }
+
+/* ---- step 2: the example ladder ------------------------------------------ */
+
+.saw-wt__ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.saw-wt__ladder li { display: flex; align-items: center; gap: 12px; }
+
+.saw-wt__band {
+  width: 76px;
+  flex: none;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  border-radius: 9999px;
+  padding: 5px 0;
+}
+
+.saw-wt__beads { display: flex; gap: 6px; }
+.saw-wt__bead {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-wt__each {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--saw-muted);
+  white-space: nowrap;
+}
+
+.saw-wt__summary {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- step 3: the practice question --------------------------------------- */
+
+.saw-wt__head3 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.saw-wt__head3 .saw-wt__title { margin-top: 8px; }
+
+.saw-wt__timer {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  margin-right: 40px;
+  display: grid;
+  place-items: center;
+}
+.saw-wt__timer svg { position: absolute; inset: 0; width: 56px; height: 56px; }
+.saw-wt__timer b {
+  position: relative;
+  font-weight: 800;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  color: var(--saw-ink);
+}
+
+.saw-wt__question {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--saw-ink);
+}
+
+.saw-wt__options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saw-wt__option {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  text-decoration: none;
+}
+a.saw-wt__option:hover { border-color: var(--saw-primary); }
+
+/* Once a pick is made the right answer is always shown, not only when it was
+   found — the point of the screen is to teach, not to score. */
+.saw-wt__option.is-right {
+  border-color: var(--saw-ok);
+  background: rgba(47, 125, 87, 0.10);
+  color: var(--saw-ok);
+}
+.saw-wt__option.is-wrong {
+  border-color: var(--saw-bad);
+  background: rgba(192, 67, 42, 0.08);
+  color: var(--saw-bad);
+}
+
+.saw-wt__verdict { margin: 0; font-size: 14px; font-weight: 600; }
+.saw-wt__verdict.is-right { color: var(--saw-ok); }
+.saw-wt__verdict.is-wrong { color: var(--saw-bad); }
+
+/* ---- step 4 --------------------------------------------------------------- */
+
+.saw-wt__finish { margin-top: 10px; }
+
+/* ---- footer: back, pips, next --------------------------------------------- */
+
+.saw-wt__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--saw-rule);
+}
+
+.saw-wt__nav {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  flex: none;
+}
+.saw-wt__nav:hover { border-color: var(--saw-primary); color: var(--saw-primary); }
+/* Holds the row's balance when there is nowhere to go. */
+.saw-wt__nav--empty { border: 0; background: none; }
+
+.saw-wt__pips {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.saw-wt__pip {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--saw-control);
+}
+.saw-wt__pip.is-on { width: 22px; background: var(--saw-primary); }
+
+@media (min-width: 900px) {
+  .saw-wt { padding: 40px 20px 56px; }
+}
+
+/* ========================================================================
+   The run — the Vue app, wearing the section
+   ========================================================================
+   The quiz app is the one already built and tested; this is a different frame
+   around the same machine. Its stylesheet ships with the app and is enqueued
+   while the shortcode renders, which is after this file, so every rule here
+   carries `.saw-app` to outrank it on specificity rather than on order — order
+   is not ours to control.
+
+   The app's own class vocabulary is the contract. It is stable, semantic and
+   documented by use; nothing here invents a name or reaches for a state class
+   the app does not set.
+   ======================================================================== */
+
+.saw-run-frame {
+  padding: 12px 20px 40px;
+}
+
+/*
+ * The app's root carries `saw-app` too, and this section puts that class on
+ * <body>. Nesting it re-applies the page rules — a second full-height ground
+ * inside the first. Tokens are inherited, which is what was wanted; the page
+ * properties are not, so they live on the body selector alone.
+ */
+.saw-app .saw-app {
+  min-height: 0;
+  background: transparent;
+}
+
+.saw-app .saw-play {
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  padding: 20px 18px;
+  color: var(--saw-body);
+}
+
+/* ---- the head: question count, level, progress -------------------------- */
+
+.saw-app .saw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+}
+
+.saw-app .saw-progress {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.saw-app .saw-level {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  background: var(--saw-ink);
+  border-radius: 9999px;
+  padding: 5px 12px;
+}
+
+/* ---- the clock ---------------------------------------------------------- */
+
+.saw-app .saw-count {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+/* The app decides when time is short; the section only says what that looks
+   like. Duplicating the threshold in CSS would be a second source of truth. */
+.saw-app .saw-count.is-urgent { color: var(--saw-bad); }
+.saw-app .saw-count.is-spent { color: var(--saw-muted); }
+
+.saw-app .saw-timerbar {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--saw-control);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.saw-app .saw-timerfill {
+  height: 100%;
+  background: var(--saw-primary);
+  border-radius: 9999px;
+}
+.saw-app .saw-timerfill.is-urgent { background: var(--saw-bad); }
+
+/* ---- the question ------------------------------------------------------- */
+
+.saw-app .saw-question {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--saw-ink);
+  margin: 0 0 14px;
+}
+
+.saw-app .saw-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.saw-app .saw-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  border: 1.5px solid var(--saw-control);
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  cursor: pointer;
+}
+.saw-app .saw-option:hover { border-color: var(--saw-primary); }
+.saw-app .saw-option.is-selected {
+  border-color: var(--saw-primary);
+  border-width: 2px;
+  background: var(--saw-tint);
+}
+/* Two classes each, to outrank the app's own `.saw-option.is-correct`. */
+.saw-app .saw-option.is-correct {
+  border-color: var(--saw-ok);
+  background: rgba(47, 125, 87, 0.10);
+  color: var(--saw-ok);
+}
+.saw-app .saw-option.is-wrong {
+  border-color: var(--saw-bad);
+  background: rgba(192, 67, 42, 0.08);
+  color: var(--saw-bad);
+}
+
+.saw-app .saw-opttext { flex: 1; }
+
+/* ---- buttons ------------------------------------------------------------ */
+
+.saw-app .saw-submitwrap { margin-top: 14px; }
+
+.saw-app .saw-btn,
+.saw-app .saw-btn-submit,
+.saw-app .saw-btn-next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 15px 18px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 0;
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+  text-decoration: none;
+}
+.saw-app .saw-btn:hover,
+.saw-app .saw-btn-submit:hover,
+.saw-app .saw-btn-next:hover { background: var(--saw-link); }
+.saw-app .saw-btn:disabled,
+.saw-app .saw-btn-submit:disabled {
+  background: var(--saw-control);
+  color: var(--saw-muted);
+  cursor: not-allowed;
+}
+
+.saw-app .saw-btn-ghost {
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  border: 1.5px solid var(--saw-control);
+}
+.saw-app .saw-btn-ghost:hover { background: var(--saw-card); border-color: var(--saw-primary); }
+
+.saw-app .saw-hint,
+.saw-app .saw-next-count,
+.saw-app .saw-runs-left {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--saw-muted);
+  text-align: center;
+}
+.saw-app .saw-hint.is-hidden { visibility: hidden; }
+
+/* ---- the running ticket tally ------------------------------------------- */
+
+.saw-app .saw-tallywrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.saw-app .saw-tally {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+}
+/* The change since the last answer. Green only — a wrong answer takes nothing
+   away, and a red delta here would say it does. */
+.saw-app .saw-delta {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-ok);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the end of the run -------------------------------------------------- */
+
+.saw-app .saw-end { text-align: center; padding: 8px 0; }
+
+.saw-app .saw-endtitle {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--saw-ink);
+}
+
+.saw-app .saw-endspins {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--saw-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.saw-app .saw-endnote {
+  margin: 8px auto 0;
+  max-width: 42ch;
+  font-size: 13.5px;
+  color: var(--saw-body);
+}
+
+.saw-app .saw-endactions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ---- the ticket numbers -------------------------------------------------- */
+
+.saw-app .saw-tickets__panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--saw-tint);
+  border-radius: var(--saw-r-control);
+  text-align: left;
+}
+.saw-app .saw-tickets__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.saw-app .saw-tickets__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+.saw-app .saw-tickets__count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-ink);
+  font-variant-numeric: tabular-nums;
+}
+.saw-app .saw-tickets__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* A long list scrolls in its own box rather than pushing the actions off the
+   screen — the app adds is-scroll past thirty numbers. */
+.saw-app .saw-tickets__list.is-scroll {
+  max-height: 168px;
+  overflow-y: auto;
+}
+.saw-app .saw-ticket {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1px solid var(--saw-control);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+/* ---- leaving mid-run ----------------------------------------------------- */
+
+.saw-app .saw-leave__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(33, 26, 20, 0.45);
+  backdrop-filter: blur(2px);
+}
+.saw-app .saw-leave__panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  width: calc(100% - 28px);
+  max-width: 400px;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: 20px;
+  box-shadow: 0 24px 48px -16px rgba(33, 26, 20, 0.35);
+  padding: 24px 22px 20px;
+}
+.saw-app .saw-leave__title {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+.saw-app .saw-leave__body { margin: 0; font-size: 14px; color: var(--saw-body); }
+
+/* The clock keeps running while the dialog is open, and the dialog says so.
+   Hiding it would make leaving feel free. */
+.saw-app .saw-leave__clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.saw-app .saw-leave__clock-num {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--saw-bad);
+  font-variant-numeric: tabular-nums;
+}
+.saw-app .saw-leave__clock-label { font-size: 12.5px; color: var(--saw-muted); }
+
+.saw-app .saw-leave__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.saw-app .saw-leave__go {
+  background: var(--saw-card);
+  color: var(--saw-bad);
+  border: 1.5px solid var(--saw-bad);
+}
+.saw-app .saw-leave__go:hover { background: rgba(192, 67, 42, 0.08); }
+
+/* ---- waiting, and when something breaks ---------------------------------- */
+
+.saw-app .saw-loading,
+.saw-app .saw-minting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  font-size: 14px;
+  color: var(--saw-muted);
+}
+
+.saw-app .saw-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid var(--saw-control);
+  border-top-color: var(--saw-primary);
+  animation: sawSpin 700ms linear infinite;
+}
+@keyframes sawSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .saw-app .saw-spinner { animation: none; border-top-color: var(--saw-control); }
+}
+
+.saw-app .saw-notice,
+.saw-app .saw-mint-error {
+  padding: 14px 16px;
+  border-radius: var(--saw-r-control);
+  background: var(--saw-tint);
+  border: 1.5px solid var(--saw-control);
+  font-size: 13.5px;
+  color: var(--saw-ink);
+}
+.saw-app .saw-error,
+.saw-app .saw-mint-error { border-color: var(--saw-bad); }
+.saw-app .saw-error__msg { margin: 0 0 6px; font-weight: 700; }
+.saw-app .saw-error__help { margin: 0; font-size: 12.5px; color: var(--saw-muted); }
+.saw-app .saw-error__actions { display: flex; gap: 10px; margin-top: 12px; }
+
+.saw-app .saw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 900px) {
+  .saw-run-frame { padding: 24px 20px 48px; }
+  .saw-app .saw-play { padding: 26px 24px; }
+  .saw-app .saw-endactions { flex-direction: row; justify-content: center; }
+  .saw-app .saw-endactions .saw-btn { width: auto; min-width: 200px; }
+  .saw-app .saw-leave__actions { flex-direction: row-reverse; }
+}
+
+/* ---- the toast ---------------------------------------------------------- */
+
+/*
+ * Bottom-centre, above the floating walkthrough button. It lives for about a
+ * second before the next screen replaces it, so it says one thing and says it in
+ * the section's own colours rather than the main site's.
+ */
+.saw-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 13px 18px;
+  background: var(--saw-ink);
+  color: var(--saw-on-dark);
+  border-radius: 9999px;
+  box-shadow: 0 14px 30px -10px rgba(33, 26, 20, 0.45);
+  font-size: 14px;
+  font-weight: 600;
+  animation: sawToastIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.saw-toast svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: #6fd3a4;
+}
+
+@keyframes sawToastIn {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .saw-toast { animation: none; }
+}
+
+/* The floating button steps aside rather than being covered. */
+@media (max-width: 899px) {
+  .saw-toast ~ .saw-fab,
+  .saw-fab { bottom: 20px; }
+}
+
+.saw-cta[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+
+/* ========================================================================
+   Desktop
+   ======================================================================== */
+
+@media (min-width: 900px) {
+  .saw-shell { max-width: none; }
+
+  .saw-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0 48px;
+    height: 76px;
+    /* Translucent with a blur, so cards scroll under it rather than past it. */
+    background: rgba(255, 250, 244, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--saw-rule);
+  }
+  .saw-header__link {
+    position: static;
+    transform: none;
+    font-size: 14px;
+    color: var(--saw-link);
+    justify-self: start;
+  }
+  .saw-header__tools {
+    position: static;
+    transform: none;
+    justify-content: flex-end;
+    gap: 14px;
+  }
+  .saw-header__logo--image img { height: 60px; }
+
+  .saw-screen-head { padding: 24px 20px 8px; }
+
+  /* The list screen: a centred hero over a three-column grid. */
+  .saw-intro {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 72px 48px 0;
+    text-align: center;
+  }
+  .saw-h1 { font-size: 44px; margin-top: 12px; }
+  .saw-lede { font-size: 17px; max-width: 560px; margin: 12px auto 0; }
+
+  .saw-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 44px 48px 40px;
+  }
+
+  .saw-card__media { height: 210px; }
+
+  .saw-panel { max-width: 720px; margin: 40px auto 0; }
+
+  .saw-path { padding: 12px 20px 40px; }
+  .saw-stack { padding: 12px 20px 40px; }
+
+  .saw-footer {
+    margin-top: 56px;
+    border-top: 1px solid var(--saw-rule);
+    padding: 24px 48px 32px;
+    line-height: 1.7;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .saw-card { transition: none; }
+  .saw-card:hover { transform: none; }
+  /* The nodes animate in with `both`, so switching the animation off without
+     restoring opacity would leave the whole run invisible. */
+  .saw-node { animation: none; opacity: 1; }
+}
+
+/* ========================================================================
+   The site's compliance strips, wearing the section's clothes
+   ========================================================================
+   The responsible-play strip and the voluntary-code badge are rendered by
+   their own plugins on every page of the site, and the section keeps them:
+   suppressing them would make this the one place with no responsible-play
+   route, which is a compliance gap dressed as a layout decision.
+
+   Every rule here is scoped under .saw-app, so the main site's copies are
+   untouched. Those plugins' own stylesheets still load — they are plugin
+   assets, not the theme's — so these override rather than replace.
+   ======================================================================== */
+
+.saw-app .nera-rp-footer-strip,
+.saw-app .nera-vc-footer-badge {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
+
+.saw-app .nera-rp-footer-strip__inner,
+.saw-app .nera-vc-footer-badge__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: none;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  background: transparent;
+  border: 0;
+}
+
+.saw-app .nera-rp-footer-strip {
+  /* Above the footer's small print, under the content: the offer of help comes
+     before the legal text, not buried in it. */
+  padding: 16px 0 4px;
+}
+
+.saw-app .nera-rp-footer-strip__icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--saw-link);
+}
+
+.saw-app .nera-rp-footer-strip__text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--saw-body);
+}
+
+.saw-app .nera-rp-footer-strip__link {
+  display: inline-flex;
+  align-items: center;
+  /* 44px of touch target, on a link a player in trouble is reaching for. */
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--saw-control);
+  border-radius: 9999px;
+  background: var(--saw-card);
+  color: var(--saw-link);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.saw-app .nera-rp-footer-strip__link:hover {
+  border-color: var(--saw-primary);
+  color: var(--saw-primary);
+}
+
+.saw-app .nera-vc-footer-badge { padding: 0 0 8px; }
+
+.saw-app .nera-vc-footer-badge__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--saw-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.saw-app .nera-vc-footer-badge__link:hover { color: var(--saw-link); }
+
+.saw-app .nera-vc-footer-badge__icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.saw-app .nera-vc-footer-badge__text { text-decoration: underline; }
+.saw-app .nera-vc-footer-badge__chevron { width: 12px; height: 12px; flex: none; }
+
+@media (min-width: 900px) {
+  .saw-app .nera-rp-footer-strip__inner,
+  .saw-app .nera-vc-footer-badge__inner { padding: 0 48px; }
+  .saw-app .nera-rp-footer-strip { padding: 24px 0 4px; }
+}
+
+/* ---- nera-age-shield-plugin's age-verification dialog --------------------
+ * Its markup (#nera-age-dialog, in every wp_footer sitewide) is built from
+ * Tailwind utility classes — bg-surface, rounded-2xl, shadow-xl, w-16 h-16,
+ * bg-primary/10, and so on — that resolve on ordinary theme pages but never
+ * here, since this section deliberately skips the theme's Tailwind build.
+ * The plugin's own age-gate.css only ever styled the overlay backdrop and
+ * the DOB dropdowns, leaving the card itself, its icon badge and its submit
+ * button with no effective style at all inside .saw-app. Restyled here to
+ * match .saw-gate above rather than editing the sibling plugin directly. */
+#nera-age-dialog .nera-age-dialog-card {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 16px;
+  padding: 28px 26px 24px;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-radius: var(--saw-r-card);
+  box-shadow: 0 24px 60px rgba(33, 26, 20, 0.28);
+}
+#nera-age-dialog .text-center { text-align: center; }
+#nera-age-dialog .mb-6 { margin-bottom: 20px; }
+#nera-age-dialog .mb-4 { margin-bottom: 14px; }
+#nera-age-dialog .mb-2 { margin-bottom: 8px; }
+#nera-age-dialog .inline-flex { display: inline-flex; }
+#nera-age-dialog .items-center { align-items: center; }
+#nera-age-dialog .justify-center { justify-content: center; }
+#nera-age-dialog .w-16 { width: 56px; }
+#nera-age-dialog .h-16 { height: 56px; }
+#nera-age-dialog .rounded-full { border-radius: 999px; }
+#nera-age-dialog [class*="bg-primary/"] { background: rgba(235, 88, 12, 0.1); }
+#nera-age-dialog .material-symbols-outlined.text-primary { color: var(--saw-primary); }
+#nera-age-dialog .text-3xl { font-size: 30px; }
+#nera-age-dialog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--saw-ink);
+}
+#nera-age-dialog .text-sm { font-size: 14px; line-height: 1.5; }
+#nera-age-dialog .text-text-secondary { color: var(--saw-muted); }
+
+#nera-age-dialog .nera-age-dialog-submit {
+  width: 100%;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 14px 20px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border: 0;
+  border-radius: var(--saw-r-button);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+#nera-age-dialog .nera-age-dialog-submit:hover:not(:disabled) { opacity: 0.9; }
+#nera-age-dialog .nera-age-dialog-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+#nera-age-dialog .nera-age-dialog-submit-icon { font-size: 20px; line-height: 1; }

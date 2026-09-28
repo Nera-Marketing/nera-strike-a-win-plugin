@@ -3,3 +3,12 @@ node_modules/
 /nera-strikeawin-*.zip
 /nera-strike-a-win-plugin-*.zip
 .release-tmp/
+
+# Internal planning/analysis docs — contain client names and internal
+# schedules/estimates, never meant for this public repo or the shipped zip.
+/BUILD-PLAN.md
+/CONTEXT.md
+/GAP-REPORT.md
+/PROGRESS.md
+/SUMMARY.md
+/requirements.md

@@ -65,6 +65,12 @@ class Nera_SAW_Settings_Admin {
 		}
 		check_admin_referer( self::NONCE );
 
+		$strikeawin_method = Nera_SAW_Mode::sanitize_method( $_POST['strikeawin_method'] ?? '' );
+		$quiz_method       = Nera_SAW_Mode::sanitize_quiz_method( $_POST['quiz_method'] ?? '' );
+		$language_scope    = Nera_SAW_Mode::sanitize_language_scope( $_POST['language_scope'] ?? '' );
+		$resume_policy     = Nera_SAW_Mode::sanitize_resume_policy( $_POST['resume_policy'] ?? '' );
+		$policy_before     = Nera_SAW_Mode::resume_policy();
+
 		$timer_min = isset( $_POST['timer_min'] ) ? (int) $_POST['timer_min'] : Nera_SAW_Constants::TIMER_MIN_SECONDS;
 		$timer_max = isset( $_POST['timer_max'] ) ? (int) $_POST['timer_max'] : Nera_SAW_Constants::TIMER_MAX_SECONDS;
 		$timer_warn = isset( $_POST['timer_warn_seconds'] ) ? (int) $_POST['timer_warn_seconds'] : 3;
@@ -99,6 +105,12 @@ class Nera_SAW_Settings_Admin {
 		update_option(
 			Nera_SAW_Constants::OPTION_SETTINGS,
 			array(
+				// This is a whole-array write: every key the settings own must be
+				// listed here or saving the page deletes it.
+				'strikeawin_method'  => $strikeawin_method,
+				'quiz_method'        => $quiz_method,
+				'language_scope'     => $language_scope,
+				'resume_policy'      => $resume_policy,
 				'timer_min'          => $timer_min,
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
@@ -115,7 +127,21 @@ class Nera_SAW_Settings_Admin {
 			Nera_SAW_Play_Page::set_page_id( (int) $_POST['play_page_id'] );
 		}
 
-		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG, 'saw_saved' => '1' ), admin_url( 'admin.php' ) ) );
+		$args = array( 'page' => self::SLUG, 'saw_saved' => '1' );
+
+		/*
+		 * Switching to "close the run" settles whatever was already stuck, under the
+		 * policy those runs were played under. Otherwise the backlog falls between
+		 * the two: too old for the new policy to judge fairly, and invisible to the
+		 * sweep because it has no clock.
+		 */
+		if ( Nera_SAW_Mode::RESUME_CLOSE === $resume_policy && Nera_SAW_Mode::RESUME_ALLOW === $policy_before ) {
+			$result                = Nera_SAW_Run::settle_legacy_runs();
+			$args['saw_settled']   = (int) $result['settled'];
+			$args['saw_unsettled'] = (int) $result['remaining'];
+		}
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
@@ -134,30 +160,117 @@ class Nera_SAW_Settings_Admin {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'nera-strikeawin' ) . '</p></div>';
 		}
 
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['saw_settled'] ) ) {
+			$settled   = (int) $_GET['saw_settled'];
+			$unsettled = isset( $_GET['saw_unsettled'] ) ? (int) $_GET['saw_unsettled'] : 0;
+
+			if ( $settled > 0 ) {
+				printf(
+					'<div class="notice notice-info is-dismissible"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: %d: number of runs */
+							_n(
+								'Settled %d run left over from the previous policy — its tickets have been issued and the run closed.',
+								'Settled %d runs left over from the previous policy — their tickets have been issued and the runs closed.',
+								$settled,
+								'nera-strikeawin'
+							),
+							$settled
+						)
+					)
+				);
+			}
+			if ( $unsettled > 0 ) {
+				printf(
+					'<div class="notice notice-warning"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: %d: number of runs */
+							__( '%d older run(s) still need settling — too many to finish in one save. Go to Strike A Win → Run Clock and back-fill the rest.', 'nera-strikeawin' ),
+							$unsettled
+						)
+					)
+				);
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( self::NONCE );
 		echo '<input type="hidden" name="action" value="' . esc_attr( self::ACTION ) . '">';
 
-		// --- Play page card ------------------------------------------------
-		$play_page_id = Nera_SAW_Play_Page::get_page_id();
+		// --- Behaviour card -------------------------------------------------
+		// First on the page because these three gate what the rest of the
+		// settings even mean: the play page is a mix-mode concept, and the
+		// stage-related copy elsewhere only applies under the ladder.
 		echo '<div class="saw-card">';
-		echo '<h2 class="saw-card__head">' . esc_html__( 'Quiz play page', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'The page that hosts the quiz. Auto-created on activation; override here if you want the quiz on a different page. The page must contain the [strikeawin_quiz] shortcode.', 'nera-strikeawin' ) . '</p>';
-		echo '<div class="saw-field-row"><label class="saw-field"><span>' . esc_html__( 'Play page', 'nera-strikeawin' ) . '</span>';
-		wp_dropdown_pages(
-			array(
-				'name'              => 'play_page_id',
-				'selected'         => (int) $play_page_id,
-				'show_option_none' => __( '— Auto (create/adopt) —', 'nera-strikeawin' ),
-				'option_none_value' => '0',
-			)
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Behaviour', 'nera-strikeawin' ) . '</h2>';
+
+		self::radio_field(
+			'strikeawin_method',
+			__( 'StrikeAWin Method', 'nera-strikeawin' ),
+			__( 'Where competitions live. Mix keeps them in the main catalogue alongside every other product. Standalone gives the plugin its own section and removes its products from the main site.', 'nera-strikeawin' ),
+			Nera_SAW_Mode::methods(),
+			Nera_SAW_Mode::method()
 		);
-		echo '</label>';
-		if ( $play_page_id > 0 ) {
-			echo '<span class="saw-field"><span>' . esc_html__( 'URL', 'nera-strikeawin' ) . '</span><a href="' . esc_url( get_permalink( $play_page_id ) ) . '" target="_blank" rel="noopener">' . esc_html( get_permalink( $play_page_id ) ) . '</a></span>';
+
+		self::radio_field(
+			'quiz_method',
+			__( 'Quiz Method', 'nera-strikeawin' ),
+			__( 'How a run is ordered. Random mixes the difficulty levels across the run; Ladder walks them in stages, easy to hard. Individual competitions can override this on their Strike A Win tab. The front-end prototype was designed around Ladder — Random is the default so that upgrading changes nothing.', 'nera-strikeawin' ),
+			Nera_SAW_Mode::quiz_methods(),
+			Nera_SAW_Mode::quiz_method()
+		);
+
+		self::radio_field(
+			'resume_policy',
+			__( 'If a run is interrupted', 'nera-strikeawin' ),
+			__( 'What happens when a player loses their connection or closes the browser mid-quiz and comes back. This does not cover the Leave button — using that and confirming it is a choice, and it ends the run either way.', 'nera-strikeawin' ),
+			Nera_SAW_Mode::resume_policies(),
+			Nera_SAW_Mode::resume_policy()
+		);
+
+		self::radio_field(
+			'language_scope',
+			__( 'Language Scope', 'nera-strikeawin' ),
+			__( 'How far the language choice reaches. Questions only keeps the interface in one language and lets the player choose the language of the questions when a run starts. Whole standalone section also translates the section\'s own content.', 'nera-strikeawin' ),
+			Nera_SAW_Mode::language_scopes(),
+			Nera_SAW_Mode::language_scope()
+		);
+
+		echo '</div>';
+
+		// --- Play page card ------------------------------------------------
+		// Only in mix. Standalone serves the quiz from the plugin's own route, so the
+		// card would be pointing at a page nothing loads -- and an administrator who
+		// "fixed" it by picking a different page would see no change at all, which is
+		// worse than the setting being absent.
+		//
+		// Hiding it does not clear it: the save above is guarded by isset(), so the
+		// stored override survives a switch to standalone and comes back intact.
+		if ( ! Nera_SAW_Mode::is_standalone() ) {
+			$play_page_id = Nera_SAW_Play_Page::get_page_id();
+			echo '<div class="saw-card">';
+			echo '<h2 class="saw-card__head">' . esc_html__( 'Quiz play page', 'nera-strikeawin' ) . '</h2>';
+			echo '<p class="saw-muted">' . esc_html__( 'The page that hosts the quiz. Auto-created on activation; override here if you want the quiz on a different page. The page must contain the [strikeawin_quiz] shortcode.', 'nera-strikeawin' ) . '</p>';
+			echo '<div class="saw-field-row"><label class="saw-field"><span>' . esc_html__( 'Play page', 'nera-strikeawin' ) . '</span>';
+			wp_dropdown_pages(
+				array(
+					'name'              => 'play_page_id',
+					'selected'         => (int) $play_page_id,
+					'show_option_none' => __( '— Auto (create/adopt) —', 'nera-strikeawin' ),
+					'option_none_value' => '0',
+				)
+			);
+			echo '</label>';
+			if ( $play_page_id > 0 ) {
+				echo '<span class="saw-field"><span>' . esc_html__( 'URL', 'nera-strikeawin' ) . '</span><a href="' . esc_url( get_permalink( $play_page_id ) ) . '" target="_blank" rel="noopener">' . esc_html( get_permalink( $play_page_id ) ) . '</a></span>';
+			}
+			echo '</div>';
+			echo '</div>';
 		}
-		echo '</div>';
-		echo '</div>';
 
 		// --- Timer bounds card ---------------------------------------------
 		echo '<div class="saw-card">';
@@ -286,5 +399,34 @@ class Nera_SAW_Settings_Admin {
 		printf( '<td><input type="number" min="0" data-name="ceiling" %s value="%s" style="width:80px"></td>', $n( 'ceiling' ), esc_attr( $tier['ceiling'] ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<td><button type="button" class="button-link saw-remove-tier" title="' . esc_attr__( 'Remove', 'nera-strikeawin' ) . '">&times;</button></td>';
 		echo '</tr>';
+	}
+
+	/**
+	 * A labelled set of radios for one of the behaviour settings.
+	 *
+	 * Radios rather than a select: there are only ever two choices and each one
+	 * needs its own sentence. A select hides the option not currently chosen,
+	 * which is exactly the one an administrator is trying to understand.
+	 *
+	 * @param string $name     Field name.
+	 * @param string $label    Field label.
+	 * @param string $help     Explanatory sentence shown under the label.
+	 * @param array  $choices  key => label.
+	 * @param string $selected Currently resolved value.
+	 */
+	private static function radio_field( $name, $label, $help, array $choices, $selected ) {
+		echo '<div class="saw-field-block">';
+		echo '<p class="saw-field-block__label"><strong>' . esc_html( $label ) . '</strong></p>';
+		echo '<p class="saw-muted">' . esc_html( $help ) . '</p>';
+		foreach ( $choices as $value => $choice_label ) {
+			printf(
+				'<label class="saw-radio"><input type="radio" name="%1$s" value="%2$s"%3$s> <span>%4$s</span></label>',
+				esc_attr( $name ),
+				esc_attr( $value ),
+				checked( (string) $selected, (string) $value, false ),
+				esc_html( $choice_label )
+			);
+		}
+		echo '</div>';
 	}
 }

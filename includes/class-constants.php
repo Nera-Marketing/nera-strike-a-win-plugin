@@ -133,6 +133,13 @@ class Nera_SAW_Constants {
 	 */
 	public static function default_settings() {
 		return array(
+			// The three behaviour gates. Defaults are today's behaviour on
+			// purpose: an install that upgrades into this code must not change
+			// shape under a player mid-draw. See ADR 0019.
+			'strikeawin_method'  => Nera_SAW_Mode::METHOD_MIX,
+			'quiz_method'        => Nera_SAW_Mode::QUIZ_RANDOM,
+			'language_scope'     => Nera_SAW_Mode::SCOPE_QUESTIONS,
+			'resume_policy'      => Nera_SAW_Mode::RESUME_ALLOW,
 			'timer_min'          => self::TIMER_MIN_SECONDS,
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,

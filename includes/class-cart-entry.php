@@ -26,6 +26,12 @@ class Nera_SAW_Cart_Entry {
 	public static function init() {
 		add_filter( 'woocommerce_add_cart_item_data', array( __CLASS__, 'add_cart_item_data' ), 10, 2 );
 		add_filter( 'woocommerce_get_cart_item_from_session', array( __CLASS__, 'get_cart_item_from_session' ), 10, 2 );
+		// Pool capacity is a real gate in both directions: at add-to-cart (catches
+		// the common case early) and again at checkout submission, immediately
+		// before payment (catches the pool having shrunk between the two — the
+		// race this exists for). Neither replaces the other.
+		add_filter( 'woocommerce_add_to_cart_validation', array( __CLASS__, 'validate_pool_capacity' ), 20, 3 );
+		add_action( 'woocommerce_check_cart_items', array( __CLASS__, 'check_cart_pool_capacity' ) );
 		// Quantity is the number of runs bought (ADR 0006) — allow >1 even if the
 		// underlying lottery product is otherwise sold individually.
 		add_filter( 'woocommerce_is_sold_individually', array( __CLASS__, 'allow_multiple_runs' ), 20, 2 );
@@ -60,6 +66,134 @@ class Nera_SAW_Cart_Entry {
 		}
 		$data[ self::CART_KEY ] = $tier_key;
 		return $data;
+	}
+
+	/**
+	 * Block an add-to-cart the ticket pool cannot possibly honour.
+	 *
+	 * A run's tickets are reserved worst-case at grant time
+	 * (`Nera_SAW_Run_Grants::grant_for_order()`, `qty * max_possible_spins()`), but
+	 * that reservation happens *after* payment — by design, ADR 0006 moved it there
+	 * so an unpaid cart never holds stock hostage. That leaves nothing upstream
+	 * stopping a sale the pool cannot back, unless something checks here, before
+	 * money moves. This is that check.
+	 *
+	 * @param bool $passed     Whether validation passed so far.
+	 * @param int  $product_id Product being added.
+	 * @param int  $quantity   Quantity.
+	 * @return bool
+	 */
+	public static function validate_pool_capacity( $passed, $product_id, $quantity ) {
+		if ( ! $passed || ! Nera_SAW_Competition_Config::is_competition( $product_id ) ) {
+			return $passed;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$tier_key = isset( $_REQUEST[ self::CART_KEY ] ) ? sanitize_key( wp_unslash( $_REQUEST[ self::CART_KEY ] ) ) : '';
+		if ( '' === $tier_key ) {
+			return $passed; // No SAW tier tagged -> not this class's add to gate.
+		}
+
+		$config = Nera_SAW_Competition_Config::get( $product_id );
+		if ( ! Nera_SAW_Competition_Config::tier( $config, $tier_key ) ) {
+			return $passed;
+		}
+
+		if ( ! self::pool_has_room( $product_id, $config, $tier_key, (int) $quantity ) ) {
+			wc_add_notice(
+				__( 'Sorry, this competition does not have enough tickets left to cover that many runs at this tier. Try a smaller quantity, another tier, or check back once the draw refreshes.', 'nera-strikeawin' ),
+				'error'
+			);
+			return false;
+		}
+
+		return $passed;
+	}
+
+	/**
+	 * Re-check the whole cart's pool capacity immediately before payment.
+	 *
+	 * `woocommerce_check_cart_items` runs from `WC_Checkout::validate_checkout()`
+	 * on every submission — this is the check that actually matters, because the
+	 * pool can shrink between an item being added and the same shopper reaching
+	 * payment (another order, or another line in this one). `wc_add_notice()`
+	 * with type 'error' is how WooCommerce itself blocks `process_checkout()`
+	 * here; nothing further needs to be returned.
+	 */
+	public static function check_cart_pool_capacity() {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+
+		// Sum quantity per (competition, tier): add-to-cart validation only ever
+		// sees one line at a time, but two lines of the same tier together can
+		// still ask for more than the pool has left.
+		$needed = array();
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$product_id = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
+			$tier_key   = isset( $item[ self::CART_KEY ] ) ? (string) $item[ self::CART_KEY ] : '';
+			if ( ! $product_id || '' === $tier_key || ! Nera_SAW_Competition_Config::is_competition( $product_id ) ) {
+				continue;
+			}
+			$key            = $product_id . '|' . $tier_key;
+			$needed[ $key ] = ( isset( $needed[ $key ] ) ? $needed[ $key ] : 0 ) + ( isset( $item['quantity'] ) ? (int) $item['quantity'] : 1 );
+		}
+
+		$flagged = array();
+		foreach ( $needed as $key => $qty ) {
+			list( $product_id, $tier_key ) = explode( '|', $key, 2 );
+			$product_id = (int) $product_id;
+			$config     = Nera_SAW_Competition_Config::get( $product_id );
+			if ( self::pool_has_room( $product_id, $config, $tier_key, $qty ) ) {
+				continue;
+			}
+			if ( isset( $flagged[ $product_id ] ) ) {
+				continue; // One notice per competition is enough even if several tiers are short.
+			}
+			$flagged[ $product_id ] = true;
+
+			$product = wc_get_product( $product_id );
+			$name    = $product ? $product->get_name() : __( 'this competition', 'nera-strikeawin' );
+			wc_add_notice(
+				sprintf(
+					/* translators: %s: competition name */
+					__( 'Sorry, %s no longer has enough tickets left for the runs in your basket. Please lower the quantity or remove it to continue.', 'nera-strikeawin' ),
+					esc_html( $name )
+				),
+				'error'
+			);
+		}
+	}
+
+	/**
+	 * Does the pool have room for `quantity` more runs at this tier's worst case?
+	 *
+	 * Mirrors the display-only "fits" check the entry shortcode already uses
+	 * (`shortcode()` below) — this is that same arithmetic, promoted to an actual
+	 * gate instead of a disabled button.
+	 *
+	 * @param int    $product_id Competition product ID.
+	 * @param array  $config     Resolved competition config.
+	 * @param string $tier_key   Tier key.
+	 * @param int    $quantity   Runs being requested.
+	 * @return bool
+	 */
+	private static function pool_has_room( $product_id, array $config, $tier_key, $quantity ) {
+		$quantity = max( 1, (int) $quantity );
+		$max      = (int) Nera_SAW_Competition_Config::max_possible_spins( $config, $tier_key );
+		if ( $max < 1 ) {
+			return true; // Nothing would be reserved; nothing to block on.
+		}
+
+		$pool = Nera_SAW_Spin_Pool::get( $product_id );
+		if ( ! $pool ) {
+			return true; // Pool not provisioned yet — unchanged from today's behaviour.
+		}
+		if ( 'open' !== $pool->status ) {
+			return false;
+		}
+
+		return (int) $pool->available >= ( $quantity * $max );
 	}
 
 	/**

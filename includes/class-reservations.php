@@ -32,7 +32,59 @@ class Nera_SAW_Reservations {
 		// not at checkout-init. The old on_order_created/on_order_released reserve
 		// hooks and the TTL sweep are retired. The class is retained for its item
 		// meta keys (ITEM_TIER / ITEM_SNAPSHOT) and demo cleanup helpers.
-		$unused = null;
+		//
+		// The hook name outlived the reservation sweep, though: Nera_SAW_Run hangs
+		// finalize_stale() on it. When this method was emptied, nothing was left to
+		// schedule CRON_HOOK — so for the whole life of that change, abandoned runs
+		// were never closed and the tickets their players had earned were never
+		// minted. Scheduling is restored here, where the constant lives, so the two
+		// cannot drift apart again (ADR 0020).
+		add_filter( 'cron_schedules', array( __CLASS__, 'add_schedule' ) ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
+		add_action( 'init', array( __CLASS__, 'ensure_scheduled' ) );
+	}
+
+	/**
+	 * A five-minute interval for the sweep.
+	 *
+	 * Tied to how long a player is willing to sit on a results screen that has not
+	 * appeared: the sweep is what mints an abandoned run's tickets, so an hourly
+	 * tick would mean an hour between earning them and seeing them.
+	 *
+	 * @param array $schedules Existing schedules.
+	 * @return array
+	 */
+	public static function add_schedule( $schedules ) {
+		if ( ! isset( $schedules['nera_saw_five_minutes'] ) ) {
+			$schedules['nera_saw_five_minutes'] = array(
+				'interval' => 5 * MINUTE_IN_SECONDS,
+				'display'  => __( 'Every five minutes (Strike A Win)', 'nera-strikeawin' ),
+			);
+		}
+		return $schedules;
+	}
+
+	/**
+	 * Schedule the sweep if it is not already scheduled.
+	 *
+	 * On `init` rather than only on activation, because this plugin updates from
+	 * GitHub — an update does not re-run the activation hook, so an activation-only
+	 * schedule would never reach a site that already had the plugin. The
+	 * wp_next_scheduled() guard makes it idempotent.
+	 */
+	public static function ensure_scheduled() {
+		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
+			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'nera_saw_five_minutes', self::CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Clear the sweep. Called on deactivation.
+	 */
+	public static function unschedule() {
+		$timestamp = wp_next_scheduled( self::CRON_HOOK );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, self::CRON_HOOK );
+		}
 	}
 
 	/**

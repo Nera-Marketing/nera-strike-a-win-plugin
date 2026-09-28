@@ -92,13 +92,26 @@
 
 	// Collect the form's option fields (excludes the admin-post action + nonce,
 	// which we override for admin-ajax).
+	//
+	// A plain object can only hold one value per key, but a checkbox group such as
+	// question_languages[] serializes as several fields sharing that one name --
+	// each assignment would overwrite the one before it, so only the last language
+	// ticked would ever reach the server. Repeated names are collected into an
+	// array instead, which is what jQuery.ajax sends as name[]=a&name[]=b.
 	function baseParams( $form ) {
 		var params = {};
 		$.each( $form.serializeArray(), function ( _i, f ) {
 			if ( f.name === 'action' || f.name === '_wpnonce' || f.name === '_wp_http_referer' ) {
 				return;
 			}
-			params[ f.name ] = f.value;
+			if ( Object.prototype.hasOwnProperty.call( params, f.name ) ) {
+				if ( ! $.isArray( params[ f.name ] ) ) {
+					params[ f.name ] = [ params[ f.name ] ];
+				}
+				params[ f.name ].push( f.value );
+			} else {
+				params[ f.name ] = f.value;
+			}
 		} );
 		params.action = cfg.action;
 		params.nonce = cfg.nonce;

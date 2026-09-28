@@ -234,6 +234,7 @@ class Nera_SAW_Log_List_Table extends WP_List_Table {
 			'run_complete' => 'saw-pill--green',    // success
 			'run_abandon'  => 'saw-pill--orange',   // attention (amber)
 			'run_restored' => 'saw-pill--green',    // admin recovery (success)
+			'run_finalize_race_avoided' => 'saw-pill--orange', // attention (amber)
 			'error'        => 'saw-pill--red',      // problem
 			'client_error' => 'saw-pill--red',
 			'client_stall' => 'saw-pill--red',

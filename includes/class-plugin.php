@@ -56,6 +56,18 @@ class Nera_SAW_Plugin {
 
 		require_once $dir . 'class-log.php';
 		require_once $dir . 'class-competition-config.php';
+		require_once $dir . 'class-competition-spec.php';
+		require_once $dir . 'class-catalogue-isolation.php';
+		require_once $dir . 'class-router.php';
+		require_once $dir . 'class-language.php';
+		require_once $dir . 'class-language-reach.php';
+		require_once $dir . 'class-language-switcher.php';
+		require_once $dir . 'class-standalone-pages.php';
+		require_once $dir . 'class-standalone-fields.php';
+		require_once $dir . 'class-standalone-chrome.php';
+		require_once $dir . 'class-standalone-basket.php';
+		require_once $dir . 'class-standalone-account.php';
+		require_once $dir . 'class-standalone-result-screen.php';
 		require_once $dir . 'class-spin-pool.php';
 		require_once $dir . 'class-reservations.php';
 		require_once $dir . 'class-run-grants.php';
@@ -73,6 +85,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-cart-entry.php';
 		require_once $dir . 'class-order-cta.php';
 		require_once $dir . 'class-integrations.php';
+		require_once $dir . 'class-seed-image.php';
 		require_once $dir . 'class-seeder.php';
 
 		if ( is_admin() ) {
@@ -83,6 +96,7 @@ class Nera_SAW_Plugin {
 			require_once $dir . 'admin/class-report-admin.php';
 			require_once $dir . 'admin/class-log-admin.php';
 			require_once $dir . 'admin/class-question-import-admin.php';
+			require_once $dir . 'admin/class-run-clock-admin.php';
 			Nera_SAW_Ladder_Admin::init();
 			Nera_SAW_Settings_Admin::init();
 			Nera_SAW_Competition_Admin::init();
@@ -90,6 +104,7 @@ class Nera_SAW_Plugin {
 			Nera_SAW_Report_Admin::init();
 			Nera_SAW_Log_Admin::init();
 			Nera_SAW_Question_Import_Admin::init();
+			Nera_SAW_Run_Clock_Admin::init();
 			// Question CRUD is now the native CPT editor (class-question-admin.php retired).
 		}
 
@@ -121,6 +136,17 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Cart_Entry::init();
 		Nera_SAW_Order_Cta::init();
 		Nera_SAW_Integrations::init();
+		Nera_SAW_Catalogue_Isolation::init();
+		Nera_SAW_Router::init();
+		Nera_SAW_Standalone_Pages::init();
+		Nera_SAW_Standalone_Fields::init();
+		Nera_SAW_Language::init();
+		Nera_SAW_Language_Reach::init();
+		Nera_SAW_Language_Switcher::init();
+		Nera_SAW_Standalone_Chrome::init();
+		Nera_SAW_Standalone_Basket::init();
+		Nera_SAW_Standalone_Account::init();
+		Nera_SAW_Standalone_Result_Screen::init();
 		Nera_SAW_Ticket_Award::init();
 
 		// Finalize abandoned runs on the reservation sweep tick.

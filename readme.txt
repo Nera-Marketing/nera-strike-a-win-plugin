@@ -4,7 +4,7 @@ Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.5
+Stable tag: 1.1.0
 
 Skill-based prize-competition quiz mechanic: paid entry → timed increasing-difficulty quiz → earned Lottery for WooCommerce tickets entered into the competition draw.
 

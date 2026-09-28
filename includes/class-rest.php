@@ -50,6 +50,10 @@ class Nera_SAW_Rest {
 					'competition_id' => array( 'required' => true, 'sanitize_callback' => 'absint' ),
 					'tier'           => array( 'required' => false, 'sanitize_callback' => 'sanitize_key' ),
 					'start_token'    => array( 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ),
+					// Optional: which language to draw the quiz bank in, from the
+					// language screen. Validated against the competition's actually
+					// playable languages inside Nera_SAW_Run::start(), not here.
+					'language'       => array( 'required' => false, 'sanitize_callback' => 'sanitize_key' ),
 				),
 				'callback'            => array( __CLASS__, 'start' ),
 			)
@@ -132,6 +136,10 @@ class Nera_SAW_Rest {
 		$competition_id = (int) $req['competition_id'];
 		$tier           = (string) $req->get_param( 'tier' );
 		$token          = (string) $req->get_param( 'start_token' );
+		// An unplayable/undeclared language falls back inside Nera_SAW_Run::start()
+		// (resolve_run_language()) rather than erroring here — a stale or tampered
+		// value is not the caller's fault to be told about, it just gets ignored.
+		$language       = sanitize_key( (string) $req->get_param( 'language' ) );
 
 		// A run is a paid asset: it can be started ONLY from a deliberate Start
 		// click on the Overview screen, which issues this per-user/competition/tier
@@ -146,7 +154,7 @@ class Nera_SAW_Rest {
 			);
 		}
 
-		$result = Nera_SAW_Run::start( $competition_id, $tier, get_current_user_id() );
+		$result = Nera_SAW_Run::start( $competition_id, $tier, get_current_user_id(), $language );
 		if ( ! is_wp_error( $result ) ) {
 			Nera_SAW_Log::add(
 				'run_start',

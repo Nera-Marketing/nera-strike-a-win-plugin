@@ -88,6 +88,7 @@ class Nera_SAW_Log_Admin {
 			'run_complete' => __( 'Run complete', 'nera-strikeawin' ),
 			'run_abandon'  => __( 'Run abandoned', 'nera-strikeawin' ),
 			'run_restored' => __( 'Run restored', 'nera-strikeawin' ),
+			'run_finalize_race_avoided' => __( 'Finalize race avoided', 'nera-strikeawin' ),
 			'error'        => __( 'Server error', 'nera-strikeawin' ),
 			'client_error' => __( 'Client error', 'nera-strikeawin' ),
 			'client_stall' => __( 'Client stall', 'nera-strikeawin' ),

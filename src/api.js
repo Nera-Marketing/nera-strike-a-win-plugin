@@ -52,8 +52,8 @@ async function request( path, method = 'GET', body, timeoutMs = REQUEST_TIMEOUT_
 }
 
 export const api = {
-	startRun( competitionId, tier, startToken ) {
-		return request( '/run/start', 'POST', { competition_id: competitionId, tier, start_token: startToken } );
+	startRun( competitionId, tier, startToken, language ) {
+		return request( '/run/start', 'POST', { competition_id: competitionId, tier, start_token: startToken, language: language || '' } );
 	},
 	getSlot( runId, slotNo ) {
 		return request( `/run/${ runId }/slot/${ slotNo }` );

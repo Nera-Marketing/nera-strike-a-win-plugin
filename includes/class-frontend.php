@@ -96,15 +96,31 @@ class Nera_SAW_Frontend {
 			);
 		}
 
+		/*
+		 * The URL wins when both are present, so a deep link (e.g. an order's Play
+		 * button) can still send a player to a specific competition on the play
+		 * page even though that page's shortcode carries no `id` of its own. The
+		 * attribute exists for the opposite case: embedding this competition's
+		 * quiz on some OTHER page, where there is no `saw_competition` query arg
+		 * to read.
+		 */
+		$atts = shortcode_atts( array( 'id' => 0, 'tier' => '' ), $atts, self::SHORTCODE );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$competition_id = isset( $_GET[ Nera_SAW_Play_Page::QV_COMPETITION ] ) ? absint( $_GET[ Nera_SAW_Play_Page::QV_COMPETITION ] ) : 0;
+		$competition_id = isset( $_GET[ Nera_SAW_Play_Page::QV_COMPETITION ] )
+			? absint( $_GET[ Nera_SAW_Play_Page::QV_COMPETITION ] )
+			: absint( $atts['id'] );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$tier_key = isset( $_GET[ Nera_SAW_Play_Page::QV_TIER ] )
+			? sanitize_key( wp_unslash( $_GET[ Nera_SAW_Play_Page::QV_TIER ] ) )
+			: sanitize_key( $atts['tier'] );
 
 		// A run is started ONLY from the Overview screen's Start button (token-gated,
 		// in-page); no URL starts a run (ADR 0007). So the play page always renders
-		// the Overview for a competition, or the hub.
+		// the Overview for a competition, or the hub. A tier narrows which of that
+		// competition's Start cards the Overview shows — it never skips the click.
 		if ( $competition_id > 0 ) {
 			return self::wrap_page_shell(
-				self::render_competition_overview( $competition_id ),
+				self::render_competition_overview( $competition_id, $tier_key ),
 				self::competition_hero( wc_get_product( $competition_id ), $competition_id )
 			);
 		}
@@ -127,11 +143,57 @@ class Nera_SAW_Frontend {
 
 	/**
 	 * Enqueue the Vue island (Vite manifest in prod, dev server in dev) + localise.
+	 *
+	 * Public: the standalone section's own play template mounts the same Vue app
+	 * without going through render()/render_competition_overview(), so it calls
+	 * this directly.
 	 */
-	private static function enqueue_app() {
+	public static function enqueue_app( $competition_id = 0 ) {
 		self::enqueue_shell_styles();
 
 		$feedback_on = Nera_SAW_Constants::quiz_feedback_enabled();
+		$competition_id = (int) $competition_id;
+
+		// Which languages the quiz-language screen can actually offer for THIS
+		// competition — empty on a monolingual site, or when the Russian (etc.)
+		// bank is too thin for this competition's distribution. See
+		// Nera_SAW_Run::playable_languages() and CONTEXT.md "Bank health".
+		$languages = $competition_id ? Nera_SAW_Run::playable_languages( $competition_id ) : array();
+		$language_names = array();
+		foreach ( $languages as $code ) {
+			$language_names[ $code ] = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $code ) : $code;
+		}
+
+		// Stage count + stage 1's label/colour, computed WITHOUT starting a run, so
+		// the quiz-language screen (shown before any slot exists) can render the same
+		// .saw-stagebar header the question/stage-break screens use instead of a bare
+		// card — matching the reference design's screen 24. "Stage" is only a
+		// deterministic, pre-run concept in ladder mode (Nera_SAW_Run::stage_of()'s own
+		// doc comment): in random mode every question is its own stage and slot 1's
+		// level is shuffled server-side per run, so a "first stage" label/colour would
+		// just be a guess. Leave them blank there rather than show something that
+		// might not match the run once it actually starts; stageCount still gets a
+		// real (deterministic) total-question count so the "Stage 1 of N" text isn't
+		// stuck at a hardcoded default.
+		$stage_count        = 0;
+		$first_stage_label  = '';
+		$first_stage_color  = '';
+		if ( $competition_id ) {
+			$config       = Nera_SAW_Competition_Config::get( $competition_id );
+			$distribution = array_filter( (array) $config['distribution'] );
+			if ( Nera_SAW_Mode::is_ladder( $competition_id ) ) {
+				$stage_count = count( $distribution );
+				foreach ( Nera_SAW_Constants::ladder() as $level ) {
+					if ( ! empty( $distribution[ $level['key'] ] ) ) {
+						$first_stage_label = (string) $level['label'];
+						$first_stage_color = Nera_SAW_Constants::level_text_color( $level['key'] );
+						break;
+					}
+				}
+			} else {
+				$stage_count = Nera_SAW_Competition_Config::total_questions( $config );
+			}
+		}
 
 		$data = array(
 			'root'               => esc_url_raw( rest_url( Nera_SAW_Rest::NS ) ),
@@ -140,6 +202,21 @@ class Nera_SAW_Frontend {
 			'showAnswerFeedback' => $feedback_on ? 1 : 0,
 			'timerWarnSeconds'   => Nera_SAW_Constants::timer_warn_seconds(),
 			'feedbackSeconds'    => Nera_SAW_Constants::feedback_seconds(),
+			'playableLanguages'  => $languages,
+			'languageNames'      => $language_names,
+			// Pre-run stage header data — see the comment above where these are
+			// computed. Read by App.vue's language phase only.
+			'stageCount'         => $stage_count,
+			'firstStageLabel'    => $first_stage_label,
+			'firstStageColor'    => $first_stage_color,
+			// "Back to competitions" on the results screen — the section's own list
+			// in standalone; the main shop page in mix, where there is no equivalent
+			// dedicated list. Never the empty string, so the button is never dead.
+			'competitionsUrl'    => esc_url_raw(
+				( class_exists( 'Nera_SAW_Standalone_Pages' ) && Nera_SAW_Standalone_Pages::url( 'competitions' ) )
+					? Nera_SAW_Standalone_Pages::url( 'competitions' )
+					: ( function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/' ) )
+			),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => __( 'View competition', 'nera-strikeawin' ),
@@ -148,6 +225,7 @@ class Nera_SAW_Frontend {
 				'submitAnswer'       => __( 'Submit answer', 'nera-strikeawin' ),
 				'checkingAnswer'     => __( 'Checking…', 'nera-strikeawin' ),
 				'nextQuestion'       => __( 'Next question', 'nera-strikeawin' ),
+				'continueLabel'      => __( 'Continue', 'nera-strikeawin' ),
 				'seeResults'         => __( 'See my results', 'nera-strikeawin' ),
 				// Screen-reader-only announcements for the Answer reveal (the visual
 				// reveal is colour alone, which assistive tech cannot convey).
@@ -173,6 +251,49 @@ class Nera_SAW_Frontend {
 				'tryAgain'           => __( 'Try again', 'nera-strikeawin' ),
 				'errorContactAdmin'  => __( 'Something went wrong. Please contact support and we will investigate and restore your run.', 'nera-strikeawin' ),
 				'runRef'             => __( 'Run reference', 'nera-strikeawin' ),
+				// Quiz language screen.
+				'quizLanguageTitle'  => __( 'Quiz language', 'nera-strikeawin' ),
+				'quizLanguageIntro'  => __( 'Questions and answers will appear in this language', 'nera-strikeawin' ),
+				// Question screen.
+				'questionOf'         => __( 'Question %1$d of %2$d', 'nera-strikeawin' ),
+				'worthTickets'       => __( 'Worth %d tickets', 'nera-strikeawin' ),
+				'worthTicket'        => __( 'Worth %d ticket', 'nera-strikeawin' ),
+				'ticketsLabel'       => __( 'Tickets', 'nera-strikeawin' ),
+				'stageOf'            => __( 'Stage %1$d of %2$d · %3$s', 'nera-strikeawin' ),
+				'bankedLine'         => __( '+%1$d banked. %2$d tickets total.', 'nera-strikeawin' ),
+				'timeUpLine'         => __( "Time's up. %d tickets total.", 'nera-strikeawin' ),
+				'wrongLine'          => __( 'Not this time. %d tickets total.', 'nera-strikeawin' ),
+				// Stage break.
+				'stageBreakEyebrow'  => __( 'Stage %1$d of %2$d', 'nera-strikeawin' ),
+				// Per-stage headline, read by App.vue as `stageBreakHeadline_{stage_no}`
+				// with the difficulty label itself as the fallback for any stage
+				// number beyond this list (a competition can have more or fewer
+				// stages than the five named here). Stage 2's "Stepping up" is the
+				// reference design's own example; the rest follow its tone.
+				'stageBreakHeadline_1' => __( 'Warming up', 'nera-strikeawin' ),
+				'stageBreakHeadline_2' => __( 'Stepping up', 'nera-strikeawin' ),
+				'stageBreakHeadline_3' => __( 'Getting serious', 'nera-strikeawin' ),
+				'stageBreakHeadline_4' => __( 'Into the hard part', 'nera-strikeawin' ),
+				'stageBreakHeadline_5' => __( 'Final stretch', 'nera-strikeawin' ),
+				// Results.
+				'runComplete'        => __( 'Run complete', 'nera-strikeawin' ),
+				'inTheDrawTitle'     => __( "You're in the draw", 'nera-strikeawin' ),
+				'inTheDrawSubtitle'  => __( '%1$d tickets banked from %2$d correct answers.', 'nera-strikeawin' ),
+				'zeroTicketsTitle'   => __( 'No tickets this run', 'nera-strikeawin' ),
+				'zeroCorrectSubtitle' => __( 'None of the %d answers landed in time.', 'nera-strikeawin' ),
+				'zeroSomeCorrectSubtitle' => __( '%1$d of %2$d correct, but not enough to bank a ticket.', 'nera-strikeawin' ),
+				'scoreLabel'         => __( 'Score', 'nera-strikeawin' ),
+				'scoreValue'         => __( '%1$d of %2$d correct', 'nera-strikeawin' ),
+				'ticketsEarnedLabel' => __( 'Tickets earned', 'nera-strikeawin' ),
+				'yourEntryNumbers'   => __( 'Your entry numbers', 'nera-strikeawin' ),
+				'moreNumbers'        => __( '+%d more', 'nera-strikeawin' ),
+				'numbersPoolNote'    => __( 'Numbers are allocated at random from this draw\'s pool.', 'nera-strikeawin' ),
+				'drawInfoWithEntry'  => __( 'Random draw, independently witnessed. You\'ll be notified either way.', 'nera-strikeawin' ),
+				'drawDatePrefix'     => __( 'Draw: %s', 'nera-strikeawin' ),
+				'noEntryNote'        => __( 'No tickets were earned, so there is no entry in this draw, and no refund is due.', 'nera-strikeawin' ),
+				'drawClosesPrefix'   => __( 'The draw closes %s.', 'nera-strikeawin' ),
+				'playAnotherRun'     => __( 'Play another run', 'nera-strikeawin' ),
+				'backToCompetitions' => __( 'Back to competitions', 'nera-strikeawin' ),
 			),
 		);
 
@@ -301,10 +422,11 @@ class Nera_SAW_Frontend {
 	/**
 	 * Competition overview: hero, quick guide, tier play cards.
 	 *
-	 * @param int $competition_id Competition product ID.
+	 * @param int    $competition_id Competition product ID.
+	 * @param string $tier_key       Narrow the Start section to one tier ('' = show every tier).
 	 * @return string
 	 */
-	private static function render_competition_overview( $competition_id ) {
+	private static function render_competition_overview( $competition_id, $tier_key = '' ) {
 		$competition_id = (int) $competition_id;
 		if ( ! Nera_SAW_Competition_Config::is_competition( $competition_id ) ) {
 			return self::notice( __( 'That competition could not be found.', 'nera-strikeawin' ), 'error' );
@@ -316,7 +438,7 @@ class Nera_SAW_Frontend {
 		}
 
 		// Load the Vue quiz app so a Start click can mount it in place.
-		self::enqueue_app();
+		self::enqueue_app( $competition_id );
 
 		$config     = Nera_SAW_Competition_Config::get( $competition_id );
 		$user_id    = get_current_user_id();
@@ -378,7 +500,10 @@ class Nera_SAW_Frontend {
 
 		$has_playable = false;
 		foreach ( (array) $config['tiers'] as $tier ) {
-			$key     = (string) $tier['key'];
+			$key = (string) $tier['key'];
+			if ( '' !== $tier_key && $key !== $tier_key ) {
+				continue;
+			}
 			$runs    = isset( $balances[ $key ] ) ? (int) $balances[ $key ] : 0;
 			$max     = (int) Nera_SAW_Competition_Config::max_possible_spins( $config, $key );
 			$offered = Nera_SAW_Competition_Config::tier_offered( $config, $competition_id, $key );
@@ -444,9 +569,13 @@ class Nera_SAW_Frontend {
 	 * button's competition/tier/token. Vanilla JS, bound once. The token travels in
 	 * the mount call (then the REST body), never the URL.
 	 *
+	 * Public for the same reason as enqueue_app(): the standalone section builds
+	 * its own Start markup and reuses this rather than re-implementing the
+	 * token-gated mount dance (ADR 0007 — no URL starts a run).
+	 *
 	 * @return string
 	 */
-	private static function start_launcher_script() {
+	public static function start_launcher_script() {
 		ob_start();
 		?>
 		<script>
@@ -563,10 +692,12 @@ class Nera_SAW_Frontend {
 	/**
 	 * Human label for a run count.
 	 *
+	 * Public: the standalone play template's Start panel shows the same count.
+	 *
 	 * @param int $runs Run count.
 	 * @return string
 	 */
-	private static function runs_label( $runs ) {
+	public static function runs_label( $runs ) {
 		$runs = (int) $runs;
 		if ( 1 === $runs ) {
 			return __( '1 run to play', 'nera-strikeawin' );

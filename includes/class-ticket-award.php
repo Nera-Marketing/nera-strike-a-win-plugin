@@ -9,10 +9,18 @@
  * async bulk generator mints them — which also attaches the numbers to the order
  * item. Section 9: tickets are minted only here (earned), never on purchase.
  *
- * NOTE (staging verification): this replicates prepick for an arbitrary count
- * using LFW public methods + documented meta. Concurrency at the number level
- * relies on the async per-product lock; the earned COUNT is already guaranteed by
- * our checkout-init reservation (ADR 0001). Verify end-to-end on staging.
+ * This replicates prepick for an arbitrary count using LFW public methods +
+ * documented meta. Concurrency at the number level is held by
+ * `Nera_LTY_Async_Locks::acquire()` around the pick-and-mint section in
+ * award() below (bounded retry, not indefinite — see acquire_mint_lock()); the
+ * earned COUNT is guarded by `Nera_SAW_Spin_Pool::confirm_clamped()` at
+ * finalize (`class-run.php::finalize_scoring()`), which a run can only reach
+ * with a reservation to draw down because `Nera_SAW_Cart_Entry` now refuses a
+ * sale the pool cannot back (`validate_pool_capacity()`,
+ * `check_cart_pool_capacity()`). Before this, none of the three actually held:
+ * the lock was cited here but never acquired, the reservation could fail
+ * silently and the sale still complete, and a run's score was written
+ * uncapped regardless of what confirm() reported.
  *
  * @package Nera_Strikeawin
  */
@@ -97,72 +105,102 @@ class Nera_SAW_Ticket_Award {
 			return array();
 		}
 
-		$picked = self::pick_numbers( $product, $count );
-		if ( empty( $picked ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[nera-strikeawin] Ticket award: no available numbers for #' . (int) $competition_id );
-			}
-			return array();
+		/*
+		 * Everything from picking numbers through minting them is one critical
+		 * section: two finalizes reading the same "available" snapshot at once is
+		 * exactly how two players end up holding the same ticket number. The
+		 * companion async plugin already ships the lock built for this
+		 * (Nera_LTY_Async_Bulk_Generator's own docblock requires callers to hold
+		 * it) — this class's own docblock has said so since it was written; it
+		 * just never actually acquired it. Bounded retry rather than blocking
+		 * indefinitely: the lock's TTL (4h) is sized for bulk admin jobs, and a
+		 * single run's handful of tickets should never legitimately need to wait
+		 * that long for one. If every attempt is beaten to it, fall back to
+		 * running unlocked rather than dropping the run's tickets entirely — same
+		 * exposure as before this change, not a new failure mode, and logged so
+		 * it is visible instead of silent.
+		 */
+		$lock_token = self::acquire_mint_lock( $competition_id );
+		if ( false === $lock_token ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf( 'Ticket mint lock busy for competition #%d — proceeding unlocked.', (int) $competition_id ),
+				array( 'competition_id' => (int) $competition_id, 'order_id' => (int) $order_id, 'user_id' => (int) $user_id )
+			);
 		}
 
-		// Merge with numbers already earned on this tier line (run-backed; never
-		// trust order-item meta — LFW confirm can copy foreign tickets onto siblings).
-		$existing = Nera_SAW_Run::ticket_numbers_for_order_tier( (int) $order_id, (int) $competition_id, (string) $tier_key );
-		$numbers  = array_values( array_unique( array_merge( $existing, array_map( 'strval', $picked ) ) ) );
-		$item->update_meta_data( '_lty_lottery_tickets', $numbers );
-		$item->update_meta_data( 'lty_lottery_tickets', $numbers );
-		$item->save();
-
-		// Hold picked numbers so concurrent workers don't reuse them.
-		$held   = (array) get_post_meta( $competition_id, '_lty_hold_tickets', true );
-		$merged = array_values( array_unique( array_merge( array_map( 'strval', $held ), array_map( 'strval', $picked ) ) ) );
-		update_post_meta( $competition_id, '_lty_hold_tickets', $merged );
-		update_post_meta( $competition_id, 'lty_hold_tickets', $merged );
-
-		// Flag the order as quiz-earned BEFORE confirmation so the ticket
-		// confirmation email (fired synchronously during confirm_tickets below)
-		// can tailor its copy. @see Nera_SAW_Integrations::filter_email_body().
-		$order->update_meta_data( self::ORDER_FLAG_EARNED, 'yes' );
-		$order->save();
-
-		// Mint via the async bulk generator (attaches numbers to the order item,
-		// fires lty_lottery_ticket_after_created).
-		if ( class_exists( 'Nera_LTY_Async_Bulk_Generator' ) && method_exists( 'Nera_LTY_Async_Bulk_Generator', 'create_ticket_for_order' ) ) {
-			try {
-				Nera_LTY_Async_Bulk_Generator::create_ticket_for_order( $order );
-			} catch ( Exception $e ) {
+		try {
+			$picked = self::pick_numbers( $product, $count );
+			if ( empty( $picked ) ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( '[nera-strikeawin] Ticket generation failed: ' . $e->getMessage() );
+					error_log( '[nera-strikeawin] Ticket award: no available numbers for #' . (int) $competition_id );
 				}
 				return array();
 			}
 
-			// The bulk generator mints tickets in `lty_ticket_pending` status and
-			// fires only `lty_lottery_ticket_after_created` — it does NOT confirm
-			// them. Confirm now (advancing them to `lty_ticket_buyer`) so
-			// `lty_lottery_ticket_confirmed` fires and the customer gets the ticket
-			// confirmation email. Mirrors the async worker's confirm sequence.
-			self::confirm_tickets( $order_id );
-		} else {
-			/**
-			 * Fires when tickets should be generated but the async generator is
-			 * unavailable. A fallback generator can hook this.
-			 *
-			 * @param int   $order_id       Order ID.
-			 * @param int   $competition_id Product ID.
-			 * @param int   $user_id        User ID.
-			 * @param array $picked         Picked ticket numbers.
-			 */
-			do_action( 'nera_saw_generate_tickets_fallback', $order_id, $competition_id, $user_id, $picked );
-		}
+			// Merge with numbers already earned on this tier line (run-backed; never
+			// trust order-item meta — LFW confirm can copy foreign tickets onto siblings).
+			$existing = Nera_SAW_Run::ticket_numbers_for_order_tier( (int) $order_id, (int) $competition_id, (string) $tier_key );
+			$numbers  = array_values( array_unique( array_merge( $existing, array_map( 'strval', $picked ) ) ) );
+			$item->update_meta_data( '_lty_lottery_tickets', $numbers );
+			$item->update_meta_data( 'lty_lottery_tickets', $numbers );
+			$item->save();
 
-		// Release the transient hold on the picked numbers now that they are real
-		// (confirmed) ticket posts and therefore counted as "placed". Without this
-		// the hold list grows every run until it covers the whole pool and
-		// pick_numbers() can never find an available number again — silently
-		// killing ticket generation on a live server. (The async path releases
-		// holds the same way via Nera_LTY_Async_Prepick::cleanup_holds().)
-		self::release_holds( $competition_id, $picked );
+			// Hold picked numbers so concurrent workers don't reuse them.
+			$held   = (array) get_post_meta( $competition_id, '_lty_hold_tickets', true );
+			$merged = array_values( array_unique( array_merge( array_map( 'strval', $held ), array_map( 'strval', $picked ) ) ) );
+			update_post_meta( $competition_id, '_lty_hold_tickets', $merged );
+			update_post_meta( $competition_id, 'lty_hold_tickets', $merged );
+
+			// Flag the order as quiz-earned BEFORE confirmation so the ticket
+			// confirmation email (fired synchronously during confirm_tickets below)
+			// can tailor its copy. @see Nera_SAW_Integrations::filter_email_body().
+			$order->update_meta_data( self::ORDER_FLAG_EARNED, 'yes' );
+			$order->save();
+
+			// Mint via the async bulk generator (attaches numbers to the order item,
+			// fires lty_lottery_ticket_after_created).
+			if ( class_exists( 'Nera_LTY_Async_Bulk_Generator' ) && method_exists( 'Nera_LTY_Async_Bulk_Generator', 'create_ticket_for_order' ) ) {
+				try {
+					Nera_LTY_Async_Bulk_Generator::create_ticket_for_order( $order );
+				} catch ( Exception $e ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						error_log( '[nera-strikeawin] Ticket generation failed: ' . $e->getMessage() );
+					}
+					return array();
+				}
+
+				// The bulk generator mints tickets in `lty_ticket_pending` status and
+				// fires only `lty_lottery_ticket_after_created` — it does NOT confirm
+				// them. Confirm now (advancing them to `lty_ticket_buyer`) so
+				// `lty_lottery_ticket_confirmed` fires and the customer gets the ticket
+				// confirmation email. Mirrors the async worker's confirm sequence.
+				self::confirm_tickets( $order_id );
+			} else {
+				/**
+				 * Fires when tickets should be generated but the async generator is
+				 * unavailable. A fallback generator can hook this.
+				 *
+				 * @param int   $order_id       Order ID.
+				 * @param int   $competition_id Product ID.
+				 * @param int   $user_id        User ID.
+				 * @param array $picked         Picked ticket numbers.
+				 */
+				do_action( 'nera_saw_generate_tickets_fallback', $order_id, $competition_id, $user_id, $picked );
+			}
+
+			// Release the transient hold on the picked numbers now that they are real
+			// (confirmed) ticket posts and therefore counted as "placed". Without this
+			// the hold list grows every run until it covers the whole pool and
+			// pick_numbers() can never find an available number again — silently
+			// killing ticket generation on a live server. (The async path releases
+			// holds the same way via Nera_LTY_Async_Prepick::cleanup_holds().)
+			self::release_holds( $competition_id, $picked );
+		} finally {
+			if ( false !== $lock_token ) {
+				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
+			}
+		}
 
 		/**
 		 * Fires after Strike A Win generates earned tickets for a run. Used to
@@ -323,6 +361,36 @@ class Nera_SAW_Ticket_Award {
 		}
 
 		LTY_Order_Handler::update_lottery_ticket_in_order( $order->get_id(), $order );
+	}
+
+	/**
+	 * Acquire the companion async plugin's per-product mint lock, retrying briefly
+	 * rather than either blocking indefinitely or giving up on the first miss.
+	 *
+	 * The lock's own TTL (`Nera_LTY_Async_Locks::LOCK_TTL`, 4 hours) is sized for
+	 * a bulk admin generation job, not a single run's handful of tickets — a run
+	 * that can't get the lock within a few hundred milliseconds is contending
+	 * with something else entirely, and waiting longer would risk the run's own
+	 * request timing out instead. Five attempts, ~40ms apart, comfortably covers
+	 * two finalizes landing in the same instant without meaningfully slowing a
+	 * clean one down.
+	 *
+	 * @param int $competition_id Product ID.
+	 * @return string|false Lock token, or false if the async plugin is absent or
+	 *                       every attempt lost the race.
+	 */
+	private static function acquire_mint_lock( $competition_id ) {
+		if ( ! class_exists( 'Nera_LTY_Async_Locks' ) ) {
+			return false;
+		}
+		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
+			$token = Nera_LTY_Async_Locks::acquire( $competition_id );
+			if ( false !== $token ) {
+				return $token;
+			}
+			usleep( 40000 ); // 40ms
+		}
+		return false;
 	}
 
 	/**

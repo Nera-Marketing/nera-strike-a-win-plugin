@@ -136,6 +136,90 @@ class Nera_SAW_Spin_Pool {
 	}
 
 	/**
+	 * Confirm a run's earnings, never claiming more than the pool can actually
+	 * back — even when the run's own reservation is missing or short.
+	 *
+	 * The happy path is exactly confirm() above: a run's tickets were reserved
+	 * worst-case at grant time (Nera_SAW_Run_Grants::grant_for_order()), so by the
+	 * time it finalizes, `reserved` already covers `$reserved_amount` and the
+	 * guarded UPDATE succeeds outright. Nera_SAW_Cart_Entry::validate_pool_capacity()
+	 * and check_cart_pool_capacity() now stop a sale that reservation couldn't
+	 * cover, so that path should be the only one reached in practice.
+	 *
+	 * The fallback exists for whatever still finds its way around that — a run
+	 * granted outside checkout, a reservation released early by some other bug.
+	 * Rather than write a run's raw score into spins_confirmed regardless (the
+	 * original defect this exists to close), it confirms only what the pool's
+	 * own `available` can support at that moment, via the same guarded-UPDATE
+	 * shape as every other transition here, and reports back exactly how much
+	 * that was so the caller records the true number — never a number larger
+	 * than what was actually reserved for it.
+	 *
+	 * @param int $competition_id  Product ID.
+	 * @param int $reserved_amount Originally reserved for this run (max possible).
+	 * @param int $earned          Spins actually earned (<= reserved_amount).
+	 * @return int The amount actually confirmed. May be less than $earned.
+	 */
+	public static function confirm_clamped( $competition_id, $reserved_amount, $earned ) {
+		$reserved_amount = max( 0, (int) $reserved_amount );
+		$earned          = max( 0, (int) $earned );
+		if ( $reserved_amount > 0 ) {
+			$earned = min( $earned, $reserved_amount );
+		}
+
+		if ( $reserved_amount > 0 && self::confirm( $competition_id, $reserved_amount, $earned ) ) {
+			return $earned;
+		}
+
+		if ( $earned < 1 ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$table = Nera_SAW_Database::table( 'spin_pool' );
+		$now   = current_time( 'mysql' );
+
+		$sql = $wpdb->prepare(
+			"UPDATE {$table}
+			 SET available = available - %d, confirmed = confirmed + %d, updated_at = %s
+			 WHERE competition_id = %d AND status = 'open' AND available >= %d",
+			$earned,
+			$earned,
+			$now,
+			(int) $competition_id,
+			$earned
+		);
+		$wpdb->query( $sql );
+		if ( $wpdb->rows_affected > 0 ) {
+			return $earned;
+		}
+
+		// Even the full earned amount doesn't fit: take exactly what `available`
+		// holds right now. A read then a guarded write, but only reached once
+		// both the purchase-time gate and this run's own reservation are already
+		// gone — and the WHERE clause still refuses to push available negative,
+		// so the worst this can do is under-confirm, never oversell.
+		$row = self::get( $competition_id );
+		$can = $row ? max( 0, (int) $row->available ) : 0;
+		if ( $can < 1 ) {
+			return 0;
+		}
+
+		$sql = $wpdb->prepare(
+			"UPDATE {$table}
+			 SET available = available - %d, confirmed = confirmed + %d, updated_at = %s
+			 WHERE competition_id = %d AND status = 'open' AND available >= %d",
+			$can,
+			$can,
+			$now,
+			(int) $competition_id,
+			$can
+		);
+		$wpdb->query( $sql );
+		return $wpdb->rows_affected > 0 ? $can : 0;
+	}
+
+	/**
 	 * Release a held reservation fully back to Available (abandon/expire/fail).
 	 *
 	 * @param int $competition_id Product ID.

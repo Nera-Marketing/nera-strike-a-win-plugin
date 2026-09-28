@@ -3,7 +3,7 @@
  * Plugin Name: Nera – Strike A Win
  * Plugin URI: https://github.com/Nera-Marketing/nera-strike-a-win-plugin
  * Description: Skill-based prize-competition quiz mechanic. Paid entry -> timed increasing-difficulty quiz -> earned LFW lottery tickets entered into the competition draw. Server-scored, no-oversell reservation pool, compliance-locked (Gambling Act 2005 skill exemption).
- * Version: 1.0.5
+ * Version: 1.1.0
  * Author: Nera
  * Text Domain: nera-strikeawin
  * Requires at least: 6.0
@@ -30,7 +30,7 @@ use YahnisElsts\PluginUpdateChecker\v5p5\Vcs\GitHubApi;
  * duration is separate, on Strike A Win → Settings → Answer reveal.
  */
 
-define( 'NERA_SAW_VERSION', '1.0.5' );
+define( 'NERA_SAW_VERSION', '1.1.0' );
 define( 'NERA_SAW_PLUGIN_SLUG', 'nera-strike-a-win-plugin' );
 define( 'NERA_SAW_PLUGIN_FILE', __FILE__ );
 define( 'NERA_SAW_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
@@ -102,6 +102,7 @@ if ( ! defined( 'NERA_SAW_DISABLE_GITHUB_UPDATES' ) || ! NERA_SAW_DISABLE_GITHUB
 }
 
 require_once NERA_SAW_PLUGIN_DIR . 'includes/class-constants.php';
+require_once NERA_SAW_PLUGIN_DIR . 'includes/class-mode.php';
 require_once NERA_SAW_PLUGIN_DIR . 'includes/class-database.php';
 require_once NERA_SAW_PLUGIN_DIR . 'includes/class-play-page.php';
 require_once NERA_SAW_PLUGIN_DIR . 'includes/class-plugin.php';
@@ -143,6 +144,30 @@ register_activation_hook(
 		Nera_SAW_Database::install();
 		Nera_SAW_Constants::install_defaults();
 		Nera_SAW_Play_Page::ensure_page();
+
+		// Belt and braces: ensure_scheduled() also runs on `init`, which is what
+		// actually reaches sites that update from GitHub without reactivating.
+		// The class is loaded on plugins_loaded, which has not necessarily fired
+		// for this plugin during its own activation request.
+		if ( class_exists( 'Nera_SAW_Reservations' ) ) {
+			Nera_SAW_Reservations::ensure_scheduled();
+		}
+	}
+);
+
+/**
+ * Deactivation: drop the abandoned-run sweep.
+ *
+ * Without this a deactivated plugin leaves a cron event pointing at a hook nobody
+ * answers — harmless, but it survives reinstalls and makes the schedule lie about
+ * what the site does.
+ */
+register_deactivation_hook(
+	__FILE__,
+	static function () {
+		if ( class_exists( 'Nera_SAW_Reservations' ) ) {
+			Nera_SAW_Reservations::unschedule();
+		}
 	}
 );
 

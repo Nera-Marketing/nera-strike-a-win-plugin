@@ -123,6 +123,80 @@ class Nera_SAW_Seeder_Admin {
 	 * @param int|float  $value Default value.
 	 * @param string     $attrs Extra input attributes (e.g. min/step).
 	 */
+	/**
+	 * Which languages to also seed a translation in — of the question bank, and
+	 * of the standalone pages'/fields' copy. One control for both, since an
+	 * administrator ticking "Russian" means the demo to look right in Russian,
+	 * not "the question bank specifically."
+	 *
+	 * Shows only languages that are both declared in Polylang and written for at
+	 * least one of the two (a language with only a question pool, or only a
+	 * standalone-copy pool, still appears — each phase seeds whichever of the two
+	 * it actually has content for and silently leaves the other in English, the
+	 * same "seed nothing rather than something wrong" rule either pool follows on
+	 * its own). With no multilingual plugin it renders nothing at all and says
+	 * nothing about it — Strike A Win is monolingual by default and most sites
+	 * running it always will be.
+	 *
+	 * Each language checked adds a translation of every curated question, linked
+	 * to the English original as a Polylang translation, and a translation of the
+	 * standalone screens' designed copy, resolved for a visitor viewing the
+	 * section in that language. The generated questions that fill a level beyond
+	 * the curated set stay English-only; nobody has written a counterpart for
+	 * them, and pairing one with an unrelated curated question would put two
+	 * different questions in a single translation group.
+	 *
+	 * @param array $checked Language codes already chosen.
+	 */
+	private static function languages_field( array $checked ) {
+		if ( ! class_exists( 'Nera_SAW_Seeder' ) ) {
+			return;
+		}
+
+		$offer = array_values(
+			array_unique(
+				array_merge(
+					Nera_SAW_Seeder::offerable_languages(),
+					Nera_SAW_Seeder::standalone_offerable_languages()
+				)
+			)
+		);
+
+		if ( empty( $offer ) ) {
+			// Say why the list is missing, but only to somebody who has a multilingual
+			// plugin and might therefore be expecting it.
+			if ( class_exists( 'Nera_SAW_Language' ) && Nera_SAW_Language::engine_present() && Nera_SAW_Language::is_multilingual() ) {
+				printf(
+					'<p class="description" style="margin:4px 0 0">%s</p>',
+					esc_html__( 'No demo copy has been written for the other languages on this site yet, so there is nothing to seed them from.', 'nera-strikeawin' )
+				);
+			}
+			return;
+		}
+
+		echo '<div class="saw-field" style="margin-top:10px">';
+		printf( '<span>%s</span>', esc_html__( 'Also seed a translation in', 'nera-strikeawin' ) );
+		echo '<div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:6px 0 2px">';
+
+		foreach ( $offer as $code ) {
+			$name = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $code ) : $code;
+
+			printf(
+				'<label style="display:inline-flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" name="seed_languages[]" value="%1$s"%2$s> <span>%3$s <code>%1$s</code></span></label>',
+				esc_attr( $code ),
+				checked( in_array( $code, $checked, true ), true, false ),
+				esc_html( $name )
+			);
+		}
+
+		echo '</div>';
+		printf(
+			'<p class="description" style="margin:2px 0 0">%s</p>',
+			esc_html__( 'Adds a written translation of each curated question (linked to the English one in Polylang, answers in the same order) and of the standalone pages’ designed copy. These are hand-written, not machine-translated — a mistranslated quiz option can leave a question with no right answer.', 'nera-strikeawin' )
+		);
+		echo '</div>';
+	}
+
 	private static function field( $label, $name, $value, $attrs = '' ) {
 		printf(
 			'<label class="saw-field"><span>%s</span><input type="number" %s name="%s" value="%s"></label>',
@@ -174,6 +248,7 @@ class Nera_SAW_Seeder_Admin {
 		$force  = ! empty( $source['force'] );
 		$opts   = array(
 			'questions_per_level' => isset( $source['questions_per_level'] ) ? (int) $source['questions_per_level'] : Nera_SAW_Seeder::QUESTIONS_PER_LEVEL,
+			'seed_languages'      => isset( $source['seed_languages'] ) ? array_values( array_filter( array_map( 'sanitize_key', (array) $source['seed_languages'] ) ) ) : array(),
 			'products'            => isset( $source['products'] ) ? (int) $source['products'] : Nera_SAW_Seeder::DEFAULT_PRODUCTS,
 			'success_submissions' => isset( $source['success_submissions'] ) ? (int) $source['success_submissions'] : Nera_SAW_Seeder::DEFAULT_SUCCESS_SUBS,
 			'error_submissions'   => isset( $source['error_submissions'] ) ? (int) $source['error_submissions'] : Nera_SAW_Seeder::DEFAULT_ERROR_SUBS,
@@ -211,6 +286,28 @@ class Nera_SAW_Seeder_Admin {
 	}
 
 	/**
+	 * Stop demo data from sending real mail.
+	 *
+	 * `create_demo_customers()` credits each demo customer's wallet, and the
+	 * submissions phase drives real WooCommerce orders to completion — both fire
+	 * WordPress's and WooCommerce's ordinary notification emails. Those go through
+	 * `wp_mail()`, which on a machine whose local mail transport cannot complete a
+	 * send (this dev box's sendmail fails its STARTTLS handshake against
+	 * smtp.gmail.com) does not fail fast: `wc-ajax` will retry within the socket
+	 * timeout, and enough customers or submissions add up past PHP's execution time
+	 * limit — the whole seed then dies with "There has been a critical error",
+	 * having advanced no further than whichever phase was mid-send, and no amount of
+	 * waiting in the browser would have shown further progress.
+	 *
+	 * This is demo data by definition — nobody is meant to receive these emails on
+	 * any environment, so there is nothing lost in not sending them, and every
+	 * environment gains a seed that cannot be blocked by its own outbound mail.
+	 */
+	private static function suppress_mail_during_seed() {
+		add_filter( 'pre_wp_mail', '__return_true' );
+	}
+
+	/**
 	 * AJAX: run ONE phase of a seed/wipe and report live progress. The browser
 	 * drives the sequence, calling back with the returned `next` phase until it is
 	 * null. This gives genuine per-phase state (and chunked submissions).
@@ -222,6 +319,7 @@ class Nera_SAW_Seeder_Admin {
 		}
 
 		@set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		self::suppress_mail_during_seed();
 
 		$parsed = self::parse_request();
 		$op     = $parsed['op'];
@@ -240,7 +338,7 @@ class Nera_SAW_Seeder_Admin {
 		}
 
 		if ( '' === $phase ) {
-			$phase = ( 'wipe' === $op ) ? 'competitions' : 'questions';
+			$phase = ( 'wipe' === $op ) ? 'competitions' : 'pages';
 		}
 
 		try {
@@ -269,6 +367,104 @@ class Nera_SAW_Seeder_Admin {
 	}
 
 	/**
+	 * The Pages section of the seed form.
+	 *
+	 * Shows what will be made rather than offering numbers to tune, because there
+	 * is nothing to tune: the pages a demo needs follow from the StrikeAWin Method,
+	 * and seeding the other mode's pages would leave an orphan nobody can explain.
+	 *
+	 * Naming them is the point. "Pages will be created" tells an administrator
+	 * nothing; a list they can compare against their own Pages screen tells them
+	 * whether the seeder did what they expected.
+	 */
+	private static function pages_fieldset() {
+		$standalone = Nera_SAW_Mode::is_standalone();
+
+		echo '<div class="saw-fieldset">';
+		echo '<div class="saw-fieldset__legend">' . esc_html__( 'Pages', 'nera-strikeawin' ) . '</div>';
+
+		echo '<p class="saw-muted" style="margin:0 0 10px">';
+		printf(
+			/* translators: %s: the current StrikeAWin Method */
+			esc_html__( 'Follows the StrikeAWin Method, currently %s. Pages that already exist are left exactly as they are — including anything you have typed into them.', 'nera-strikeawin' ),
+			'<strong>' . esc_html( $standalone ? __( 'Standalone', 'nera-strikeawin' ) : __( 'Mix', 'nera-strikeawin' ) ) . '</strong>'
+		);
+		echo '</p>';
+
+		echo '<table class="widefat striped" style="max-width:760px">';
+		echo '<thead><tr>';
+		echo '<th style="width:38%">' . esc_html__( 'Page', 'nera-strikeawin' ) . '</th>';
+		echo '<th style="width:32%">' . esc_html__( 'Address', 'nera-strikeawin' ) . '</th>';
+		echo '<th>' . esc_html__( 'Status', 'nera-strikeawin' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		if ( $standalone ) {
+			foreach ( Nera_SAW_Standalone_Pages::registry() as $route => $screen ) {
+				$id = Nera_SAW_Standalone_Pages::page_id( $route );
+				self::page_row(
+					$screen['title'],
+					$id ? get_permalink( $id ) : trailingslashit( home_url( $screen['slug'] ) ),
+					$id
+				);
+			}
+		} else {
+			$id = (int) get_option( 'nera_saw_play_page_id' );
+			self::page_row(
+				__( 'Play Strike A Win', 'nera-strikeawin' ),
+				$id ? get_permalink( $id ) : '',
+				$id
+			);
+		}
+
+		echo '</tbody></table>';
+
+		// The teardown deliberately spares these, and somebody will otherwise press
+		// Remove demo data expecting a clean slate and find the pages still there.
+		echo '<p class="saw-muted" style="margin:10px 0 0">';
+		echo esc_html__( 'Pages are not removed by “Remove demo data”. They are part of how the site works rather than demo content, and on a live site they hold real copy.', 'nera-strikeawin' );
+		echo '</p>';
+
+		echo '</div>';
+	}
+
+	/**
+	 * One row of the Pages table.
+	 *
+	 * @param string $title Page title.
+	 * @param string $url   Permalink, or the address it would get.
+	 * @param int    $id    Existing page ID, or 0.
+	 */
+	private static function page_row( $title, $url, $id ) {
+		$exists = $id && 'page' === get_post_type( $id ) && 'trash' !== get_post_status( $id );
+
+		echo '<tr>';
+		printf( '<td><strong>%s</strong></td>', esc_html( $title ) );
+
+		if ( $url ) {
+			printf(
+				'<td><a href="%1$s" target="_blank" rel="noopener"><code>%2$s</code></a></td>',
+				esc_url( $url ),
+				esc_html( wp_make_link_relative( $url ) )
+			);
+		} else {
+			echo '<td><span class="saw-muted">&mdash;</span></td>';
+		}
+
+		if ( $exists ) {
+			$edit = get_edit_post_link( $id );
+			printf(
+				'<td><span style="color:#2f7d57">&#10003; %1$s</span>%2$s</td>',
+				esc_html__( 'Already there', 'nera-strikeawin' ),
+				$edit ? ' &middot; <a href="' . esc_url( $edit ) . '">' . esc_html__( 'Edit', 'nera-strikeawin' ) . '</a>' : ''
+			);
+		} else {
+			printf( '<td><span style="color:#b26a00">%s</span></td>', esc_html__( 'Will be created', 'nera-strikeawin' ) );
+		}
+
+		echo '</tr>';
+	}
+
+	/**
 	 * Run one seed phase.
 	 *
 	 * @param string $phase  Phase key.
@@ -278,6 +474,48 @@ class Nera_SAW_Seeder_Admin {
 	 */
 	private static function seed_phase( $phase, array $opts, $offset ) {
 		switch ( $phase ) {
+			case 'pages':
+				// First, so a tester opening the demo has somewhere to go before any
+				// data exists. Which pages get made depends on the StrikeAWin Method.
+				$r    = Nera_SAW_Seeder::phase_pages( $opts );
+				$made = count( $r['created'] );
+
+				if ( Nera_SAW_Mode::METHOD_STANDALONE === $r['mode'] ) {
+					$message = $made
+						/* translators: 1: pages created, 2: pages in total */
+						? sprintf( __( 'Created %1$d standalone page(s): %2$s.', 'nera-strikeawin' ), $made, implode( ', ', $r['created'] ) )
+						/* translators: %d: pages in total */
+						: sprintf( __( 'All %d standalone page(s) already present.', 'nera-strikeawin' ), (int) $r['total'] );
+
+					// Reported separately from the pages: filling copy is the part an
+					// administrator will go and look at, and on a re-run it is usually
+					// the only thing that changed.
+					$filled = count( $r['filled'] );
+					if ( $filled ) {
+						/* translators: %d: fields filled */
+						$message .= ' ' . sprintf( __( 'Filled %d empty content field(s) with the designed copy.', 'nera-strikeawin' ), $filled );
+					} else {
+						$message .= ' ' . __( 'Content fields already have values.', 'nera-strikeawin' );
+					}
+
+					$translated = count( $r['translated'] );
+					if ( $translated ) {
+						/* translators: %d: translations written */
+						$message .= ' ' . sprintf( __( 'Wrote %d translated content field(s).', 'nera-strikeawin' ), $translated );
+					}
+				} else {
+					$message = $made
+						? __( 'Created the Play Strike A Win page.', 'nera-strikeawin' )
+						: __( 'The Play Strike A Win page is already present.', 'nera-strikeawin' );
+				}
+
+				return array(
+					'phase'   => 'pages',
+					'label'   => __( 'Pages', 'nera-strikeawin' ),
+					'message' => $message,
+					'next'    => 'questions',
+				);
+
 			case 'questions':
 				// Chunked: each question is a full wp_insert_post, so seeding a large
 				// per-level count in one request times out. Insert a slice per call,
@@ -373,7 +611,19 @@ class Nera_SAW_Seeder_Admin {
 				return array( 'phase' => 'tickets', 'label' => __( 'LFW tickets', 'nera-strikeawin' ), /* translators: %d */ 'message' => sprintf( __( 'Removed %d demo LFW ticket(s).', 'nera-strikeawin' ), $n ), 'next' => 'orders' );
 			case 'orders':
 				$n = Nera_SAW_Seeder::wipe_orders();
-				return array( 'phase' => 'orders', 'label' => __( 'Orders', 'nera-strikeawin' ), /* translators: %d */ 'message' => sprintf( __( 'Removed %d demo order(s).', 'nera-strikeawin' ), $n ), 'next' => 'users' );
+				return array( 'phase' => 'orders', 'label' => __( 'Orders', 'nera-strikeawin' ), /* translators: %d */ 'message' => sprintf( __( 'Removed %d demo order(s).', 'nera-strikeawin' ), $n ), 'next' => 'images' );
+			case 'images':
+				// Seeded featured images are the seeder's own files, unlike the pages,
+				// so they do come out with the rest of the demo.
+				$n = Nera_SAW_Seed_Image::wipe();
+				return array(
+					'phase'   => 'images',
+					'label'   => __( 'Demo images', 'nera-strikeawin' ),
+					/* translators: %d: images */
+					'message' => sprintf( __( 'Removed %d generated demo image(s).', 'nera-strikeawin' ), $n ),
+					'next'    => 'users',
+				);
+
 			case 'users':
 				$n = Nera_SAW_Seeder::wipe_users();
 				return array( 'phase' => 'users', 'label' => __( 'Customers', 'nera-strikeawin' ), /* translators: %d */ 'message' => sprintf( __( 'Removed %d demo user(s).', 'nera-strikeawin' ), $n ), 'next' => null );
@@ -437,6 +687,7 @@ class Nera_SAW_Seeder_Admin {
 			wp_die( esc_html__( 'Insufficient permissions.', 'nera-strikeawin' ) );
 		}
 		check_admin_referer( self::NONCE );
+		self::suppress_mail_during_seed();
 
 		$parsed = self::parse_request();
 		if ( 'seed' === $parsed['op'] ) {
@@ -557,12 +808,25 @@ class Nera_SAW_Seeder_Admin {
 		// back to the out-of-the-box defaults when nothing has been saved yet.
 		$opts = Nera_SAW_Seeder::saved_opts();
 
+		// --- Pages ----------------------------------------------------------
+		self::pages_fieldset();
+
+		// --- Languages --------------------------------------------------------
+		// Page-wide, not folded into Question bank: it now also seeds a
+		// translation of the standalone pages' own copy, so it governs more than
+		// one fieldset below.
+		echo '<div class="saw-fieldset">';
+		echo '<div class="saw-fieldset__legend">' . esc_html__( 'Languages', 'nera-strikeawin' ) . '</div>';
+		self::languages_field( isset( $opts['seed_languages'] ) ? (array) $opts['seed_languages'] : array() );
+		echo '</div>';
+
 		// --- Question bank --------------------------------------------------
 		echo '<div class="saw-fieldset">';
 		echo '<div class="saw-fieldset__legend">' . esc_html__( 'Question bank', 'nera-strikeawin' ) . '</div>';
 		echo '<div class="saw-field-grid">';
 		self::field( __( 'Questions per level', 'nera-strikeawin' ), 'questions_per_level', (int) $opts['questions_per_level'], 'min="1"' );
-		echo '</div></div>';
+		echo '</div>';
+		echo '</div>';
 
 		// --- Giveaways ------------------------------------------------------
 		echo '<div class="saw-fieldset">';

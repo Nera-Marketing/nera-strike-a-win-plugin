@@ -70,6 +70,11 @@ class Nera_SAW_Competition_Admin {
 			}
 			$(document).on('change', '#saw_quiz_type', sync);
 			$(function(){ sync(); });
+
+			$(document).on('click', '.saw-shortcode-box', function(){
+				var text = $(this).find('code').text();
+				if (navigator.clipboard) { navigator.clipboard.writeText(text); }
+			});
 		})(jQuery);";
 		wp_add_inline_script( 'nera-saw-admin-product', $js );
 	}
@@ -106,6 +111,78 @@ class Nera_SAW_Competition_Admin {
 					<label for="saw_total_time"><?php esc_html_e( 'Total time (minutes)', 'nera-strikeawin' ); ?></label>
 					<input type="number" name="saw_total_time" id="saw_total_time" min="0" value="<?php echo (int) $config['total_time']; ?>" <?php disabled( 'whole_period' !== $config['quiz_type'] ); ?> />
 					<span class="description"><?php esc_html_e( 'Whole-quiz timing (not available for live competitions yet).', 'nera-strikeawin' ); ?></span>
+				</p>
+			</div>
+
+			<div class="options_group">
+				<p class="form-field">
+					<label><?php esc_html_e( 'ShortCode', 'nera-strikeawin' ); ?></label>
+					<span class="saw-shortcode-box" title="<?php esc_attr_e( 'Click to copy', 'nera-strikeawin' ); ?>">
+						<span class="dashicons dashicons-clipboard" aria-hidden="true"></span>
+						<code><?php echo esc_html( sprintf( '[strikeawin_quiz id="%d"]', $product_id ) ); ?></code>
+					</span>
+					<span class="description"><?php esc_html_e( 'Embeds this competition\'s quiz on any page — every tier the player has runs on gets a Start card. The id is only needed off the site\'s own Play page; there, the page\'s own link already says which competition.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<?php
+				$saw_sc_overrides = isset( $config['tier_overrides'] ) && is_array( $config['tier_overrides'] ) ? $config['tier_overrides'] : array();
+				$saw_sc_tiers     = array();
+				foreach ( Nera_SAW_Constants::global_tiers() as $saw_sc_tier ) {
+					$saw_sc_key = (string) $saw_sc_tier['key'];
+					$saw_sc_ov  = isset( $saw_sc_overrides[ $saw_sc_key ] ) && is_array( $saw_sc_overrides[ $saw_sc_key ] ) ? $saw_sc_overrides[ $saw_sc_key ] : array();
+					if ( isset( $saw_sc_ov['enabled'] ) && empty( $saw_sc_ov['enabled'] ) ) {
+						continue;
+					}
+					$saw_sc_tiers[] = $saw_sc_tier;
+				}
+				?>
+				<?php if ( $saw_sc_tiers ) : ?>
+					<p class="form-field">
+						<label><?php esc_html_e( 'Per tier', 'nera-strikeawin' ); ?></label>
+						<?php foreach ( $saw_sc_tiers as $saw_sc_tier ) : ?>
+							<span class="saw-shortcode-box" title="<?php esc_attr_e( 'Click to copy', 'nera-strikeawin' ); ?>" style="margin:0 8px 8px 0">
+								<span class="dashicons dashicons-clipboard" aria-hidden="true"></span>
+								<code><?php echo esc_html( sprintf( '[strikeawin_quiz id="%d" tier="%s"]', $product_id, $saw_sc_tier['key'] ) ); ?></code>
+							</span>
+						<?php endforeach; ?>
+						<span class="description"><?php esc_html_e( 'Shows only that tier\'s Start card, for embedding a single tier\'s quiz on its own.', 'nera-strikeawin' ); ?></span>
+					</p>
+				<?php endif; ?>
+			</div>
+
+			<div class="options_group">
+				<?php
+				/*
+				 * Per-competition Quiz Method. Blank is "inherit", and the label
+				 * names the global value so an administrator can see what
+				 * inheriting actually means without opening Settings in another
+				 * tab. Whether the run shows stages follows from this, so the
+				 * description says so — it is the part people are surprised by.
+				 */
+				$saw_global_quiz   = Nera_SAW_Mode::quiz_method();
+				$saw_quiz_choices  = Nera_SAW_Mode::quiz_methods();
+				$saw_quiz_override = isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::INHERIT;
+				?>
+				<p class="form-field">
+					<label for="saw_cash_alternative"><?php esc_html_e( 'Cash alternative', 'nera-strikeawin' ); ?></label>
+					<input type="text" name="saw_cash_alternative" id="saw_cash_alternative" class="short" style="width:180px"
+						value="<?php echo esc_attr( isset( $config['cash_alternative'] ) ? $config['cash_alternative'] : '' ); ?>"
+						placeholder="<?php esc_attr_e( '£28,000', 'nera-strikeawin' ); ?>" />
+					<span class="description"><?php esc_html_e( 'Shown on the competition page as what the winner may take instead of the prize. Printed exactly as typed — leave empty to hide the row.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<p class="form-field">
+					<label for="saw_quiz_method"><?php esc_html_e( 'Quiz Method', 'nera-strikeawin' ); ?></label>
+					<select name="saw_quiz_method" id="saw_quiz_method" class="short" style="width:260px">
+						<option value="" <?php selected( $saw_quiz_override, Nera_SAW_Mode::INHERIT ); ?>>
+							<?php
+							/* translators: %s: the global Quiz Method label. */
+							echo esc_html( sprintf( __( 'Inherit global — %s', 'nera-strikeawin' ), $saw_quiz_choices[ $saw_global_quiz ] ) );
+							?>
+						</option>
+						<?php foreach ( $saw_quiz_choices as $saw_key => $saw_label ) : ?>
+							<option value="<?php echo esc_attr( $saw_key ); ?>" <?php selected( $saw_quiz_override, $saw_key ); ?>><?php echo esc_html( $saw_label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<span class="description"><?php esc_html_e( 'Ladder runs the levels in stages, easy to hard, and the competition page shows a stage for each. Random mixes them across the run, so there are no stages to show — only how many questions come from each level.', 'nera-strikeawin' ); ?></span>
 				</p>
 			</div>
 
@@ -273,6 +350,10 @@ class Nera_SAW_Competition_Admin {
 		$config = array(
 			'enabled'        => true,
 			'quiz_type'      => $quiz_type,
+			'cash_alternative' => isset( $_POST['saw_cash_alternative'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_cash_alternative'] ) ) : '',
+			'quiz_method'    => Nera_SAW_Mode::sanitize_quiz_method_override(
+				isset( $_POST['saw_quiz_method'] ) ? wp_unslash( $_POST['saw_quiz_method'] ) : Nera_SAW_Mode::INHERIT
+			),
 			'timer_seconds'  => isset( $_POST['saw_timer'] ) ? (int) $_POST['saw_timer'] : Nera_SAW_Constants::timer_max(),
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
