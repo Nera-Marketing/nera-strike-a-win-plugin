@@ -69,6 +69,24 @@ class Nera_SAW_Language_Switcher {
 		if ( ! isset( $_GET['saw_entry'] ) ) {
 			return;
 		}
+
+		/*
+		 * `saw_entry` alone is not an answer — it is also the query arg the
+		 * language links (entry_url()) and the already-verified "Continue"
+		 * link carry, and both of those are reachable by anyone who copies or
+		 * guesses the URL, not only by a visitor who actually ticked the 18+
+		 * box. Recording entry on `saw_entry`'s presence alone let a bare
+		 * `?saw_entry=1` admit an unverified visitor with no age answer on
+		 * record at all — this checks for the real answer behind it: either
+		 * the checkbox form's own `saw_over18=1`, or a `nera-age-shield`
+		 * verification already on this account (the same source the "already
+		 * verified" branch of the gate itself trusts, see age_state()).
+		 */
+		$ticked   = isset( $_GET['saw_over18'] ) && '1' === $_GET['saw_over18'];
+		$verified = self::age_state()['verified'];
+		if ( ! $ticked && ! $verified ) {
+			return;
+		}
 		// phpcs:enable
 
 		if ( ! headers_sent() ) {
