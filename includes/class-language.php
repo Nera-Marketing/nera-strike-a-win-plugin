@@ -61,6 +61,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
+			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 
 			// See self::current()'s docblock (step 2) for why this needs a cookie
@@ -224,10 +225,43 @@ class Nera_SAW_Language {
 				'I agree to the %s'                => 'Принимаю %s',
 				'Terms &amp; Conditions'           => 'Условия использования',
 				'I am over the age of 18'         => 'Мне есть 18 лет',
+				'privacy policy'                   => 'политика конфиденциальности',
+				'terms and conditions'             => 'условия использования',
 			);
 		}
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The registration screen's privacy-policy paragraph — the one string on
+	 * this page `translate_loginreg_strings()` above cannot reach. WooCommerce
+	 * builds it with `get_option( 'woocommerce_registration_privacy_policy_text',
+	 * $default )`, and this site (like most) has that option saved with a real
+	 * value already, so `get_option()` returns the stored row and the `__()`
+	 * call building the fallback default never even runs — there is no
+	 * `gettext` call here to filter. `woocommerce_get_privacy_policy_text` is
+	 * the one filter WooCommerce still passes the resolved text through
+	 * regardless of which branch produced it (see `wc_get_privacy_policy_text()`
+	 * in wc-template-functions.php), which is why this hooks that one instead.
+	 * The `[privacy_policy]` placeholder is left intact — `wc_replace_policy_
+	 * page_link_placeholders()` swaps it for the actual link afterwards, and
+	 * that link's own text ("privacy policy") is a plain `__()` call already
+	 * covered by the map above.
+	 *
+	 * @param string $text Text WordPress would otherwise return.
+	 * @param string $type Which policy text this is ('checkout' or 'registration').
+	 * @return string
+	 */
+	public static function translate_privacy_policy_text( $text, $type ) {
+		if ( 'registration' !== $type || is_admin() || 'ru' !== self::current() ) {
+			return $text;
+		}
+		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return $text;
+		}
+
+		return 'Ваши персональные данные будут использованы для улучшения вашего опыта на этом сайте, управления доступом к вашему аккаунту, а также для других целей, описанных в нашей [privacy_policy].';
 	}
 
 	/**
