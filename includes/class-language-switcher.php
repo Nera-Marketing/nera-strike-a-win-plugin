@@ -187,7 +187,23 @@ class Nera_SAW_Language_Switcher {
 			if ( $queried ) {
 				$twin = (int) pll_get_post( $queried, $code );
 				if ( $twin && 'publish' === get_post_status( $twin ) ) {
-					return (string) get_permalink( $twin );
+					/*
+					 * Not a bare `get_permalink()` return: that call runs through
+					 * `user_trailingslashit` on its way out, which is exactly where
+					 * `Nera_SAW_Language::carry_current_language()` stamps the
+					 * CURRENT request's language onto any section link that does
+					 * not already carry one — and this twin permalink never did,
+					 * so switching away from a non-default language (e.g. RU back
+					 * to EN) got the current, wrong language re-stamped onto the
+					 * very link meant to escape it, silently undoing the switch.
+					 * Found by clicking "EN" while on a RU page whose Polylang
+					 * translation exists: the resulting href still read
+					 * `?saw_lang=ru`. `add_query_arg()` here replaces rather than
+					 * duplicates an existing key, so this wins regardless of
+					 * whether that stamping already happened inside
+					 * `get_permalink()` itself.
+					 */
+					return add_query_arg( Nera_SAW_Language::SWITCH_ARG, $code, get_permalink( $twin ) );
 				}
 			}
 		}
