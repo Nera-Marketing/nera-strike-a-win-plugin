@@ -161,8 +161,21 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 
 			<?php if ( class_exists( 'Nera_SAW_Language' ) ) { Nera_SAW_Language::hidden_field(); } ?>
 
+			<?php
+			/*
+			 * Pre-ticked, not pre-answered: an account already carrying a real
+			 * age-shield verification (the same source the entry gate itself
+			 * trusts — see Nera_SAW_Language_Switcher::age_state()) has already
+			 * given this answer once and should not have to tick the identical
+			 * box again on every single purchase. Still a real, un-disabled
+			 * checkbox the player can untick, and still `required`, so an
+			 * unverified account gets exactly the same native browser gate as
+			 * before.
+			 */
+			$saw_age_verified = class_exists( 'Nera_SAW_Language_Switcher' ) && Nera_SAW_Language_Switcher::age_state()['verified'];
+			?>
 			<label class="saw-check">
-				<input type="checkbox" name="saw_confirm_age" value="1" required>
+				<input type="checkbox" name="saw_confirm_age" value="1" required<?php checked( $saw_age_verified ); ?>>
 				<span><?php echo esc_html( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_age' ) ); ?></span>
 			</label>
 

@@ -3,7 +3,7 @@
  * Plugin Name: Nera – Strike A Win
  * Plugin URI: https://github.com/Nera-Marketing/nera-strike-a-win-plugin
  * Description: Skill-based prize-competition quiz mechanic. Paid entry -> timed increasing-difficulty quiz -> earned LFW lottery tickets entered into the competition draw. Server-scored, no-oversell reservation pool, compliance-locked (Gambling Act 2005 skill exemption).
- * Version: 1.1.4
+ * Version: 1.1.5
  * Author: Nera
  * Text Domain: nera-strikeawin
  * Requires at least: 6.0
@@ -30,7 +30,7 @@ use YahnisElsts\PluginUpdateChecker\v5p5\Vcs\GitHubApi;
  * duration is separate, on Strike A Win → Settings → Answer reveal.
  */
 
-define( 'NERA_SAW_VERSION', '1.1.4' );
+define( 'NERA_SAW_VERSION', '1.1.5' );
 define( 'NERA_SAW_PLUGIN_SLUG', 'nera-strike-a-win-plugin' );
 define( 'NERA_SAW_PLUGIN_FILE', __FILE__ );
 define( 'NERA_SAW_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );

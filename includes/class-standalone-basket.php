@@ -686,9 +686,14 @@ class Nera_SAW_Standalone_Basket {
 	 * plugin could have reached, because the classes it would have to target belong
 	 * to a framework this section does not load.
 	 *
-	 * The basket is what identifies the request instead. Segregation guarantees a
-	 * basket holding an entry holds nothing else, so an entry in the cart during a
-	 * WooCommerce AJAX call means the player is in the section.
+	 * The basket is what identifies the request instead: an entry in the cart during a
+	 * WooCommerce AJAX call means the player is in the section -- but only when the
+	 * basket holds nothing else. Nothing enforces that a basket holding an entry holds
+	 * only entries, and a mixed basket is checked out on the main site's own checkout
+	 * page. Treating its AJAX refreshes as the section's swapped in the section's
+	 * payment template (with its own terms and place-order block) and WooCommerce's
+	 * stock payment-method rows: every terms-time notice printed twice and the gateway
+	 * card artwork lost its size cap.
 	 *
 	 * @return bool
 	 */
@@ -700,7 +705,27 @@ class Nera_SAW_Standalone_Basket {
 		$ajax = ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() )
 			|| ! empty( $_GET['wc-ajax'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		return $ajax && null !== self::current_entry();
+		return $ajax && null !== self::current_entry() && self::basket_is_only_entries();
+	}
+
+	/**
+	 * Does the basket hold nothing but competition entries?
+	 *
+	 * @return bool
+	 */
+	protected static function basket_is_only_entries() {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return false;
+		}
+
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$product_id = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
+			if ( ! $product_id || ! Nera_SAW_Competition_Config::is_competition( $product_id ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
