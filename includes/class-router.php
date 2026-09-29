@@ -363,6 +363,26 @@ class Nera_SAW_Router {
 		}
 
 		/*
+		 * Login/Register tab-switching on My Account, logged out only — the form
+		 * this enhances (templates/woocommerce/myaccount/form-login.php) never
+		 * renders for a signed-in visitor. An enhancement over two <details> that
+		 * already work stacked open, same reasoning as the walkthrough script
+		 * above: never a dependency, never loaded anywhere else.
+		 */
+		if ( class_exists( 'Nera_SAW_Standalone_Pages' ) && is_page() && ! is_user_logged_in() ) {
+			$my_account = Nera_SAW_Standalone_Pages::page_id( 'my-account' );
+			if ( $my_account && (int) $my_account === (int) get_queried_object_id() ) {
+				wp_enqueue_script(
+					'nera-saw-loginreg-tabs',
+					NERA_SAW_PLUGIN_URL . 'assets/js/loginreg-tabs.js',
+					array(),
+					NERA_SAW_VERSION,
+					true
+				);
+			}
+		}
+
+		/*
 		 * A payment gateway on checkout (found: the "Part wallet, part card"
 		 * option) renders its icon as `<span class="material-symbols-outlined">
 		 * account_balance_wallet</span>` with no `aria-hidden`, unlike every

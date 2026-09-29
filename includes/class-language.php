@@ -60,6 +60,7 @@ class Nera_SAW_Language {
 			add_filter( 'user_trailingslashit', array( __CLASS__, 'carry_current_language' ), 10, 1 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 
 			// See self::current()'s docblock (step 2) for why this needs a cookie
@@ -173,6 +174,58 @@ class Nera_SAW_Language {
 		}
 
 		$ru = self::saw_ru_strings();
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the WooCommerce-domain strings on the standalone Login/Register
+	 * screen (`templates/woocommerce/myaccount/form-login.php` — the restored
+	 * stock template plus this site's own three register fields).
+	 *
+	 * A `'woocommerce' === $domain` check alone would hijack every WooCommerce
+	 * string on the whole install the moment a request's language happens to be
+	 * Russian — cart, checkout, the theme's own account page, anywhere the core
+	 * templates run — none of which this plugin owns or has any business
+	 * relabelling. `Nera_SAW_Router::is_standalone_screen()` is the same guard
+	 * `class-router.php` uses to decide whether this section's own assets load
+	 * at all, so this filter only ever fires on the section's own screens,
+	 * exactly where that template is the one actually rendering.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_loginreg_strings( $translated, $original, $domain ) {
+		if ( 'woocommerce' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'Login'                            => 'Вход',
+				'Register'                         => 'Регистрация',
+				'Required'                         => 'Обязательно',
+				'Username or email address'       => 'Имя пользователя или email',
+				'Username'                          => 'Имя пользователя',
+				'Password'                          => 'Пароль',
+				'Remember me'                       => 'Запомнить меня',
+				'Log in'                            => 'Войти',
+				'Lost your password?'              => 'Забыли пароль?',
+				'Full Name'                         => 'Полное имя',
+				'Email address'                     => 'Адрес электронной почты',
+				'A link to set a new password will be sent to your email address.'
+					=> 'Ссылка для установки нового пароля будет отправлена на ваш email.',
+				'I agree to the %s'                => 'Принимаю %s',
+				'Terms &amp; Conditions'           => 'Условия использования',
+				'I am over the age of 18'         => 'Мне есть 18 лет',
+			);
+		}
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
 	}

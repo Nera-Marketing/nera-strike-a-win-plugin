@@ -2153,14 +2153,55 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
 
 /*
  * Login / Register on the standalone entry page (templates/woocommerce/
- * myaccount/form-login.php): the same saw-account-acc accordion row as the
- * logged-in My Account screen below 900px, so a mobile visitor sees one
- * collapsible section at a time instead of both forms stacked in full. Both
- * render `open` in the markup (no JS to decide a breakpoint at request
- * time), so this is only ever a case of a panel a mobile visitor can choose
- * to collapse — never one that starts hidden. At 900px and up the toggle is
- * disabled and the two panels sit side by side exactly as this screen has
- * always looked at that width.
+ * myaccount/form-login.php).
+ *
+ * Below 900px: the same saw-account-acc accordion row as the logged-in My
+ * Account screen — both panels render `open` in the markup and stay
+ * independent, so a mobile visitor can collapse either one without it
+ * affecting the other (no JS needed for this half; it is the HTML's own
+ * default state).
+ *
+ * At 900px and up: real side-by-side tabs, not a taller accordion — the two
+ * <summary> labels sit in one row and only the active panel's content shows
+ * beneath it, full width. A <details>'s own box normally stacks summary
+ * directly above its content, which is what kept the desktop version reading
+ * as a vertical accordion even once exclusivity was added.
+ *
+ * Two other techniques were tried and measured, in the browser, to fail:
+ * - `display: contents` on each <details> (to lift summary and content out
+ *   as direct grid/flex items of `.saw-loginreg`) with CSS Grid spanning:
+ *   the content div's `grid-column: 1 / 3` resolved correctly in computed
+ *   style but measured only one track wide in the rendered box — a genuine
+ *   engine limitation, not a specificity bug (reproduced with the sibling
+ *   panel genuinely `display: none`, ruling out two items fighting one cell).
+ * - The same flattening with Flexbox + `order` (both labels ordered ahead of
+ *   both panels, so the active panel's 100%-basis line always wraps below
+ *   both, whichever is open): the *computed* order and flex-basis were both
+ *   correct, but the rendered position ignored them — the open panel painted
+ *   above the label row instead of below it.
+ * `display: contents` is also what quietly breaks the browser's own "hide
+ * content while closed" behaviour for a <details> — that behaviour is tied
+ * to the element having a real box, not to a stylesheet rule read from
+ * outside — so both attempts above needed a hand-written
+ * `:not([open]) > .saw-account-acc__panel { display: none }` just to get
+ * back to where the plain, unflattened element already started.
+ *
+ * What's here instead never flattens the <details> at all, so none of the
+ * above ever comes up. Each label is pulled out with plain absolute
+ * positioning — pinned to the top of `.saw-loginreg` (the nearest positioned
+ * ancestor), left 0% or 50%, at a fixed height reserved by the container's
+ * own `padding-top`. Absolute removes each label from its own <details>'s
+ * flow, so a closed <details> — summary absolute, content natively
+ * `display: none` — collapses to zero height and takes no flow space;
+ * the open one's content is a plain block, unpositioned, so it simply
+ * starts at the top of its own (flow-pushed-down) box: right under the
+ * shared label strip, full width, no matter which of the two is open.
+ * Exclusivity itself (opening one tab closes the other) is still handled by
+ * loginreg-tabs.js, unchanged by this — a `name` attribute would make the
+ * two <details> exclusive at EVERY width, breaking the mobile accordion
+ * above, so the script enforces it only when `matchMedia('(min-width:
+ * 900px)')` matches. Without JS both panels still open in full, stacked,
+ * same as before this file existed: a working page, just not tabbed.
  */
 .saw-loginreg {
   display: flex;
@@ -2170,28 +2211,59 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
 }
 @media (min-width: 900px) {
   .saw-loginreg {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 40px;
+    --saw-loginreg-tab-h: 48px;
+    position: relative;
+    padding-top: var(--saw-loginreg-tab-h);
+    border: 1.5px solid var(--saw-control);
+    border-radius: var(--saw-r-control);
+    overflow: hidden;
   }
+  /*
+   * Each <details> is still `.saw-account-acc` too (the same accordion row
+   * used elsewhere) — its own margin and border are what a standalone
+   * accordion row wants, not what a now-zero-height closed tab should leave
+   * behind as a stray rectangle inside the shared card built above.
+   */
   .saw-loginreg__panel {
-    flex: 1 1 0;
+    margin: 0;
     border: 0;
+    border-radius: 0;
   }
   .saw-loginreg__panel > .saw-account-acc__label {
-    padding: 0 0 16px;
-    font-size: 18px;
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: var(--saw-loginreg-tab-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    line-height: 1;
+    font-size: 16px;
     font-weight: 700;
-    background: transparent;
-    cursor: default;
-    pointer-events: none;
+    text-align: center;
+    color: var(--saw-muted);
+    background: var(--saw-bg);
   }
+  .saw-loginreg__panel:first-child > .saw-account-acc__label {
+    left: 0;
+    border-right: 1.5px solid var(--saw-control);
+  }
+  .saw-loginreg__panel:last-child > .saw-account-acc__label {
+    left: 50%;
+  }
+  .saw-loginreg__panel[open] > .saw-account-acc__label {
+    color: var(--saw-ink);
+    background: var(--saw-card);
+  }
+  /* A tab header switches by its own active state, not an expand/collapse
+     chevron — the arrow belongs to the accordion reading below 900px. */
   .saw-loginreg__panel > .saw-account-acc__label::after {
     display: none;
   }
   .saw-loginreg__panel > .saw-account-acc__panel {
-    padding: 0;
-    border-top: 0;
+    border-top: 1.5px solid var(--saw-control);
+    padding: 20px 24px 28px;
   }
 }
 
