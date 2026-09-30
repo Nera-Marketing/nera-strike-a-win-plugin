@@ -202,10 +202,11 @@ class Nera_SAW_Frontend {
 			'showAnswerFeedback' => $feedback_on ? 1 : 0,
 			'timerWarnSeconds'   => Nera_SAW_Constants::timer_warn_seconds(),
 			'feedbackSeconds'    => Nera_SAW_Constants::feedback_seconds(),
-			// Interrupted runs (ADR 0030). Under 'resume' the page-hide ping only
-			// records the moment of interruption; under 'close' it still abandons.
+			// Interrupted runs (ADR 0030). The client no longer pings on a timer —
+			// see App.vue's checkAfterReturn() — so this only decides what a
+			// backgrounded-then-foregrounded tab means: under 'resume' it may offer
+			// Resume; under 'close' a real gap always abandons.
 			'resumePolicy'       => Nera_SAW_Mode::allows_resume() ? 'resume' : 'close',
-			'heartbeatSeconds'   => Nera_SAW_Constants::HEARTBEAT_SECONDS,
 			'playableLanguages'  => $languages,
 			'languageNames'      => $language_names,
 			// Pre-run stage header data — see the comment above where these are

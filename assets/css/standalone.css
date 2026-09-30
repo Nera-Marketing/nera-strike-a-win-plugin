@@ -3296,14 +3296,23 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
 }
 .saw-app .saw-leave__body { margin: 0; font-size: 14px; color: var(--saw-body); }
 
-/* The clock keeps running while the dialog is open, and the dialog says so.
-   Hiding it would make leaving feel free. */
+/*
+ * The clock keeps running while the dialog is open, and the dialog says so.
+ * Hiding it would make leaving feel free.
+ *
+ * Re-skins colour only — display/flex-direction/margin are left to the base
+ * rule in App.vue's own <style> block (72px circle, centred via `margin: 0
+ * auto`). This used to also redeclare those layout properties for a flat,
+ * baseline-aligned row with no `margin: auto`, which is a different shape
+ * than the circle the base rule draws (that rule's own width/height/
+ * border-radius/background were never overridden here, so the circle itself
+ * never went away) — the result was a circular badge with its centring
+ * removed, pinned to the panel's left edge instead of centred. Confirmed by
+ * reading both rules side by side, not guessed from the screenshot alone.
+ */
 .saw-app .saw-leave__clock {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 8px;
-  margin: 14px 0 4px;
+  background: var(--saw-tint);
+  border-color: var(--saw-control);
 }
 .saw-app .saw-leave__clock-num {
   font-size: 24px;

@@ -100,7 +100,13 @@ class Nera_SAW_Run {
 		// player's bank forever — see serve_slot() and ADR 0020.
 		self::start_clock( $run_id, count( $draw['slots'] ), $config );
 
-		return self::state( self::get( $run_id ) );
+		$run   = self::get( $run_id );
+		$state = self::state( $run );
+		// The whole run's content, once, instead of one fetch per question as the
+		// player advances — see bulk_slots_payload()'s own docblock for why this
+		// carries no correct-answer flag and does not start any timer by itself.
+		$state['slots'] = self::bulk_slots_payload( $run );
+		return $state;
 	}
 
 	/**
@@ -253,7 +259,9 @@ class Nera_SAW_Run {
 			}
 		}
 
-		return self::state( $active );
+		$state           = self::state( $active );
+		$state['slots']  = self::bulk_slots_payload( $active );
+		return $state;
 	}
 
 	/**
@@ -428,52 +436,95 @@ class Nera_SAW_Run {
 
 		$remaining = max( 0, ( self::ts( $slot->deadline_at ) - self::ts( current_time( 'mysql' ) ) ) );
 
-		// Client-safe answers in the slot's randomised display order: original
-		// index + text only (never the correct flag). Scoring uses the original index.
-		$all   = (array) $snapshot['answers'];
-		$order = ! empty( $snapshot['display_order'] ) ? (array) $snapshot['display_order'] : array_keys( $all );
-		$answers = array();
-		foreach ( $order as $i ) {
-			$i = (int) $i;
-			if ( isset( $all[ $i ] ) ) {
-				$answers[] = array(
-					'index' => $i,
-					'text'  => (string) $all[ $i ]['text'],
-				);
+		/*
+		 * No question text, answers, level or stage metadata here any more — the
+		 * client already has every slot's full content from bulk_slots_payload()
+		 * (sent once, at Start/Resume), keyed by slot_no. Repeating it on every
+		 * arm call was the bulk of this endpoint's own work (building the
+		 * shuffled answers list, the stage lookup) and its response size; this is
+		 * now only the one thing that has to happen at the moment the player
+		 * actually reaches the slot — stamp its clock — plus the small amount of
+		 * live progress the client cannot already know locally.
+		 */
+		return array(
+			'run_id'        => (int) $run_id,
+			'slot_no'       => (int) $slot->slot_no,
+			'total_slots'   => (int) self::count_slots( $run_id ),
+			'timer_seconds' => (int) $timer,
+			'seconds_left'  => (int) $remaining,
+			'spins_so_far'  => (int) self::spins_so_far( $run_id ),
+		);
+	}
+
+	/**
+	 * Every one of a run's questions and answer options at once — the same
+	 * shape serve_slot() builds per slot, minus the fields that only mean
+	 * something at the moment a slot is actually reached (`timer_seconds`,
+	 * `seconds_left`, `spins_so_far`, `total_slots`), and with no correct-answer
+	 * flag anywhere in it, same guarantee as serve_slot(). Sent once, from
+	 * start()/resume(), so the client can hold a whole run's content locally
+	 * and switch screens without a fetch per question — see those methods'
+	 * own callers for why.
+	 *
+	 * Deliberately does NOT call serve_slot() or touch served_at/deadline_at/
+	 * mark_seen(): stamping a slot's timer here, before the player has
+	 * actually reached it, is the exact bug ADR 0030 fixed (time bleeding from
+	 * earlier screens into a later question). ensure_slot_snapshot() is safe
+	 * to call this early — it only freezes which question this slot drew and
+	 * its randomised display order, not when its clock starts.
+	 *
+	 * @param object $run Run row.
+	 * @return array<int, array> One entry per slot, in slot order.
+	 */
+	private static function bulk_slots_payload( $run ) {
+		global $wpdb;
+		$t     = Nera_SAW_Database::table( 'run_slots' );
+		$slots = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC", (int) $run->id ) );
+
+		$config     = json_decode( $run->config_snapshot, true );
+		$config     = is_array( $config ) ? $config : array();
+		$multiplier = self::tier_multiplier( $run );
+
+		$out = array();
+		foreach ( (array) $slots as $slot ) {
+			$snapshot = self::ensure_slot_snapshot( $slot );
+			if ( ! $snapshot ) {
+				continue; // Question missing/deleted — skip rather than break the whole payload.
 			}
+
+			$all     = (array) $snapshot['answers'];
+			$order   = ! empty( $snapshot['display_order'] ) ? (array) $snapshot['display_order'] : array_keys( $all );
+			$answers = array();
+			foreach ( $order as $i ) {
+				$i = (int) $i;
+				if ( isset( $all[ $i ] ) ) {
+					$answers[] = array(
+						'index' => $i,
+						'text'  => (string) $all[ $i ]['text'],
+					);
+				}
+			}
+
+			$level_def = Nera_SAW_Constants::level( $slot->level_key );
+			$stage     = self::stage_of( (int) $run->id, $config, (int) $slot->slot_no );
+
+			$out[] = array(
+				'slot_no'            => (int) $slot->slot_no,
+				'level'              => $slot->level_key,
+				'level_label'        => $level_def ? (string) $level_def['label'] : '',
+				'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+				'question'           => (string) $snapshot['question_text'],
+				'answers'            => $answers,
+				'reward'             => (int) $slot->reward_base * $multiplier,
+				'quiz_method'        => isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::QUIZ_RANDOM,
+				'stage_no'           => $stage['stage_no'],
+				'stage_count'        => $stage['stage_count'],
+				'is_first_of_stage'  => $stage['is_first_of_stage'],
+				'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
+			);
 		}
 
-		// The player-facing face of the slot's difficulty Level: its name, and its
-		// ladder colour corrected for use as text (see level_text_color()). Safe to
-		// disclose — difficulty says nothing about which answer is correct.
-		$level_def = Nera_SAW_Constants::level( $slot->level_key );
-		$stage     = self::stage_of( $run_id, $config, (int) $slot->slot_no );
-
-		return array(
-			'run_id'             => (int) $run_id,
-			'slot_no'            => (int) $slot->slot_no,
-			'total_slots'        => (int) self::count_slots( $run_id ),
-			'level'              => $slot->level_key,
-			'level_label'        => $level_def ? (string) $level_def['label'] : '',
-			'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
-			'question'           => (string) $snapshot['question_text'],
-			'answers'            => $answers,
-			'timer_seconds'      => (int) $timer,
-			'seconds_left'       => (int) $remaining,
-			'spins_so_far'       => (int) self::spins_so_far( $run_id ),
-			// What THIS question is worth if answered correctly — the "Worth N
-			// tickets" pill. Same multiplier submit_answer() actually pays out with,
-			// so the promise shown here is never higher than what lands.
-			'reward'             => (int) $slot->reward_base * self::tier_multiplier( $run ),
-			'quiz_method'        => isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::QUIZ_RANDOM,
-			// 'Stage' is only meaningful in ladder mode (CONTEXT.md). In random mode
-			// every question is its own stage, purely for the "Stage N of M" numbering
-			// the head-bar shows — nothing groups and no stage-break screen fires.
-			'stage_no'           => $stage['stage_no'],
-			'stage_count'        => $stage['stage_count'],
-			'is_first_of_stage'  => $stage['is_first_of_stage'],
-			'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
-		);
+		return $out;
 	}
 
 	/**
@@ -1903,7 +1954,13 @@ class Nera_SAW_Run {
 			self::update_run( (int) $run_id, array( 'last_seen_at' => current_time( 'mysql' ) ) );
 		}
 
-		return self::state( self::get_run( (int) $run_id ) );
+		// Included every time, not only for a fresh Start: a client that reached
+		// Resume via a full page reload (not just a tab switch) has no in-memory
+		// copy of the run's content left to fall back on.
+		$fresh_run       = self::get_run( (int) $run_id );
+		$state           = self::state( $fresh_run );
+		$state['slots']  = self::bulk_slots_payload( $fresh_run );
+		return $state;
 	}
 
 	/**

@@ -146,6 +146,23 @@ const slot = reactive( {
 
 const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 0, correct_index: -1 } );
 
+// The whole run's content (question, answers, level/stage metadata — never a
+// correct-answer flag), fetched once from Start/Resume instead of once per
+// question. Keyed by slot_no; loadSlot() applies a slot's entry from here
+// before it arms that slot's clock, so switching screens never has to wait on
+// a fetch for content the client already holds.
+const slotContentCache = new Map();
+function cacheSlotContent( slots ) {
+	if ( ! Array.isArray( slots ) ) {
+		return;
+	}
+	for ( const entry of slots ) {
+		if ( entry && Number.isInteger( entry.slot_no ) ) {
+			slotContentCache.set( entry.slot_no, entry );
+		}
+	}
+}
+
 let ticker = null;
 let holdTicker = null;
 let holdAdvance = null; // closure that advances past the reveal (button or timeout).
@@ -179,74 +196,35 @@ async function abandonOnce() {
 }
 
 // Page is genuinely unloading (tab close / address bar / confirmed toolbar
-// reload); pagehide (not beforeunload) so a cancelled native prompt never acts on
-// a run the player stayed on.
-//
-// Under 'let the player continue' this is NOT a leave: the beacon is one last
-// heartbeat, which fixes the moment of interruption so Resume can give back the
-// time that was left (ADR 0030). Under 'close the run' it still abandons.
+// reload); pagehide (not beforeunload) so a cancelled native prompt never acts
+// on a run the player stayed on. Always a deliberate leave now, under either
+// policy — a page that is gone has nowhere left to show a Resume prompt to,
+// so there is nothing to hold for (see onVisibilityChange()/checkAfterReturn()
+// for the interruption this used to also cover: backgrounding the tab, which
+// is not the page going away).
 function onPageHide() {
-	if ( abandonSent || ! runId.value ) {
-		return;
-	}
-	if ( resumePolicy === 'resume' ) {
-		if ( quizSessionActive ) {
-			api.heartbeatBeacon( runId.value );
-		}
-		return;
-	}
-	if ( ! shouldBlockLeave() ) {
+	if ( abandonSent || ! runId.value || ! shouldBlockLeave() ) {
 		return;
 	}
 	abandonSent = true;
 	api.abandonBeacon( runId.value );
 }
 
-/* --- Heartbeat -------------------------------------------------------------
- * While a run is on screen (question, reveal, stage break) the server is told
- * every few seconds that the player is still here. The server derives
- * "interrupted" from these going quiet; nothing here decides anything.
+/* --- Interruption detection -------------------------------------------------
+ * No periodic ping. The server learns a player may have been interrupted only
+ * from real events — tab backgrounded then foregrounded again — checked once,
+ * on return, rather than guessed at on a timer while nothing may have
+ * happened at all. Losing network (`offline`) and a hard crash get no
+ * client-side handling of their own; both fall through to the server's own
+ * wall-clock sweep (finalize_stale()), exactly as an undetected drop always
+ * has. See the grilling session this design came out of for why: any
+ * periodic heartbeat short enough to matter against a 10-second question
+ * timer stopped being worth its own request volume, and every attempt to
+ * detect an interruption from client-held state (localStorage, the client's
+ * own clock) can be defeated by a player who simply changes their system
+ * clock — only the server's clock is not the player's to set.
  * ------------------------------------------------------------------------- */
 const resumePolicy = ( window.NeraSAW && window.NeraSAW.resumePolicy ) || 'resume';
-let heartbeatTimer = null;
-let heartbeatBusy = false;
-
-function stopHeartbeat() {
-	if ( heartbeatTimer ) {
-		clearInterval( heartbeatTimer );
-		heartbeatTimer = null;
-	}
-}
-
-function startHeartbeat() {
-	stopHeartbeat();
-	const every = Math.max( 1, ( window.NeraSAW && window.NeraSAW.heartbeatSeconds ) || 3 ) * 1000;
-	heartbeatTimer = setInterval( beat, every );
-}
-
-async function beat() {
-	if ( heartbeatBusy || ! runId.value || ! quizSessionActive ) {
-		return;
-	}
-	heartbeatBusy = true;
-	try {
-		const r = await api.heartbeat( runId.value );
-		if ( r && r.errored ) {
-			stopHeartbeat();
-			const err = new Error( t( 'runClosed', 'This run was closed after it was interrupted. Please contact support and we will restore it.' ) );
-			err.code = 'saw_interrupted';
-			fail( err );
-		} else if ( r && r.held ) {
-			// The page is alive but the server had stopped hearing from it (a long
-			// network drop). Pick the run back up in place.
-			await recoverHeld();
-		}
-	} catch ( e ) {
-		// A dropped ping is exactly what the server is built to absorb.
-	} finally {
-		heartbeatBusy = false;
-	}
-}
 
 // Resume the run, then re-read the live question so its clock is the server's.
 async function resumeThen( slotNo ) {
@@ -258,15 +236,42 @@ async function resumeThen( slotNo ) {
 	return loadSlot( slotNo );
 }
 
-async function recoverHeld() {
-	if ( phase.value === 'question' && slot.slot_no ) {
-		return resumeThen( slot.slot_no );
+// Tab regained focus: ask the server, once, whether anything actually
+// happened while it was away — never assumed from how long the client thinks
+// it was gone. A trivial glance away that never lapsed anything gets no
+// prompt at all; only a real, server-confirmed gap does.
+async function checkAfterReturn() {
+	if ( ! runId.value || ! quizSessionActive ) {
+		return;
 	}
 	try {
-		await api.resumeRun( runId.value );
+		const r = await api.heartbeat( runId.value );
+		if ( r && r.errored ) {
+			const err = new Error( t( 'runClosed', 'This run was closed after it was interrupted. Please contact support and we will restore it.' ) );
+			err.code = 'saw_interrupted';
+			fail( err );
+			return;
+		}
+		if ( r && r.held ) {
+			const leave = await openLeaveDialog();
+			if ( leave ) {
+				await proceedLeave( toEnd );
+			} else {
+				await resumeThen( slot.slot_no );
+			}
+		}
+		// Neither: nothing lapsed, continue exactly as if nothing happened.
 	} catch ( e ) {
-		fail( e );
+		// Best-effort — a failed check just tries again next time focus returns.
 	}
+}
+
+function onVisibilityChange() {
+	if ( typeof document !== 'undefined' && 'visible' === document.visibilityState ) {
+		checkAfterReturn();
+	}
+	// Going hidden: deliberately does nothing — no request at all, which is the
+	// whole point of not polling.
 }
 
 function requestLeavePrompt( proceed ) {
@@ -540,6 +545,7 @@ function setupNavigationGuards() {
 	window.addEventListener( 'beforeunload', onBeforeUnload );
 	window.addEventListener( 'pagehide', onPageHide );
 	document.addEventListener( 'click', onDocumentClick, true );
+	document.addEventListener( 'visibilitychange', onVisibilityChange );
 }
 
 function armHistoryTrap() {
@@ -574,10 +580,10 @@ function teardownNavigationGuards() {
 		window.removeEventListener( 'beforeunload', onBeforeUnload );
 	window.removeEventListener( 'pagehide', onPageHide );
 	document.removeEventListener( 'click', onDocumentClick, true );
+	document.removeEventListener( 'visibilitychange', onVisibilityChange );
 }
 
 function releaseNavigationGuard() {
-	stopHeartbeat();
 	// Every teardown path (error, results, confirmed leave) funnels through here,
 	// so this is where a pending reveal advance is dropped. Without it a hold that
 	// expires after we have abandoned would try to serve the next slot of a run
@@ -837,6 +843,9 @@ function applyState( state ) {
 	if ( state.spins_final !== null && state.spins_final !== undefined ) {
 		spinsFinal.value = state.spins_final;
 	}
+	// Only Start/Resume send this (the whole run's content, once); every other
+	// call to applyState() (answer, etc.) simply has nothing here to cache.
+	cacheSlotContent( state.slots );
 }
 
 // The reference design's constant, mirrored from Nera_SAW_Mode::QUIZ_LADDER —
@@ -901,7 +910,6 @@ async function start() {
 		}
 		quizSessionActive = true;
 		armNavigationGuard();
-		startHeartbeat();
 		if ( props.leaveNow ) {
 			return leaveNowFlow();
 		}
@@ -942,6 +950,18 @@ async function loadSlot( slotNo ) {
 	clearHold();
 	retryAction = () => loadSlot( slotNo );
 	try {
+		// Content first, from the cache Start/Resume already filled — never a
+		// fetch for this part. Missing only if the cache was somehow never
+		// populated (shouldn't happen; Start/Resume always sends it), in which
+		// case the fields below simply keep whatever the slot object last held.
+		const cached = slotContentCache.get( slotNo );
+		if ( cached ) {
+			Object.assign( slot, cached );
+		}
+
+		// Then the live part — arms this slot's clock server-side (first visit
+		// only) and returns just the moment-to-moment fields the cache can't
+		// know: timer_seconds, seconds_left, spins_so_far, total_slots.
 		const data = await api.getSlot( runId.value, slotNo );
 		if ( data.status === 'finalized' ) {
 			applyState( data );
@@ -954,8 +974,9 @@ async function loadSlot( slotNo ) {
 		// first of a stage — maybeShowStageBreak() sets them for the transition,
 		// but a plain loadSlot() (stage 1, or the second+ question within a stage)
 		// never goes through there and must not be left showing a stale stage.
-		stageNo.value = data.stage_no || stageNo.value;
-		stageCount.value = data.stage_count || stageCount.value;
+		// Sourced from the cache now (serve_slot() no longer returns them).
+		stageNo.value = ( cached && cached.stage_no ) || stageNo.value;
+		stageCount.value = ( cached && cached.stage_count ) || stageCount.value;
 
 		// Reset only now that the replacement question is in hand. Clearing earlier
 		// would blank the reveal — highlights gone, countdown at zero, options live

@@ -49,14 +49,16 @@ class Nera_SAW_Constants {
 	/* ---------------------------------------------------------------------
 	 * Interrupted runs (ADR 0030).
 	 *
-	 * While a run is on screen the client pings the server every
-	 * HEARTBEAT_SECONDS. A run whose last ping is older than
-	 * HEARTBEAT_STALE_SECONDS is interrupted: its clock is frozen where the last
-	 * ping left it and the player is offered Resume for the configured window.
-	 * The stale threshold is several beats, so one dropped request is not an
-	 * interruption.
+	 * No periodic client ping any more (see App.vue's checkAfterReturn(), and
+	 * the grilling session that replaced HEARTBEAT_SECONDS's polling with
+	 * event-driven checks on tab focus/pagehide instead — a fixed interval
+	 * short enough to matter against a 10-second question timer cost more in
+	 * request volume than it was worth). `last_seen_at` is now only ever
+	 * refreshed by one of those real events, but the same staleness test still
+	 * applies: a run whose last check-in is older than HEARTBEAT_STALE_SECONDS
+	 * is interrupted, its clock frozen where that check-in left it, and the
+	 * player offered Resume for the configured window.
 	 * ------------------------------------------------------------------- */
-	const HEARTBEAT_SECONDS       = 3;
 	const HEARTBEAT_STALE_SECONDS = 15;
 
 	/** Minutes a run is held when the admin field is saved blank. */
