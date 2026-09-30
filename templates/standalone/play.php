@@ -250,6 +250,79 @@ Nera_SAW_Router::part(
 		?>
 		<div id="saw-quiz" class="saw-quiz-mount" hidden data-show-feedback="<?php echo esc_attr( Nera_SAW_Constants::quiz_feedback_enabled() ? '1' : '0' ); ?>"></div>
 		<?php echo Nera_SAW_Frontend::start_launcher_script(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed markup, no user input. ?>
+		<?php
+		/*
+		 * Arriving from the competition page's Play button: press the matching
+		 * Start button ourselves, so the player goes straight to the language
+		 * choice instead of seeing this overview a second time. It clicks the real
+		 * button, so the server-issued token still does the starting (ADR 0007) —
+		 * the URL only says which tier, never that a run may begin. With no runs at
+		 * that tier there is no button to press and the overview simply shows.
+		 */
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saw_autostart = ! empty( $_GET['saw_autostart'] ) && isset( $_GET[ Nera_SAW_Play_Page::QV_TIER ] );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saw_auto_tier = $saw_autostart ? sanitize_key( wp_unslash( $_GET[ Nera_SAW_Play_Page::QV_TIER ] ) ) : '';
+		// Which button to press: a tier card, or one of the interrupted-run popup's
+		// two (arriving from the competition page's popup — see parts/resume-popup.php).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saw_auto_mode = ! empty( $_GET['saw_leave'] ) ? 'leave' : ( ! empty( $_GET['saw_resume'] ) ? 'resume' : 'tier' );
+		?>
+		<?php
+		// A run held for Resume: offered before anything else on the screen.
+		Nera_SAW_Router::part(
+			'parts/resume-popup.php',
+			array(
+				'saw_on_play'           => true,
+				'saw_focus_competition' => $saw_competition_id,
+			)
+		);
+		?>
+		<?php if ( '' !== $saw_auto_tier ) : ?>
+			<style>.saw-hub--competition{visibility:hidden}.saw-resume-pop{display:none}</style>
+			<script>
+			( function () {
+				var tier = <?php echo wp_json_encode( $saw_auto_tier ); ?>;
+				var mode = <?php echo wp_json_encode( $saw_auto_mode ); ?>;
+				var wanted = function ( b ) {
+					var isResume = b.hasAttribute( 'data-saw-resume' );
+					var isLeave = b.hasAttribute( 'data-saw-leave' );
+					if ( 'leave' === mode ) { return isLeave; }
+					if ( 'resume' === mode ) { return isResume; }
+					return ! isResume && ! isLeave;
+				};
+				var run = function () {
+					var btns = document.querySelectorAll( '.saw-start-run' );
+					var hit = null;
+					for ( var i = 0; i < btns.length; i++ ) {
+						if ( wanted( btns[ i ] ) && btns[ i ].getAttribute( 'data-tier' ) === tier ) { hit = btns[ i ]; break; }
+					}
+					if ( ! hit ) {
+						// Nothing to launch: show the overview (and any popup) rather than
+						// a blank panel.
+						var hub = document.querySelector( '.saw-hub--competition' );
+						if ( hub ) { hub.style.visibility = 'visible'; }
+						var pop = document.querySelector( '.saw-resume-pop' );
+						if ( pop ) { pop.style.display = ''; }
+						return;
+					}
+					if ( window.history && window.history.replaceState ) {
+						var u = new URL( window.location.href );
+						u.searchParams.delete( 'saw_autostart' );
+						u.searchParams.delete( 'saw_resume' );
+						u.searchParams.delete( 'saw_leave' );
+						window.history.replaceState( null, '', u.toString() );
+					}
+					hit.click();
+				};
+				if ( 'loading' === document.readyState ) {
+					document.addEventListener( 'DOMContentLoaded', run );
+				} else {
+					run();
+				}
+			} )();
+			</script>
+		<?php endif; ?>
 	<?php endif; ?>
 
 	<div class="saw-connector" aria-hidden="true"></div>

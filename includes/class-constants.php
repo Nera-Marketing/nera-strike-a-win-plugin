@@ -47,6 +47,33 @@ class Nera_SAW_Constants {
 	const LATENCY_GRACE_SECONDS = 1.5;
 
 	/* ---------------------------------------------------------------------
+	 * Interrupted runs (ADR 0030).
+	 *
+	 * While a run is on screen the client pings the server every
+	 * HEARTBEAT_SECONDS. A run whose last ping is older than
+	 * HEARTBEAT_STALE_SECONDS is interrupted: its clock is frozen where the last
+	 * ping left it and the player is offered Resume for the configured window.
+	 * The stale threshold is several beats, so one dropped request is not an
+	 * interruption.
+	 * ------------------------------------------------------------------- */
+	const HEARTBEAT_SECONDS       = 3;
+	const HEARTBEAT_STALE_SECONDS = 15;
+
+	/** Minutes a run is held when the admin field is saved blank. */
+	const RESUME_WINDOW_BLANK_MINUTES = 5;
+
+	/** Minutes offered in the field before the admin has saved anything. */
+	const RESUME_WINDOW_DEFAULT_MINUTES = 10;
+
+	/**
+	 * Idle time allowed between one question ending and the next being served
+	 * (answer reveal, stage-break screen). Question deadlines are stamped when a
+	 * question is served, so this is what keeps a run from being parked forever
+	 * between questions.
+	 */
+	const BETWEEN_QUESTIONS_SLACK_SECONDS = 120;
+
+	/* ---------------------------------------------------------------------
 	 * Answer reveal hold (seconds).
 	 *
 	 * How long the question stays on screen after a submit, showing which option
@@ -140,6 +167,9 @@ class Nera_SAW_Constants {
 			'quiz_method'        => Nera_SAW_Mode::QUIZ_RANDOM,
 			'language_scope'     => Nera_SAW_Mode::SCOPE_QUESTIONS,
 			'resume_policy'      => Nera_SAW_Mode::RESUME_ALLOW,
+			// Minutes an interrupted run is held for Resume. '' (saved blank) means
+			// RESUME_WINDOW_BLANK_MINUTES — see Nera_SAW_Mode::resume_window_seconds().
+			'resume_window_minutes' => self::RESUME_WINDOW_DEFAULT_MINUTES,
 			'timer_min'          => self::TIMER_MIN_SECONDS,
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,

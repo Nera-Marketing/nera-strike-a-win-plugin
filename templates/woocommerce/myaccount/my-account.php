@@ -160,13 +160,35 @@ if ( false !== $saw_logout_pos && $saw_rest ) {
 	$saw_order = array_merge( $saw_order, $saw_rest );
 }
 
+/*
+ * `view-order` is not a row of its own — it is a sub-endpoint of Orders,
+ * reached only by clicking a specific order in that list, never from the nav.
+ * `wc_is_current_account_menu_item()` already knows this and opens the Orders
+ * row for it (see its own `elseif ( 'orders' === $endpoint && isset(
+ * $wp->query_vars['view-order'] ) )` branch) — but the panel below used to
+ * always fire `orders`'s own action regardless, so that row opened correctly
+ * and then showed the full list again instead of the one order the player had
+ * just clicked into. WooCommerce's stock `woocommerce_account_content()`
+ * avoids this by firing whichever query var is actually active; this does the
+ * same, narrowly, only where the two can disagree.
+ */
+global $wp;
+$saw_view_order_id = isset( $wp->query_vars['view-order'] ) ? $wp->query_vars['view-order'] : '';
+
 /**
  * One endpoint's own content, exactly what its own page would show — see the
  * docblock above for why every one of these is safe to call unconditionally.
  *
  * @param string $endpoint Endpoint key.
  */
-$saw_panel = static function ( $endpoint ) {
+$saw_panel = static function ( $endpoint ) use ( $saw_view_order_id ) {
+	if ( 'orders' === $endpoint && '' !== $saw_view_order_id ) {
+		if ( has_action( 'woocommerce_account_view-order_endpoint' ) ) {
+			do_action( 'woocommerce_account_view-order_endpoint', $saw_view_order_id );
+		}
+		return;
+	}
+
 	if ( has_action( 'woocommerce_account_' . $endpoint . '_endpoint' ) ) {
 		do_action( 'woocommerce_account_' . $endpoint . '_endpoint', '' );
 	}

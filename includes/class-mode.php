@@ -102,7 +102,7 @@ class Nera_SAW_Mode {
 	 */
 	public static function resume_policies() {
 		return array(
-			self::RESUME_ALLOW => __( 'Let the player continue — they land on whichever question is live, and the ones they missed score zero', 'nera-strikeawin' ),
+			self::RESUME_ALLOW => __( 'Let the player continue — the run is held, and they are offered Resume on the question they were on. If they do not resume in time, the run is closed for an administrator', 'nera-strikeawin' ),
 			self::RESUME_CLOSE => __( 'Close the run — an administrator reviews it and can refund the run', 'nera-strikeawin' ),
 		);
 	}
@@ -238,6 +238,26 @@ class Nera_SAW_Mode {
 	 */
 	public static function allows_resume() {
 		return self::RESUME_ALLOW === self::resume_policy();
+	}
+
+	/**
+	 * How long an interrupted run is held for Resume, in seconds.
+	 *
+	 * The admin field is in minutes with no upper limit. Saved blank it means the
+	 * short built-in window rather than "no window" — a run cannot be held open
+	 * forever. Anything that is not a positive whole number reads as blank.
+	 *
+	 * @return int
+	 */
+	public static function resume_window_seconds() {
+		$s       = Nera_SAW_Constants::settings();
+		$minutes = isset( $s['resume_window_minutes'] ) ? $s['resume_window_minutes'] : Nera_SAW_Constants::RESUME_WINDOW_DEFAULT_MINUTES;
+
+		if ( ! is_numeric( $minutes ) || (int) $minutes < 1 ) {
+			$minutes = Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES;
+		}
+
+		return (int) $minutes * MINUTE_IN_SECONDS;
 	}
 
 	/* ---------------------------------------------------------------------

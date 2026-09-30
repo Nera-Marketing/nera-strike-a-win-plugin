@@ -720,7 +720,8 @@ a.saw-card__title:hover { color: var(--saw-link); }
   cursor: pointer;
 }
 .saw-tier__body { display: block; }
-.saw-tier:focus-within { outline: 2px solid var(--saw-primary); outline-offset: 2px; }
+/* The radio only, not anything inside the card: a Play link that keeps focus after a click would otherwise draw a second ring around a card that already has its own border. */
+.saw-tier:has(input:focus-visible) { outline: 2px solid var(--saw-primary); outline-offset: 2px; }
 /* The radio is the accessible control; the card is what is actually looked at. */
 .saw-tier input {
   position: absolute;
@@ -734,6 +735,43 @@ a.saw-card__title:hover { color: var(--saw-link); }
   background: var(--saw-tint);
 }
 .saw-tier__label { display: block; font-size: 15px; font-weight: 800; color: var(--saw-ink); }
+
+/*
+ * Runs the player already holds at this tier, bought but not yet played —
+ * shown only when there is a real balance to report (see the template's own
+ * `> 0` guard). A `0` here would read as "you have none", the opposite of
+ * what an absent badge already says by saying nothing.
+ */
+.saw-tier__balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 6px 5px 10px;
+  border-radius: 9999px;
+  background: var(--saw-tint);
+}
+.saw-tier__balance-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--saw-body);
+}
+.saw-tier__balance-count {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-primary);
+  color: var(--saw-primary);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
 .saw-tier__price {
   display: block;
   font-size: 13px;
@@ -3653,3 +3691,38 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
 #nera-age-dialog .nera-age-dialog-submit:hover:not(:disabled) { opacity: 0.9; }
 #nera-age-dialog .nera-age-dialog-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 #nera-age-dialog .nera-age-dialog-submit-icon { font-size: 20px; line-height: 1; }
+
+/* Runs already held, shown as plain emphasised text rather than a badge. */
+.saw-tier__runs {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--saw-primary);
+}
+.saw-tier__play { margin-top: 12px; }
+
+/* ---- interrupted-run popup (ADR 0030) ------------------------------------ */
+.saw-resume-pop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(33, 26, 22, 0.6);
+}
+.saw-resume-pop[hidden] { display: none; }
+.saw-resume-pop__card {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  background: var(--saw-card);
+  border-radius: var(--saw-r-button);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.saw-resume-pop__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-ink); }
+.saw-resume-pop__body { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--saw-body); }
+.saw-resume-pop__actions { margin-top: 6px; }
+.saw-resume-pop__note { margin: 12px 0 0; font-size: 12.5px; color: var(--saw-muted); text-align: center; }

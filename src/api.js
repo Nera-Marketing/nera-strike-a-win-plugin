@@ -72,6 +72,15 @@ export const api = {
 	abandonRun( runId ) {
 		return request( `/run/${ runId }/abandon`, 'POST', {}, 60000 );
 	},
+	// The client is still here. Called every few seconds while a run is on screen;
+	// the server derives "interrupted" from these going quiet (ADR 0030).
+	heartbeat( runId ) {
+		return request( `/run/${ runId }/heartbeat`, 'POST', {}, 8000 );
+	},
+	// Pick an interrupted run back up.
+	resumeRun( runId ) {
+		return request( `/run/${ runId }/resume`, 'POST', {} );
+	},
 	// Best-effort client diagnostic report (error or stalled request). Fire-and-
 	// forget: never throws, never blocks gameplay. Feeds the server Quiz Log.
 	logClient( payload ) {
@@ -87,6 +96,19 @@ export const api = {
 				body: JSON.stringify( payload || {} ),
 			} ).catch( () => {} );
 		} catch ( e ) {}
+	},
+	// One last ping as the page goes away, so the server knows when the run was
+	// interrupted. Same transport constraints as abandonBeacon().
+	heartbeatBeacon( runId ) {
+		if ( typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function' ) {
+			return false;
+		}
+		const url = `${ cfg.root }/run/${ runId }/heartbeat?_wpnonce=${ encodeURIComponent( cfg.nonce ) }`;
+		try {
+			return navigator.sendBeacon( url, new Blob( [ '{}' ], { type: 'application/json' } ) );
+		} catch ( e ) {
+			return false;
+		}
 	},
 	// Best-effort abandon for page unload (tab close / address bar / toolbar
 	// reload), where async fetches are unreliable. sendBeacon can't set headers,

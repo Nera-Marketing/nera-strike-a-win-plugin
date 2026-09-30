@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Nera_SAW_Database {
 
-	const DB_VERSION = '0.6.0';
+	const DB_VERSION = '0.7.0';
 	const OPTION_KEY = 'nera_saw_db_version';
 
 	/**
@@ -117,6 +117,7 @@ CREATE TABLE {$runs} (
   started_at datetime DEFAULT NULL,
   finalized_at datetime DEFAULT NULL,
   expires_at datetime DEFAULT NULL,
+  last_seen_at datetime DEFAULT NULL,
   PRIMARY KEY (id),
   KEY user_id (user_id),
   KEY competition_id (competition_id),

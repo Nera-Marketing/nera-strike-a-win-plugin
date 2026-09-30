@@ -1,5 +1,11 @@
 # A run has its own deadline, and the sweep runs on that
 
+> **Partly superseded by [ADR 0030](0030-a-question-clock-starts-when-it-is-served-and-an-interrupted-run-is-held.md):**
+> a question's deadline is now stamped when it is served, not chained from the
+> previous answer, and "let the player continue" holds an interrupted run for Resume
+> instead of scoring the lapsed questions zero. The run-level `expires_at`, the sweep
+> and the `errored` state below still stand.
+
 A run is stamped with `expires_at` when it starts — its question count times the
 per-question timer, plus slack. The sweeper that finalizes abandoned runs selects on
 that column. On reconnect, the live question is computed from elapsed time: slots

@@ -71,6 +71,11 @@ class Nera_SAW_Settings_Admin {
 		$resume_policy     = Nera_SAW_Mode::sanitize_resume_policy( $_POST['resume_policy'] ?? '' );
 		$policy_before     = Nera_SAW_Mode::resume_policy();
 
+		// Minutes, no upper limit. Blank is stored as '' and means the built-in
+		// short window (Nera_SAW_Mode::resume_window_seconds()); it is not "no window".
+		$resume_window_raw = isset( $_POST['resume_window_minutes'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['resume_window_minutes'] ) ) ) : '';
+		$resume_window     = ( '' !== $resume_window_raw && (int) $resume_window_raw >= 1 ) ? (int) $resume_window_raw : '';
+
 		$timer_min = isset( $_POST['timer_min'] ) ? (int) $_POST['timer_min'] : Nera_SAW_Constants::TIMER_MIN_SECONDS;
 		$timer_max = isset( $_POST['timer_max'] ) ? (int) $_POST['timer_max'] : Nera_SAW_Constants::TIMER_MAX_SECONDS;
 		$timer_warn = isset( $_POST['timer_warn_seconds'] ) ? (int) $_POST['timer_warn_seconds'] : 3;
@@ -111,6 +116,7 @@ class Nera_SAW_Settings_Admin {
 				'quiz_method'        => $quiz_method,
 				'language_scope'     => $language_scope,
 				'resume_policy'      => $resume_policy,
+				'resume_window_minutes' => $resume_window,
 				'timer_min'          => $timer_min,
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
@@ -231,6 +237,26 @@ class Nera_SAW_Settings_Admin {
 			Nera_SAW_Mode::resume_policies(),
 			Nera_SAW_Mode::resume_policy()
 		);
+
+		// Only meaningful under "let the player continue", but always rendered and
+		// always saved: switching policy back and forth must not lose the number.
+		$window_saved = isset( $s['resume_window_minutes'] ) ? $s['resume_window_minutes'] : Nera_SAW_Constants::RESUME_WINDOW_DEFAULT_MINUTES;
+		echo '<div class="saw-field-block">';
+		echo '<label class="saw-field"><span><strong>' . esc_html__( 'Minutes to hold an interrupted run', 'nera-strikeawin' ) . '</strong></span>';
+		printf(
+			'<input type="number" name="resume_window_minutes" min="1" step="1" value="%1$s" placeholder="%2$d" class="small-text">',
+			esc_attr( (string) $window_saved ),
+			(int) Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES
+		);
+		echo '</label>';
+		echo '<p class="saw-muted">' . esc_html(
+			sprintf(
+				/* translators: %d: minutes used when the field is blank */
+				__( 'Applies to "Let the player continue". How long a player has to press Resume before the run is closed for an administrator to restore. No upper limit. Leave blank for %d minutes.', 'nera-strikeawin' ),
+				Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES
+			)
+		) . '</p>';
+		echo '</div>';
 
 		self::radio_field(
 			'language_scope',

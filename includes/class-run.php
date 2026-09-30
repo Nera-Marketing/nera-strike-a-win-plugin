@@ -195,6 +195,10 @@ class Nera_SAW_Run {
 	/**
 	 * The player's in-progress run for a competition (if any).
 	 *
+	 * An `errored` run is not in progress: it is parked for an administrator, and
+	 * counting it here would make the player's next Start resume a run that can no
+	 * longer be played, instead of using the run they still hold.
+	 *
 	 * @param int $competition_id Competition ID.
 	 * @param int $user_id        User ID.
 	 * @return object|null
@@ -204,7 +208,7 @@ class Nera_SAW_Run {
 		$t = Nera_SAW_Database::table( 'runs' );
 		return $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$t} WHERE user_id = %d AND competition_id = %d AND status = 'active' ORDER BY id DESC LIMIT 1",
+				"SELECT * FROM {$t} WHERE user_id = %d AND competition_id = %d AND status = 'active' AND end_reason <> 'errored' ORDER BY id DESC LIMIT 1",
 				(int) $user_id,
 				(int) $competition_id
 			)
@@ -223,6 +227,19 @@ class Nera_SAW_Run {
 		$active = self::active_run( $competition_id, $user_id );
 		if ( ! $active ) {
 			return null;
+		}
+
+		// Held too long without a Resume: it goes to an administrator, and this
+		// Start begins a fresh run from the balance instead.
+		if ( self::interruption_expired( $active ) ) {
+			self::mark_interruption_expired( $active );
+			return null;
+		}
+
+		// An explicit Start on a held run is a Resume: the clock picks up where the
+		// last heartbeat left it.
+		if ( self::pending_info( $active ) ) {
+			$active = self::thaw( $active );
 		}
 
 		$live_config = Nera_SAW_Competition_Config::get( $competition_id );
@@ -361,6 +378,11 @@ class Nera_SAW_Run {
 			return self::state( $run );
 		}
 
+		$held = self::guard_held( $run );
+		if ( $held ) {
+			return $held;
+		}
+
 		$slot = self::get_slot( $run_id, $slot_no );
 		if ( ! $slot ) {
 			return new WP_Error( 'saw_bad_slot', __( 'Invalid slot.', 'nera-strikeawin' ) );
@@ -381,19 +403,23 @@ class Nera_SAW_Run {
 
 		if ( ! $slot->served_at ) {
 			$served = current_time( 'mysql' );
-			$fields = array( 'served_at' => $served );
 
-			// The deadline is normally already set: start_clock() stamps slot 1 and
-			// every answer chains the next one. Fetching a slot does NOT restart its
-			// clock — that is the whole point of the server owning it. This branch
-			// only covers a slot that somehow has no deadline at all.
-			if ( ! $slot->deadline_at ) {
-				$fields['deadline_at'] = gmdate( 'Y-m-d H:i:s', self::ts( $served ) + $timer );
-				$slot->deadline_at     = $fields['deadline_at'];
-			}
+			// The question's clock starts here, on first sight, and never again:
+			// fetching an already-served slot does NOT restart it, which is the whole
+			// point of the server owning the clock (ADR 0030).
+			$deadline_at = gmdate( 'Y-m-d H:i:s', self::ts( $served ) + $timer );
 
-			self::update_slot( $slot->id, $fields );
-			$slot->served_at = $served;
+			self::update_slot(
+				$slot->id,
+				array(
+					'served_at'   => $served,
+					'deadline_at' => $deadline_at,
+				)
+			);
+			$slot->served_at   = $served;
+			$slot->deadline_at = $deadline_at;
+
+			self::roll_expiry( $run, $slot, $config );
 
 			// Seen is stamped HERE, on first sight, not when the slot was drawn.
 			// A drawn-but-never-served question stays available to this player.
@@ -572,6 +598,14 @@ class Nera_SAW_Run {
 			return self::state( $run );
 		}
 
+		// An answer arriving on a held run is a stale tab or a client that lost its
+		// connection and is back: it must Resume first, or it would answer against a
+		// clock that has been frozen since the last heartbeat.
+		$held = self::guard_held( $run );
+		if ( $held ) {
+			return $held;
+		}
+
 		$slot = self::get_slot( $run_id, $slot_no );
 		if ( ! $slot || ! $slot->served_at ) {
 			return new WP_Error( 'saw_not_served', __( 'Slot was not served.', 'nera-strikeawin' ) );
@@ -583,11 +617,6 @@ class Nera_SAW_Run {
 		$now_ts    = self::ts( current_time( 'mysql' ) );
 		$deadline  = self::ts( $slot->deadline_at ) + Nera_SAW_Constants::LATENCY_GRACE_SECONDS;
 		$timed_out = $now_ts > $deadline;
-
-		$run_config     = json_decode( $run->config_snapshot, true );
-		$timer_seconds  = Nera_SAW_Constants::clamp_timer(
-			isset( $run_config['timer_seconds'] ) ? $run_config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-		);
 
 		// Score against the slot snapshot (stable across later question edits).
 		$snapshot = self::ensure_slot_snapshot( $slot );
@@ -628,11 +657,6 @@ class Nera_SAW_Run {
 				'spins_awarded' => $awarded,
 			)
 		);
-
-		// The next slot's clock starts the moment this one ended — not when the
-		// client gets around to asking for it. Without this the run pauses between
-		// questions, which is precisely what ADR 0020 rejects.
-		self::chain_next_slot( $run_id, (int) $slot_no, self::ts( current_time( 'mysql' ) ), $timer_seconds );
 
 		$next = self::next_unanswered_slot( $run_id );
 		if ( ! $next ) {
@@ -1230,6 +1254,19 @@ class Nera_SAW_Run {
 		 * this clause the sweep would close it, mint its tickets, and remove the
 		 * marker before any administrator saw it.
 		 */
+		$closes = ! $force_resume && ! Nera_SAW_Mode::allows_resume();
+
+		/*
+		 * Runs that report a heartbeat are judged by it, not by `expires_at`
+		 * (ADR 0030). Under "let the player continue" they are either alive, held
+		 * for Resume, or held past the window - and only the last is the sweep's
+		 * business: it goes to an administrator, nothing is minted. A run with no
+		 * heartbeat at all predates the column and keeps the old rule below.
+		 */
+		if ( ! $closes && ! $force_resume ) {
+			self::expire_interrupted();
+		}
+
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT id FROM {$runs}
@@ -1237,11 +1274,11 @@ class Nera_SAW_Run {
 				 AND end_reason <> 'errored'
 				 AND expires_at IS NOT NULL
 				 AND expires_at < %s
+				 " . ( ( $force_resume || $closes ) ? '' : 'AND last_seen_at IS NULL' ) . "
 				 LIMIT 200",
 				gmdate( 'Y-m-d H:i:s', self::ts( $now ) - Nera_SAW_Constants::LATENCY_GRACE_SECONDS )
 			)
 		);
-		$closes = ! $force_resume && ! Nera_SAW_Mode::allows_resume();
 
 		foreach ( (array) $ids as $rid ) {
 			if ( $closes ) {
@@ -1572,22 +1609,23 @@ class Nera_SAW_Run {
 	}
 
 	/**
-	 * Stamp the run's wall clock and start slot 1's.
+	 * Stamp the run's wall clock.
 	 *
-	 * Slot 1's deadline is set here rather than when it is first fetched, so the
-	 * clock is the server's from the first second. A player who buys a run, never
-	 * opens it and comes back tomorrow has an expired run, not a fresh one.
+	 * Only the run-level clock. A question's own 10 seconds start when it is served
+	 * (serve_slot()), not here and not when the previous answer lands — otherwise
+	 * the language screen, the stage-break screen and the answer reveal would all
+	 * be paid for out of the question's timer (ADR 0030).
 	 *
 	 * @param int   $run_id     Run ID.
 	 * @param int   $slot_count Number of slots drawn.
 	 * @param array $config     Config snapshot.
 	 */
 	private static function start_clock( $run_id, $slot_count, array $config ) {
-		$now   = current_time( 'mysql' );
-		$timer = self::timer_for( $config );
+		$now = current_time( 'mysql' );
 
 		$fields = array(
-			'expires_at' => gmdate( 'Y-m-d H:i:s', self::ts( $now ) + self::run_window_seconds( $config, $slot_count ) ),
+			'expires_at'   => gmdate( 'Y-m-d H:i:s', self::ts( $now ) + self::run_window_seconds( $config, $slot_count ) ),
+			'last_seen_at' => $now,
 		);
 
 		// insert_run() already stamps started_at. Only fill it if it is somehow
@@ -1599,39 +1637,374 @@ class Nera_SAW_Run {
 		}
 
 		self::update_run( (int) $run_id, $fields );
+	}
 
-		$first = self::get_slot( (int) $run_id, 1 );
-		if ( $first && ! $first->deadline_at ) {
-			self::update_slot( $first->id, array( 'deadline_at' => gmdate( 'Y-m-d H:i:s', self::ts( $now ) + $timer ) ) );
+	/* ====================================================================
+	 * Interrupted runs — heartbeat, hold, resume (ADR 0030)
+	 * ================================================================== */
+
+	/**
+	 * Record that the player's client is still there.
+	 *
+	 * Called every few seconds by the quiz while a run is on screen, and once more
+	 * when the page is going away. That last ping is what fixes the moment of
+	 * interruption, which is what lets Resume give back exactly the time that was
+	 * left.
+	 *
+	 * A ping on a run already held does NOT quietly revive it: the client is told
+	 * so and must Resume, which is the one path that moves the clock.
+	 *
+	 * @param int $run_id  Run ID.
+	 * @param int $user_id Acting user.
+	 * @return array|WP_Error Keys: status, held, errored.
+	 */
+	public static function heartbeat( $run_id, $user_id ) {
+		$run = self::owned_run( $run_id, $user_id );
+		if ( is_wp_error( $run ) ) {
+			return $run;
 		}
+
+		if ( 'active' !== $run->status ) {
+			return array( 'status' => (string) $run->status, 'held' => false, 'errored' => false );
+		}
+
+		if ( 'errored' === (string) $run->end_reason ) {
+			return array( 'status' => 'active', 'held' => false, 'errored' => true );
+		}
+
+		if ( Nera_SAW_Mode::allows_resume() ) {
+			if ( self::interruption_expired( $run ) ) {
+				self::mark_interruption_expired( $run );
+				return array( 'status' => 'active', 'held' => false, 'errored' => true );
+			}
+			if ( self::pending_info( $run ) ) {
+				return array( 'status' => 'active', 'held' => true, 'errored' => false );
+			}
+		}
+
+		self::update_run( (int) $run_id, array( 'last_seen_at' => current_time( 'mysql' ) ) );
+
+		return array( 'status' => 'active', 'held' => false, 'errored' => false );
 	}
 
 	/**
-	 * Give the next slot its deadline, measured from when this one ended.
+	 * Is this run held for Resume right now?
 	 *
-	 * Does not touch `served_at` — that still means "the player saw it", and is
-	 * what marks a question seen. A slot can therefore have a running deadline it
-	 * was never shown for, which is exactly the abandoned case.
+	 * Derived, never stored: a heartbeat older than the stale threshold, inside the
+	 * configured window. Nothing has to run for a run to become held, so there is
+	 * no sweep to fall behind — the same reason ADR 0020 gave a run its own clock.
+	 *
+	 * @param object $run Run row.
+	 * @return array|null Keys: since (unix time of the last heartbeat), until. Null when not held.
+	 */
+	public static function pending_info( $run ) {
+		if ( ! $run || 'active' !== $run->status || 'errored' === (string) $run->end_reason || empty( $run->last_seen_at ) ) {
+			return null;
+		}
+		if ( ! Nera_SAW_Mode::allows_resume() ) {
+			return null;
+		}
+
+		$seen = self::ts( $run->last_seen_at );
+		$now  = self::ts( current_time( 'mysql' ) );
+
+		if ( ( $now - $seen ) <= Nera_SAW_Constants::HEARTBEAT_STALE_SECONDS ) {
+			return null;
+		}
+
+		$until = $seen + Nera_SAW_Mode::resume_window_seconds();
+		if ( $now > $until ) {
+			return null;
+		}
+
+		return array(
+			'since' => $seen,
+			'until' => $until,
+		);
+	}
+
+	/**
+	 * Was this run held for Resume and then left past its window?
+	 *
+	 * @param object $run Run row.
+	 * @return bool
+	 */
+	public static function interruption_expired( $run ) {
+		if ( ! $run || 'active' !== $run->status || 'errored' === (string) $run->end_reason || empty( $run->last_seen_at ) ) {
+			return false;
+		}
+		if ( ! Nera_SAW_Mode::allows_resume() ) {
+			return false;
+		}
+
+		return self::ts( current_time( 'mysql' ) ) > ( self::ts( $run->last_seen_at ) + Nera_SAW_Mode::resume_window_seconds() );
+	}
+
+	/**
+	 * Close a run that was held and never resumed, for an administrator.
+	 *
+	 * Same end state as the "close the run" policy: `errored`, nothing minted, and
+	 * Restore refunds the run.
+	 *
+	 * @param object $run Run row.
+	 * @return object The run, refreshed.
+	 */
+	private static function mark_interruption_expired( $run ) {
+		$run_id = (int) $run->id;
+
+		self::update_run( $run_id, array( 'end_reason' => 'errored' ) );
+
+		if ( class_exists( 'Nera_SAW_Log' ) ) {
+			Nera_SAW_Log::error(
+				'run_interrupted',
+				sprintf(
+					/* translators: %d: minutes the run was held */
+					__( 'The run was interrupted and not resumed within %d minutes, so it was closed for review.', 'nera-strikeawin' ),
+					(int) round( Nera_SAW_Mode::resume_window_seconds() / MINUTE_IN_SECONDS )
+				),
+				array(
+					'run_id'         => $run_id,
+					'competition_id' => (int) $run->competition_id,
+					'tier_key'       => (string) $run->tier_key,
+					'user_id'        => (int) $run->user_id,
+				)
+			);
+		}
+
+		$fresh = self::get_run( $run_id );
+		return $fresh ? $fresh : $run;
+	}
+
+	/**
+	 * Close every held run whose window has run out.
+	 *
+	 * @param int $user_id Limit to one player (0 = everyone), for the lazy check on
+	 *                     a page load.
+	 * @return int Runs closed.
+	 */
+	public static function expire_interrupted( $user_id = 0 ) {
+		if ( ! Nera_SAW_Mode::allows_resume() ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$t   = Nera_SAW_Database::table( 'runs' );
+		$cut = gmdate( 'Y-m-d H:i:s', self::ts( current_time( 'mysql' ) ) - Nera_SAW_Mode::resume_window_seconds() );
+
+		$sql = "SELECT id FROM {$t}
+			WHERE status = 'active' AND end_reason <> 'errored'
+			AND last_seen_at IS NOT NULL AND last_seen_at < %s";
+		$arg = array( $cut );
+		if ( (int) $user_id > 0 ) {
+			$sql  .= ' AND user_id = %d';
+			$arg[] = (int) $user_id;
+		}
+		$sql .= ' LIMIT 200';
+
+		$closed = 0;
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( $sql, $arg ) ) as $id ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$run = self::get_run( (int) $id );
+			if ( $run && self::interruption_expired( $run ) ) {
+				self::mark_interruption_expired( $run );
+				$closed++;
+			}
+		}
+
+		return $closed;
+	}
+
+	/**
+	 * The player's runs currently held for Resume, newest first.
+	 *
+	 * Also closes any that have outlived the window, so the popup never offers a
+	 * run that can no longer be resumed.
+	 *
+	 * @param int $user_id User ID.
+	 * @return object[] Run rows, each with a `resume_until` unix time added.
+	 */
+	public static function pending_for_user( $user_id ) {
+		if ( (int) $user_id < 1 || ! Nera_SAW_Mode::allows_resume() ) {
+			return array();
+		}
+
+		self::expire_interrupted( (int) $user_id );
+
+		global $wpdb;
+		$t    = Nera_SAW_Database::table( 'runs' );
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$t} WHERE user_id = %d AND status = 'active' AND end_reason <> 'errored' AND last_seen_at IS NOT NULL ORDER BY id DESC LIMIT 20",
+				(int) $user_id
+			)
+		);
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$info = self::pending_info( $row );
+			if ( $info ) {
+				$row->resume_until = $info['until'];
+				$out[]             = $row;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Resume a held run: give the live question back exactly the time it had when
+	 * the last heartbeat arrived, and let the run's own wall clock skip the time
+	 * spent away.
+	 *
+	 * The interrupted question keeps its remaining time, not a fresh full timer —
+	 * a fresh one would let a player see a question, leave, look the answer up and
+	 * come back (ADR 0030).
 	 *
 	 * @param int $run_id  Run ID.
-	 * @param int $slot_no The slot that just ended.
-	 * @param int $from_ts Unix time the slot ended (answered or lapsed).
-	 * @param int $timer   Seconds per question.
+	 * @param int $user_id Acting user.
+	 * @return array|WP_Error Run state.
 	 */
-	private static function chain_next_slot( $run_id, $slot_no, $from_ts, $timer ) {
-		$next = self::get_slot( (int) $run_id, (int) $slot_no + 1 );
-		if ( ! $next || $next->answered_at || $next->deadline_at ) {
-			return;
+	public static function resume( $run_id, $user_id ) {
+		$run = self::owned_run( $run_id, $user_id );
+		if ( is_wp_error( $run ) ) {
+			return $run;
 		}
-		self::update_slot( $next->id, array( 'deadline_at' => gmdate( 'Y-m-d H:i:s', (int) $from_ts + (int) $timer ) ) );
+
+		if ( 'active' !== $run->status ) {
+			return self::state( $run );
+		}
+
+		if ( 'errored' === (string) $run->end_reason || self::interruption_expired( $run ) ) {
+			if ( 'errored' !== (string) $run->end_reason ) {
+				self::mark_interruption_expired( $run );
+			}
+			return new WP_Error(
+				'saw_interrupted',
+				__( 'This run was closed after it was interrupted. Please contact support and we will restore it.', 'nera-strikeawin' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		if ( self::pending_info( $run ) ) {
+			$run = self::thaw( $run );
+
+			if ( class_exists( 'Nera_SAW_Log' ) ) {
+				Nera_SAW_Log::add(
+					'run_resume',
+					array(
+						'run_id'         => (int) $run->id,
+						'competition_id' => (int) $run->competition_id,
+						'tier_key'       => (string) $run->tier_key,
+						'user_id'        => (int) $run->user_id,
+						'message'        => 'Interrupted run resumed',
+					)
+				);
+			}
+		} else {
+			self::update_run( (int) $run_id, array( 'last_seen_at' => current_time( 'mysql' ) ) );
+		}
+
+		return self::state( self::get_run( (int) $run_id ) );
+	}
+
+	/**
+	 * Unfreeze a held run.
+	 *
+	 * @param object $run Run row (must be held).
+	 * @return object The run, refreshed.
+	 */
+	private static function thaw( $run ) {
+		global $wpdb;
+		$slots  = Nera_SAW_Database::table( 'run_slots' );
+		$now    = current_time( 'mysql' );
+		$now_ts = self::ts( $now );
+		$seen   = self::ts( $run->last_seen_at );
+
+		// The question that was on screen: served, unanswered. Its clock stopped at
+		// the last heartbeat, so it gets back what it had left then.
+		$live = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$slots} WHERE run_id = %d AND answered_at IS NULL AND served_at IS NOT NULL AND deadline_at IS NOT NULL ORDER BY slot_no ASC LIMIT 1",
+				(int) $run->id
+			)
+		);
+		if ( $live ) {
+			$remaining = max( 0, self::ts( $live->deadline_at ) - $seen );
+			self::update_slot( (int) $live->id, array( 'deadline_at' => gmdate( 'Y-m-d H:i:s', $now_ts + $remaining ) ) );
+		}
+
+		$fields = array( 'last_seen_at' => $now );
+		if ( $run->expires_at ) {
+			$fields['expires_at'] = gmdate( 'Y-m-d H:i:s', self::ts( $run->expires_at ) + max( 0, $now_ts - $seen ) );
+		}
+		self::update_run( (int) $run->id, $fields );
+
+		$fresh = self::get_run( (int) $run->id );
+		return $fresh ? $fresh : $run;
+	}
+
+	/**
+	 * Refuse to serve or score a run that is held or closed.
+	 *
+	 * @param object $run Run row.
+	 * @return WP_Error|null
+	 */
+	private static function guard_held( $run ) {
+		if ( 'errored' === (string) $run->end_reason ) {
+			return new WP_Error(
+				'saw_interrupted',
+				__( 'This run was closed after it was interrupted. Please contact support and we will restore it.', 'nera-strikeawin' ),
+				array( 'status' => 409 )
+			);
+		}
+		if ( self::pending_info( $run ) ) {
+			return new WP_Error(
+				'saw_pending',
+				__( 'Your run was interrupted. Resume to carry on.', 'nera-strikeawin' ),
+				array( 'status' => 409 )
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * Push the run's wall clock out when a question is served.
+	 *
+	 * Deadlines are stamped at serve time, so the run-level `expires_at` can no
+	 * longer be fixed at the start: the answer reveal and the stage-break screen sit
+	 * between questions and are not on any question's timer. It rolls forward from
+	 * each serve to that question's deadline, plus a timer for every question still
+	 * to come, plus the between-question slack.
+	 *
+	 * @param object $run    Run row.
+	 * @param object $slot   The slot just served (deadline_at set).
+	 * @param array  $config Config snapshot.
+	 */
+	private static function roll_expiry( $run, $slot, array $config ) {
+		global $wpdb;
+		$t     = Nera_SAW_Database::table( 'run_slots' );
+		$after = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE run_id = %d AND slot_no > %d", (int) $run->id, (int) $slot->slot_no )
+		);
+
+		$expires = self::ts( $slot->deadline_at )
+			+ ( $after * self::timer_for( $config ) )
+			+ (int) ceil( Nera_SAW_Constants::LATENCY_GRACE_SECONDS )
+			+ ( ( $after + 1 ) * Nera_SAW_Constants::BETWEEN_QUESTIONS_SLACK_SECONDS );
+
+		self::update_run(
+			(int) $run->id,
+			array(
+				'expires_at'   => gmdate( 'Y-m-d H:i:s', $expires ),
+				'last_seen_at' => current_time( 'mysql' ),
+			)
+		);
 	}
 
 	/**
 	 * Settle every slot whose window closed while nobody was watching.
 	 *
 	 * Walks the unanswered slots in order, scoring each lapsed one as a timeout
-	 * and chaining the next one's deadline from the moment this one *should* have
-	 * ended — not from now, or a player could gain time by disconnecting. Stops at
+	 * Stops at
 	 * the first slot still inside its window: that is the live question.
 	 *
 	 * @param object $run Run row.
@@ -1646,9 +2019,18 @@ class Nera_SAW_Run {
 		$t      = Nera_SAW_Database::table( 'run_slots' );
 		$now_ts = self::ts( current_time( 'mysql' ) );
 		$grace  = Nera_SAW_Constants::LATENCY_GRACE_SECONDS;
-		$config = json_decode( $run->config_snapshot, true );
-		$config = is_array( $config ) ? $config : array();
-		$timer  = self::timer_for( $config );
+
+		/*
+		 * A run held for Resume is frozen: nothing lapses while the player is
+		 * away, because the clock stopped at the last heartbeat (ADR 0030). One held
+		 * past its window is closed for an administrator instead.
+		 */
+		if ( self::interruption_expired( $run ) ) {
+			return self::mark_interruption_expired( $run );
+		}
+		if ( self::pending_info( $run ) ) {
+			return $run;
+		}
 
 		$pending = $wpdb->get_results(
 			$wpdb->prepare( "SELECT * FROM {$t} WHERE run_id = %d AND answered_at IS NULL ORDER BY slot_no ASC", (int) $run->id )
@@ -1695,7 +2077,6 @@ class Nera_SAW_Run {
 					'spins_awarded' => 0,
 				)
 			);
-			self::chain_next_slot( (int) $run->id, (int) $slot->slot_no, $ended_ts, $timer );
 			$changed = true;
 		}
 

@@ -95,6 +95,26 @@ class Nera_SAW_Rest {
 
 		register_rest_route(
 			self::NS,
+			'/run/(?P<id>\d+)/heartbeat',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'require_login' ),
+				'callback'            => array( __CLASS__, 'heartbeat' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/run/(?P<id>\d+)/resume',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'require_login' ),
+				'callback'            => array( __CLASS__, 'resume' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/run/(?P<id>\d+)/abandon',
 			array(
 				'methods'             => 'POST',
@@ -253,6 +273,32 @@ class Nera_SAW_Rest {
 			);
 		}
 		return self::respond( $result, array( 'op' => 'complete', 'run_id' => (int) $req['id'] ) );
+	}
+
+	/**
+	 * POST /run/{id}/heartbeat — the client is still here (ADR 0030).
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function heartbeat( WP_REST_Request $req ) {
+		return self::respond(
+			Nera_SAW_Run::heartbeat( (int) $req['id'], get_current_user_id() ),
+			array( 'op' => 'heartbeat', 'run_id' => (int) $req['id'] )
+		);
+	}
+
+	/**
+	 * POST /run/{id}/resume — pick an interrupted run back up (ADR 0030).
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function resume( WP_REST_Request $req ) {
+		return self::respond(
+			Nera_SAW_Run::resume( (int) $req['id'], get_current_user_id() ),
+			array( 'op' => 'resume', 'run_id' => (int) $req['id'] )
+		);
 	}
 
 	/**

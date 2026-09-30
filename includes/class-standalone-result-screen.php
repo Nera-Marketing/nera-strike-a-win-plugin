@@ -114,67 +114,27 @@ class Nera_SAW_Standalone_Result_Screen {
 	}
 
 	/**
-	 * Draw the section's version.
+	 * Draw the section's version — disabled by request.
+	 *
+	 * `claim_overlay()` above still declines the mu-plugin's own draw on the
+	 * section's screens (so its unskinned purple popup cannot leak through
+	 * instead), but this no longer replaces it with anything of its own: the
+	 * order-received confirmation popup is suppressed entirely on the
+	 * standalone section. The main site is unaffected either way — the
+	 * mu-plugin's overlay still renders normally there, since `claim_overlay()`
+	 * only ever intercepts `on_section_screen()`.
+	 *
+	 * The state is still reset here (not just left set) so a stray second call
+	 * on the same request — the "one draw per request" guard this always had —
+	 * cannot leave `self::$due`/`self::$order` pointing at a stale order.
 	 *
 	 * @param int $order_id Order the shopper has just completed.
 	 */
 	public static function render( $order_id ) {
 		unset( $order_id );
 
-		if ( '' === self::$due ) {
-			return;
-		}
-
-		$type  = self::$due;
-		$order = self::$order;
-
-		// One draw per request, whatever else fires on this hook.
 		self::$due   = '';
 		self::$order = null;
-
-		if ( ! $order instanceof WC_Order ) {
-			return;
-		}
-
-		Nera_SAW_Router::part(
-			'result-screen/' . ( 'prize-draw' === $type ? 'prize-draw.php' : 'instant-win-no-win.php' ),
-			array(
-				'saw_order'   => $order,
-				'saw_product' => self::drawn_product( $order ),
-			)
-		);
-	}
-
-	/**
-	 * The product whose draw date the prize-draw screen reports.
-	 *
-	 * The mu-plugin picks the first lottery line that is neither an instant winner
-	 * nor a Spin To Win product, and that choice is not passed through the filter, so
-	 * it is made again here on the same terms.
-	 *
-	 * @param WC_Order $order The finished order.
-	 * @return WC_Product|null
-	 */
-	private static function drawn_product( $order ) {
-		if ( ! function_exists( 'lty_is_lottery_product' ) ) {
-			return null;
-		}
-
-		foreach ( $order->get_items() as $item ) {
-			$product = $item->get_product();
-
-			if ( ! $product || ! lty_is_lottery_product( $product ) ) {
-				continue;
-			}
-
-			if ( method_exists( $product, 'is_instant_winner' ) && $product->is_instant_winner() ) {
-				continue;
-			}
-
-			return $product;
-		}
-
-		return null;
 	}
 
 	/**

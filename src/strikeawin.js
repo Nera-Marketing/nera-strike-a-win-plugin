@@ -18,6 +18,8 @@ function launch( opts ) {
 		competitionId: parseInt( opts.competitionId, 10 ) || 0,
 		tier: opts.tier || '',
 		startToken: opts.token || '',
+		resume: !! opts.resume,
+		leaveNow: !! opts.leaveNow,
 	} ).mount( el );
 }
 

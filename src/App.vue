@@ -6,6 +6,10 @@ const props = defineProps( {
 	competitionId: { type: Number, required: true },
 	tier: { type: String, default: '' },
 	startToken: { type: String, default: '' },
+	// Set by the interrupted-run popup. Resume skips the language screen (the run
+	// already has its language); leaveNow ends the run and goes to the results.
+	resume: { type: Boolean, default: false },
+	leaveNow: { type: Boolean, default: false },
 } );
 
 const strings = ( window.NeraSAW && window.NeraSAW.strings ) || {};
@@ -175,14 +179,94 @@ async function abandonOnce() {
 }
 
 // Page is genuinely unloading (tab close / address bar / confirmed toolbar
-// reload). Fire a best-effort beacon; pagehide (not beforeunload) so a cancelled
-// native prompt never finalizes a run the player stayed on.
+// reload); pagehide (not beforeunload) so a cancelled native prompt never acts on
+// a run the player stayed on.
+//
+// Under 'let the player continue' this is NOT a leave: the beacon is one last
+// heartbeat, which fixes the moment of interruption so Resume can give back the
+// time that was left (ADR 0030). Under 'close the run' it still abandons.
 function onPageHide() {
-	if ( ! shouldBlockLeave() || abandonSent || ! runId.value ) {
+	if ( abandonSent || ! runId.value ) {
+		return;
+	}
+	if ( resumePolicy === 'resume' ) {
+		if ( quizSessionActive ) {
+			api.heartbeatBeacon( runId.value );
+		}
+		return;
+	}
+	if ( ! shouldBlockLeave() ) {
 		return;
 	}
 	abandonSent = true;
 	api.abandonBeacon( runId.value );
+}
+
+/* --- Heartbeat -------------------------------------------------------------
+ * While a run is on screen (question, reveal, stage break) the server is told
+ * every few seconds that the player is still here. The server derives
+ * "interrupted" from these going quiet; nothing here decides anything.
+ * ------------------------------------------------------------------------- */
+const resumePolicy = ( window.NeraSAW && window.NeraSAW.resumePolicy ) || 'resume';
+let heartbeatTimer = null;
+let heartbeatBusy = false;
+
+function stopHeartbeat() {
+	if ( heartbeatTimer ) {
+		clearInterval( heartbeatTimer );
+		heartbeatTimer = null;
+	}
+}
+
+function startHeartbeat() {
+	stopHeartbeat();
+	const every = Math.max( 1, ( window.NeraSAW && window.NeraSAW.heartbeatSeconds ) || 3 ) * 1000;
+	heartbeatTimer = setInterval( beat, every );
+}
+
+async function beat() {
+	if ( heartbeatBusy || ! runId.value || ! quizSessionActive ) {
+		return;
+	}
+	heartbeatBusy = true;
+	try {
+		const r = await api.heartbeat( runId.value );
+		if ( r && r.errored ) {
+			stopHeartbeat();
+			const err = new Error( t( 'runClosed', 'This run was closed after it was interrupted. Please contact support and we will restore it.' ) );
+			err.code = 'saw_interrupted';
+			fail( err );
+		} else if ( r && r.held ) {
+			// The page is alive but the server had stopped hearing from it (a long
+			// network drop). Pick the run back up in place.
+			await recoverHeld();
+		}
+	} catch ( e ) {
+		// A dropped ping is exactly what the server is built to absorb.
+	} finally {
+		heartbeatBusy = false;
+	}
+}
+
+// Resume the run, then re-read the live question so its clock is the server's.
+async function resumeThen( slotNo ) {
+	try {
+		await api.resumeRun( runId.value );
+	} catch ( e ) {
+		return fail( e );
+	}
+	return loadSlot( slotNo );
+}
+
+async function recoverHeld() {
+	if ( phase.value === 'question' && slot.slot_no ) {
+		return resumeThen( slot.slot_no );
+	}
+	try {
+		await api.resumeRun( runId.value );
+	} catch ( e ) {
+		fail( e );
+	}
 }
 
 function requestLeavePrompt( proceed ) {
@@ -493,6 +577,7 @@ function teardownNavigationGuards() {
 }
 
 function releaseNavigationGuard() {
+	stopHeartbeat();
 	// Every teardown path (error, results, confirmed leave) funnels through here,
 	// so this is where a pending reveal advance is dropped. Without it a hold that
 	// expires after we have abandoned would try to serve the next slot of a run
@@ -816,6 +901,10 @@ async function start() {
 		}
 		quizSessionActive = true;
 		armNavigationGuard();
+		startHeartbeat();
+		if ( props.leaveNow ) {
+			return leaveNowFlow();
+		}
 		if ( maybeShowStageBreak( state ) ) {
 			return;
 		}
@@ -833,6 +922,19 @@ async function start() {
 		}
 		fail( e );
 	}
+}
+
+// "End run" from the interrupted-run popup: the run is finalized as a deliberate
+// leave - earned tickets are minted, the rest of the reserved stock goes back, it
+// cannot be restored - and the player lands on the results.
+async function leaveNowFlow() {
+	abandonSent = true;
+	try {
+		await api.abandonRun( runId.value );
+	} catch ( e ) {
+		return fail( e );
+	}
+	return toEnd();
 }
 
 async function loadSlot( slotNo ) {
@@ -875,6 +977,9 @@ async function loadSlot( slotNo ) {
 		phase.value = 'question';
 		startCountdown();
 	} catch ( e ) {
+		if ( e && e.code === 'saw_pending' ) {
+			return resumeThen( slotNo );
+		}
 		fail( e );
 	}
 }
@@ -938,6 +1043,9 @@ async function submit( option ) {
 		startHold( state );
 	} catch ( e ) {
 		submitting.value = false;
+		if ( e && e.code === 'saw_pending' ) {
+			return resumeThen( slot.slot_no );
+		}
 		fail( e );
 	}
 }
@@ -997,7 +1105,7 @@ function pickLanguage( code ) {
 }
 
 onMounted( () => {
-	if ( hasLanguageChoice ) {
+	if ( hasLanguageChoice && ! props.resume && ! props.leaveNow ) {
 		// Screen 24: the player picks before anything is drawn, so the run itself
 		// is created in the chosen language — see pickLanguage() -> start(). No
 		// navigation guard yet; nothing paid-for exists to protect until they choose.

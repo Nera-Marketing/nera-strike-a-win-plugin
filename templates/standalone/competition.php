@@ -96,6 +96,17 @@ Nera_SAW_Router::part(
 );
 ?>
 
+<?php
+// A run held for Resume comes before everything else on the page (ADR 0030).
+Nera_SAW_Router::part(
+	'parts/resume-popup.php',
+	array(
+		'saw_on_play'           => false,
+		'saw_focus_competition' => (int) $saw_spec['id'],
+	)
+);
+?>
+
 <div class="saw-screen saw-screen--narrow">
 <article class="saw-path">
 
@@ -151,8 +162,23 @@ Nera_SAW_Router::part(
 
 			<p class="saw-buy__eyebrow"><?php echo esc_html( Nera_SAW_Standalone_Fields::shell( 'saw_cd_tier_heading' ) ); ?></p>
 
+			<?php
+			/*
+			 * Runs the player already holds at each tier — bought previously but not
+			 * yet played. class_exists() guards Nera_SAW_Run_Grants the same way the
+			 * language toggle guards Polylang: this template has no other reason to
+			 * assume the class is loaded. Zero balances are left out of the map
+			 * entirely by Nera_SAW_Run_Grants::balance() itself, not filtered here, so
+			 * a tier the player has never bought simply has no entry to find below.
+			 */
+			$saw_tier_balances = ( is_user_logged_in() && class_exists( 'Nera_SAW_Run_Grants' ) )
+				? Nera_SAW_Run_Grants::balance( get_current_user_id(), (int) $saw_spec['id'] )
+				: array();
+			?>
+
 			<ul class="saw-tiers">
 				<?php foreach ( $saw_spec['tiers'] as $saw_i => $saw_tier ) : ?>
+					<?php $saw_tier_balance = isset( $saw_tier_balances[ $saw_tier['key'] ] ) ? (int) $saw_tier_balances[ $saw_tier['key'] ] : 0; ?>
 					<li>
 						<label class="saw-tier">
 							<input type="radio" name="<?php echo esc_attr( Nera_SAW_Cart_Entry::CART_KEY ); ?>"
@@ -160,6 +186,9 @@ Nera_SAW_Router::part(
 								<?php checked( 0, $saw_i ); ?>>
 							<span class="saw-tier__body">
 								<span class="saw-tier__label"><?php echo esc_html( $saw_tier['label'] ); ?></span>
+									<?php if ( $saw_tier_balance > 0 ) : ?>
+										<span class="saw-tier__runs"><?php echo esc_html( Nera_SAW_Frontend::runs_label( $saw_tier_balance ) ); ?></span>
+									<?php endif; ?>
 								<span class="saw-tier__price">
 									<?php
 									echo wp_kses_post(
@@ -184,6 +213,14 @@ Nera_SAW_Router::part(
 									?>
 								</span>
 							</span>
+								<?php if ( $saw_tier_balance > 0 ) : ?>
+									<?php
+									// Straight to the run: the play page sees saw_autostart and launches
+									// without showing its own overview again.
+									$saw_play_url = add_query_arg( 'saw_autostart', '1', nera_saw_get_play_url( (int) $saw_spec['id'], (string) $saw_tier['key'] ) );
+									?>
+									<a class="saw-cta saw-tier__play" href="<?php echo esc_url( $saw_play_url ); ?>"><?php esc_html_e( 'Play quiz', 'nera-strikeawin' ); ?></a>
+								<?php endif; ?>
 						</label>
 					</li>
 				<?php endforeach; ?>

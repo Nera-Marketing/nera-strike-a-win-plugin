@@ -202,6 +202,10 @@ class Nera_SAW_Frontend {
 			'showAnswerFeedback' => $feedback_on ? 1 : 0,
 			'timerWarnSeconds'   => Nera_SAW_Constants::timer_warn_seconds(),
 			'feedbackSeconds'    => Nera_SAW_Constants::feedback_seconds(),
+			// Interrupted runs (ADR 0030). Under 'resume' the page-hide ping only
+			// records the moment of interruption; under 'close' it still abandons.
+			'resumePolicy'       => Nera_SAW_Mode::allows_resume() ? 'resume' : 'close',
+			'heartbeatSeconds'   => Nera_SAW_Constants::HEARTBEAT_SECONDS,
 			'playableLanguages'  => $languages,
 			'languageNames'      => $language_names,
 			// Pre-run stage header data — see the comment above where these are
@@ -251,6 +255,7 @@ class Nera_SAW_Frontend {
 				'tryAgain'           => __( 'Try again', 'nera-strikeawin' ),
 				'errorContactAdmin'  => __( 'Something went wrong. Please contact support and we will investigate and restore your run.', 'nera-strikeawin' ),
 				'runRef'             => __( 'Run reference', 'nera-strikeawin' ),
+				'runClosed'          => __( 'This run was closed after it was interrupted. Please contact support and we will restore it.', 'nera-strikeawin' ),
 				// Quiz language screen.
 				'quizLanguageTitle'  => __( 'Quiz language', 'nera-strikeawin' ),
 				'quizLanguageIntro'  => __( 'Questions and answers will appear in this language', 'nera-strikeawin' ),
@@ -599,6 +604,10 @@ class Nera_SAW_Frontend {
 							competitionId: parseInt( btn.getAttribute( 'data-competition' ), 10 ) || 0,
 							tier: btn.getAttribute( 'data-tier' ) || '',
 							token: btn.getAttribute( 'data-nonce' ) || '',
+							// Resume and Leave come from the interrupted-run popup: neither shows the
+							// language screen, because the run already has its language.
+							resume: btn.hasAttribute( 'data-saw-resume' ),
+							leaveNow: btn.hasAttribute( 'data-saw-leave' ),
 							mountEl: mount
 						} );
 					} else {
