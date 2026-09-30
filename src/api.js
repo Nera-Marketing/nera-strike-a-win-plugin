@@ -82,6 +82,12 @@ export const api = {
 	resumeRun( runId ) {
 		return request( `/run/${ runId }/resume`, 'POST', {} );
 	},
+	// EXPERIMENTAL: one call at the very end instead of one /answer per question.
+	// See Nera_SAW_Run::submit_all_experimental()'s docblock for the security
+	// tradeoff this reopens (answer key visible to the client before answering).
+	submitAll( runId, answers ) {
+		return request( `/run/${ runId }/submit-all`, 'POST', { answers }, 60000 );
+	},
 	// Best-effort client diagnostic report (error or stalled request). Fire-and-
 	// forget: never throws, never blocks gameplay. Feeds the server Quiz Log.
 	logClient( payload ) {

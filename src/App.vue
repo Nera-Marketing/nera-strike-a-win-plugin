@@ -113,6 +113,14 @@ const totalSlots = ref( 0 );
 const spinsSoFar = ref( 0 );
 const spinsFinal = ref( null );
 
+// EXPERIMENTAL (see Nera_SAW_Run::submit_all_experimental() docblock): the
+// run-wide timer (CMS config, not per-run state) and the XOR seed Start/Resume
+// send once, plus the answers accumulated locally and reported in a single
+// submit-all call at the end instead of one /answer call per question.
+const timerSeconds = ref( 0 );
+const obfuscationSeed = ref( 0 );
+const experimentalAnswers = [];
+
 const selectedAnswer = ref( null );
 const submitting = ref( false ); // answer POST in flight (reveal can't paint until it lands).
 const revealCorrectIndex = ref( -1 ); // -1 = nothing to reveal (unusable snapshot).
@@ -846,6 +854,12 @@ function applyState( state ) {
 	// Only Start/Resume send this (the whole run's content, once); every other
 	// call to applyState() (answer, etc.) simply has nothing here to cache.
 	cacheSlotContent( state.slots );
+	if ( state.timer_seconds ) {
+		timerSeconds.value = state.timer_seconds;
+	}
+	if ( state.obfuscation_seed !== undefined && state.obfuscation_seed !== null ) {
+		obfuscationSeed.value = state.obfuscation_seed;
+	}
 }
 
 // The reference design's constant, mirrored from Nera_SAW_Mode::QUIZ_LADDER —
@@ -949,60 +963,42 @@ async function loadSlot( slotNo ) {
 	clearTicker();
 	clearHold();
 	retryAction = () => loadSlot( slotNo );
-	try {
-		// Content first, from the cache Start/Resume already filled — never a
-		// fetch for this part. Missing only if the cache was somehow never
-		// populated (shouldn't happen; Start/Resume always sends it), in which
-		// case the fields below simply keep whatever the slot object last held.
-		const cached = slotContentCache.get( slotNo );
-		if ( cached ) {
-			Object.assign( slot, cached );
-		}
-
-		// Then the live part — arms this slot's clock server-side (first visit
-		// only) and returns just the moment-to-moment fields the cache can't
-		// know: timer_seconds, seconds_left, spins_so_far, total_slots.
-		const data = await api.getSlot( runId.value, slotNo );
-		if ( data.status === 'finalized' ) {
-			applyState( data );
-			return toEnd();
-		}
-		Object.assign( slot, data );
-		spinsSoFar.value = data.spins_so_far || 0;
-		totalSlots.value = data.total_slots || totalSlots.value;
-		// The head-bar's "Stage N of M" reads these on every slot, not only the
-		// first of a stage — maybeShowStageBreak() sets them for the transition,
-		// but a plain loadSlot() (stage 1, or the second+ question within a stage)
-		// never goes through there and must not be left showing a stale stage.
-		// Sourced from the cache now (serve_slot() no longer returns them).
-		stageNo.value = ( cached && cached.stage_no ) || stageNo.value;
-		stageCount.value = ( cached && cached.stage_count ) || stageCount.value;
-
-		// Reset only now that the replacement question is in hand. Clearing earlier
-		// would blank the reveal — highlights gone, countdown at zero, options live
-		// again — for however long the fetch takes, on the screen the player is
-		// still looking at. locked must drop before the expired-slot path below, or
-		// its submit('') would no-op against the previous answer's lock.
-		locked.value = false;
-		submitting.value = false;
-		advancing.value = false;
-		selectedAnswer.value = null;
-		revealCorrectIndex.value = -1;
-		revealSecondsLeft.value = 0;
-		revealIsFinal.value = false;
-
-		if ( slot.seconds_left <= 0 ) {
-			return submit( '' );
-		}
-
-		phase.value = 'question';
-		startCountdown();
-	} catch ( e ) {
-		if ( e && e.code === 'saw_pending' ) {
-			return resumeThen( slotNo );
-		}
-		fail( e );
+	// Content first, from the cache Start/Resume already filled — never a
+	// fetch for this part. Missing only if the cache was somehow never
+	// populated (shouldn't happen; Start/Resume always sends it), in which
+	// case the fields below simply keep whatever the slot object last held.
+	const cached = slotContentCache.get( slotNo );
+	if ( cached ) {
+		Object.assign( slot, cached );
 	}
+
+	// EXPERIMENTAL (see Nera_SAW_Run::submit_all_experimental() docblock): no
+	// per-slot fetch any more — the clock is armed from the one run-wide
+	// timer_seconds Start/Resume sent, reset to full every time (the accepted
+	// tradeoff for not tracking a server-side per-question deadline here).
+	// const data = await api.getSlot( runId.value, slotNo );
+	// if ( data.status === 'finalized' ) { applyState( data ); return toEnd(); }
+	// Object.assign( slot, data );
+	slot.slot_no = slotNo;
+	slot.timer_seconds = timerSeconds.value;
+	slot.seconds_left = timerSeconds.value;
+	// The head-bar's "Stage N of M" reads these on every slot, not only the
+	// first of a stage — maybeShowStageBreak() sets them for the transition,
+	// but a plain loadSlot() (stage 1, or the second+ question within a stage)
+	// never goes through there and must not be left showing a stale stage.
+	stageNo.value = ( cached && cached.stage_no ) || stageNo.value;
+	stageCount.value = ( cached && cached.stage_count ) || stageCount.value;
+
+	locked.value = false;
+	submitting.value = false;
+	advancing.value = false;
+	selectedAnswer.value = null;
+	revealCorrectIndex.value = -1;
+	revealSecondsLeft.value = 0;
+	revealIsFinal.value = false;
+
+	phase.value = 'question';
+	startCountdown();
 }
 
 function startCountdown() {
@@ -1038,6 +1034,31 @@ function advanceAfterAnswer( state ) {
 	}
 }
 
+// EXPERIMENTAL: same shape advanceAfterAnswer()/maybeShowStageBreak() expect
+// from the server's per-answer response, built instead from the slot content
+// Start/Resume already cached — nothing here is fetched.
+function buildExperimentalAdvanceState( nextSlotNo ) {
+	if ( nextSlotNo > totalSlots.value ) {
+		return { status: 'finalized', next_slot: null };
+	}
+	const next = slotContentCache.get( nextSlotNo );
+	return {
+		status: 'active',
+		next_slot: nextSlotNo,
+		next_stage: next
+			? {
+				quiz_method: next.quiz_method,
+				is_first_of_stage: next.is_first_of_stage,
+				stage_no: next.stage_no,
+				stage_count: next.stage_count,
+				reward_label: next.stage_reward_label,
+				level_label: next.level_label,
+				level_text_color: next.level_text_color,
+			}
+			: null,
+	};
+}
+
 async function submit( option ) {
 	if ( locked.value ) {
 		return;
@@ -1046,29 +1067,37 @@ async function submit( option ) {
 	submitting.value = true;
 	clearTicker();
 	retryAction = () => submit( option );
-	try {
-		const state = await api.answer( runId.value, slot.slot_no, option );
-		applyState( state );
-		if ( state.result ) {
-			Object.assign( lastResult, state.result );
-		}
-		submitting.value = false;
-		if ( ! isAnswerFeedbackEnabled() ) {
-			return advanceAfterAnswer( state );
-		}
-		// Only the server knows which option was right (ADR 0017); it arrives with
-		// this response, so the reveal can only be painted now.
-		revealCorrectIndex.value = Number.isInteger( lastResult.correct_index ) ? lastResult.correct_index : -1;
-		revealIsFinal.value = ( 'finalized' === state.status || ! state.next_slot );
-		phase.value = 'reveal';
-		startHold( state );
-	} catch ( e ) {
-		submitting.value = false;
-		if ( e && e.code === 'saw_pending' ) {
-			return resumeThen( slot.slot_no );
-		}
-		fail( e );
+
+	// EXPERIMENTAL (see Nera_SAW_Run::submit_all_experimental() docblock): score
+	// locally against the obfuscated answer key already in slotContentCache,
+	// accumulate the answer, and only hit the server once — at the very end
+	// (fetchRunComplete()'s submit-all call) — instead of one /answer per question.
+	// const state = await api.answer( runId.value, slot.slot_no, option );
+	// applyState( state );
+	const cached = slotContentCache.get( slot.slot_no );
+	const correctIndex = cached ? ( cached.answer_key ^ obfuscationSeed.value ) : -1;
+	const chosenIndex = ( '' === option ) ? -1 : option;
+	const isCorrect = ( -1 !== chosenIndex && chosenIndex === correctIndex );
+	const awarded = isCorrect ? ( slot.reward || 0 ) : 0;
+
+	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
+	spinsSoFar.value = ( spinsSoFar.value || 0 ) + awarded;
+	Object.assign( lastResult, {
+		correct: isCorrect,
+		timed_out: ( '' === option ),
+		spins_awarded: awarded,
+		correct_index: correctIndex,
+	} );
+
+	const state = buildExperimentalAdvanceState( slot.slot_no + 1 );
+	submitting.value = false;
+	if ( ! isAnswerFeedbackEnabled() ) {
+		return advanceAfterAnswer( state );
 	}
+	revealCorrectIndex.value = correctIndex;
+	revealIsFinal.value = ( 'finalized' === state.status || ! state.next_slot );
+	phase.value = 'reveal';
+	startHold( state );
 }
 
 async function fetchRunComplete() {
@@ -1078,7 +1107,10 @@ async function fetchRunComplete() {
 	ticketsLoading.value = true;
 	ticketsError.value = '';
 	try {
-		const summary = await api.completeRun( runId.value );
+		// EXPERIMENTAL: one call carrying every locally-accumulated answer,
+		// instead of a separate /answer per question plus this /complete call.
+		// const summary = await api.completeRun( runId.value );
+		const summary = await api.submitAll( runId.value, experimentalAnswers );
 		if ( summary.spins_final !== null && summary.spins_final !== undefined ) {
 			spinsFinal.value = summary.spins_final;
 		}

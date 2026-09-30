@@ -105,7 +105,14 @@ class Nera_SAW_Run {
 		// The whole run's content, once, instead of one fetch per question as the
 		// player advances — see bulk_slots_payload()'s own docblock for why this
 		// carries no correct-answer flag and does not start any timer by itself.
-		$state['slots'] = self::bulk_slots_payload( $run );
+		// $state['slots'] = self::bulk_slots_payload( $run );
+		// EXPERIMENTAL: one run-wide timer value (CMS-configured, not per-run state)
+		// so the client can arm each question's clock itself instead of asking
+		// serve_slot() for seconds_left — see the docblock above for why a full
+		// reset instead of a real-time countdown is the accepted tradeoff here.
+		$state['timer_seconds']     = self::timer_for( $config );
+		$state['obfuscation_seed'] = wp_rand( 1, 254 );
+		$state['slots']            = self::bulk_slots_payload_experimental_with_answers( $run, $state['obfuscation_seed'] );
 		return $state;
 	}
 
@@ -260,7 +267,10 @@ class Nera_SAW_Run {
 		}
 
 		$state           = self::state( $active );
-		$state['slots']  = self::bulk_slots_payload( $active );
+		// $state['slots'] = self::bulk_slots_payload( $active );
+		$state['timer_seconds']     = self::timer_for( $live_config );
+		$state['obfuscation_seed'] = wp_rand( 1, 254 );
+		$state['slots']            = self::bulk_slots_payload_experimental_with_answers( $active, $state['obfuscation_seed'] );
 		return $state;
 	}
 
@@ -539,6 +549,163 @@ class Nera_SAW_Run {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * EXPERIMENTAL — evaluated for release at the user's explicit direction,
+	 * against the concrete objection already on record: this sends every
+	 * question's correct answer to the browser before the player answers
+	 * anything, which is trivially readable via the browser's own Network
+	 * tab — no tooling or skill beyond that is needed. It reopens exactly the
+	 * guarantee `bulk_slots_payload()` above (and serve_slot()'s own docblock,
+	 * and every other screen in this run engine) was built to hold: "the
+	 * answer key never leaves the server." For a real-money, Gambling Act
+	 * 2005 skill-competition, that guarantee is what makes it a skill
+	 * competition rather than a lottery with extra steps.
+	 *
+	 * `$obfuscation_seed` (XOR'd against each correct index) is not a
+	 * security boundary and is not presented as one: the seed has to travel
+	 * to the client for the client to undo it, the same reason no client-side
+	 * "encryption" scheme can work here (see the grilling session this came
+	 * out of). It exists only so the correct index is not sitting in the
+	 * network payload as a bare, human-legible integer next to its answer
+	 * text — a deterrent against a glance, not a lock.
+	 *
+	 * @param object $run             Run row.
+	 * @param int    $obfuscation_seed XOR seed, generated once per call and
+	 *                                 returned alongside so the client can undo it.
+	 * @return array<int, array> One entry per slot, in slot order.
+	 */
+	private static function bulk_slots_payload_experimental_with_answers( $run, $obfuscation_seed ) {
+		global $wpdb;
+		$t     = Nera_SAW_Database::table( 'run_slots' );
+		$slots = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC", (int) $run->id ) );
+
+		$config     = json_decode( $run->config_snapshot, true );
+		$config     = is_array( $config ) ? $config : array();
+		$multiplier = self::tier_multiplier( $run );
+		$stage_map  = self::stage_map_for_slots( (array) $slots, $config );
+
+		$out = array();
+		foreach ( (array) $slots as $slot ) {
+			$snapshot = self::ensure_slot_snapshot( $slot );
+			if ( ! $snapshot ) {
+				continue;
+			}
+
+			$all     = (array) $snapshot['answers'];
+			$order   = ! empty( $snapshot['display_order'] ) ? (array) $snapshot['display_order'] : array_keys( $all );
+			$answers = array();
+			foreach ( $order as $i ) {
+				$i = (int) $i;
+				if ( isset( $all[ $i ] ) ) {
+					$answers[] = array(
+						'index' => $i,
+						'text'  => (string) $all[ $i ]['text'],
+					);
+				}
+			}
+
+			$level_def     = Nera_SAW_Constants::level( $slot->level_key );
+			$stage         = isset( $stage_map[ (int) $slot->slot_no ] )
+				? $stage_map[ (int) $slot->slot_no ]
+				: array( 'stage_no' => 1, 'stage_count' => 1, 'is_first_of_stage' => true );
+			$correct_index = isset( $snapshot['correct_index'] ) ? (int) $snapshot['correct_index'] : -1;
+
+			$out[] = array(
+				'slot_no'            => (int) $slot->slot_no,
+				'level'              => $slot->level_key,
+				'level_label'        => $level_def ? (string) $level_def['label'] : '',
+				'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+				'question'           => (string) $snapshot['question_text'],
+				'answers'            => $answers,
+				// See this method's own docblock: obfuscated, not protected.
+				'answer_key'         => $correct_index ^ $obfuscation_seed,
+				'reward'             => (int) $slot->reward_base * $multiplier,
+				'quiz_method'        => isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::QUIZ_RANDOM,
+				'stage_no'           => $stage['stage_no'],
+				'stage_count'        => $stage['stage_count'],
+				'is_first_of_stage'  => $stage['is_first_of_stage'],
+				'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * EXPERIMENTAL companion to bulk_slots_payload_experimental_with_answers():
+	 * finalize a run from the client's own report of what it did, instead of
+	 * server-verified per-answer state. Ticket math is still computed here
+	 * from the competition's own config (never from a client-supplied ticket
+	 * count directly), which bounds the payout to what the config actually
+	 * allows — but which slots counted as "correct" is taken on the client's
+	 * word, because under this design the server has no per-answer record of
+	 * its own left to check it against.
+	 *
+	 * @param int   $run_id  Run ID.
+	 * @param int   $user_id Acting user.
+	 * @param array $answers [{slot_no, chosen_index}], one per slot the client says it answered.
+	 * @return array|WP_Error
+	 */
+	public static function submit_all_experimental( $run_id, $user_id, array $answers ) {
+		$run = self::owned_run( $run_id, $user_id );
+		if ( is_wp_error( $run ) ) {
+			return $run;
+		}
+		if ( 'active' !== $run->status ) {
+			return self::state( $run );
+		}
+
+		global $wpdb;
+		$t     = Nera_SAW_Database::table( 'run_slots' );
+		$slots = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC", (int) $run_id ) );
+		$by_no = array();
+		foreach ( (array) $slots as $slot ) {
+			$by_no[ (int) $slot->slot_no ] = $slot;
+		}
+
+		$multiplier = self::tier_multiplier( $run );
+		$now        = current_time( 'mysql' );
+
+		foreach ( $answers as $a ) {
+			$slot_no = isset( $a['slot_no'] ) ? (int) $a['slot_no'] : 0;
+			if ( ! isset( $by_no[ $slot_no ] ) || $by_no[ $slot_no ]->answered_at ) {
+				continue;
+			}
+			$slot          = $by_no[ $slot_no ];
+			$snapshot      = self::ensure_slot_snapshot( $slot );
+			$correct_index = $snapshot ? (int) $snapshot['correct_index'] : -1;
+			$chosen_index  = isset( $a['chosen_index'] ) ? (int) $a['chosen_index'] : -1;
+			$correct       = ( $chosen_index === $correct_index );
+			$awarded       = $correct ? (int) $slot->reward_base * $multiplier : 0;
+
+			self::update_slot(
+				$slot->id,
+				array(
+					'answered_at'   => $now,
+					'chosen_index'  => $chosen_index,
+					'is_correct'    => $correct ? 1 : 0,
+					'outcome'       => $correct ? 'correct' : 'wrong',
+					'spins_awarded' => $awarded,
+				)
+			);
+		}
+
+		// Anything the client's report never mentioned is scored zero, same as
+		// an ordinary timeout — see abandon()'s own handling of this.
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$t} SET answered_at = %s, is_correct = 0, outcome = 'timeout', spins_awarded = 0
+				 WHERE run_id = %d AND answered_at IS NULL",
+				$now,
+				(int) $run_id
+			)
+		);
+
+		self::finalize( (int) $run_id, 'completed' );
+
+		return self::complete_run( (int) $run_id, (int) $user_id );
 	}
 
 	/**
@@ -2021,7 +2188,11 @@ class Nera_SAW_Run {
 		// copy of the run's content left to fall back on.
 		$fresh_run       = self::get_run( (int) $run_id );
 		$state           = self::state( $fresh_run );
-		$state['slots']  = self::bulk_slots_payload( $fresh_run );
+		// $state['slots'] = self::bulk_slots_payload( $fresh_run );
+		$fresh_config               = json_decode( (string) $fresh_run->config_snapshot, true );
+		$state['timer_seconds']     = self::timer_for( is_array( $fresh_config ) ? $fresh_config : array() );
+		$state['obfuscation_seed'] = wp_rand( 1, 254 );
+		$state['slots']            = self::bulk_slots_payload_experimental_with_answers( $fresh_run, $state['obfuscation_seed'] );
 		return $state;
 	}
 

@@ -123,6 +123,19 @@ class Nera_SAW_Rest {
 			)
 		);
 
+		// EXPERIMENTAL (see Nera_SAW_Run::submit_all_experimental() docblock): the
+		// client reports every answer it collected locally, in one call, instead of
+		// per-question. Not a release candidate as-is.
+		register_rest_route(
+			self::NS,
+			'/run/(?P<id>\d+)/submit-all',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'require_login' ),
+				'callback'            => array( __CLASS__, 'submit_all' ),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/competition/(?P<id>\d+)/pool',
@@ -327,6 +340,37 @@ class Nera_SAW_Rest {
 			);
 		}
 		return self::respond( $result, array( 'op' => 'abandon', 'run_id' => (int) $req['id'] ) );
+	}
+
+	/**
+	 * POST /run/{id}/submit-all — EXPERIMENTAL (see
+	 * Nera_SAW_Run::submit_all_experimental() docblock). The client reports every
+	 * answer it collected locally, once, instead of per-question via /answer.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function submit_all( WP_REST_Request $req ) {
+		$answers = $req->get_param( 'answers' );
+		$answers = is_array( $answers ) ? $answers : array();
+
+		$result = Nera_SAW_Run::submit_all_experimental( (int) $req['id'], get_current_user_id(), $answers );
+		if ( ! is_wp_error( $result ) ) {
+			$minted = is_array( $result['ticket_numbers'] ?? null ) ? count( $result['ticket_numbers'] ) : 0;
+			Nera_SAW_Log::add(
+				'run_complete',
+				array(
+					'run_id'         => (int) $req['id'],
+					'competition_id' => (int) ( $result['competition_id'] ?? 0 ),
+					'tier_key'       => (string) ( $result['tier_key'] ?? '' ),
+					'order_id'       => (int) ( $result['order_id'] ?? 0 ),
+					'user_id'        => get_current_user_id(),
+					'message'        => sprintf( 'Run complete via submit-all (experimental): %d tickets won, %d minted', (int) ( $result['spins_final'] ?? 0 ), $minted ),
+					'context'        => array( 'spins_final' => (int) ( $result['spins_final'] ?? 0 ), 'minted' => $minted ),
+				)
+			);
+		}
+		return self::respond( $result, array( 'op' => 'submit_all', 'run_id' => (int) $req['id'] ) );
 	}
 
 	/**
