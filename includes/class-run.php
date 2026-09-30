@@ -485,6 +485,18 @@ class Nera_SAW_Run {
 		$config     = is_array( $config ) ? $config : array();
 		$multiplier = self::tier_multiplier( $run );
 
+		/*
+		 * Stage assignment for every slot, computed once from the rows already
+		 * fetched above — not stage_of() per slot. stage_of() re-runs its own
+		 * "SELECT every slot in this run" query on every single call, which is
+		 * fine for its real callers (once, for one slot — the live one, or the
+		 * next one), but here, called once per slot in a 12-13 iteration loop,
+		 * that turned into 12-13 redundant round trips of the same query,
+		 * measured on staging at ~2s added to Start alone. Same grouping rule
+		 * as stage_of(), just walked across $slots once.
+		 */
+		$stage_map = self::stage_map_for_slots( (array) $slots, $config );
+
 		$out = array();
 		foreach ( (array) $slots as $slot ) {
 			$snapshot = self::ensure_slot_snapshot( $slot );
@@ -506,7 +518,9 @@ class Nera_SAW_Run {
 			}
 
 			$level_def = Nera_SAW_Constants::level( $slot->level_key );
-			$stage     = self::stage_of( (int) $run->id, $config, (int) $slot->slot_no );
+			$stage     = isset( $stage_map[ (int) $slot->slot_no ] )
+				? $stage_map[ (int) $slot->slot_no ]
+				: array( 'stage_no' => 1, 'stage_count' => 1, 'is_first_of_stage' => true );
 
 			$out[] = array(
 				'slot_no'            => (int) $slot->slot_no,
@@ -525,6 +539,54 @@ class Nera_SAW_Run {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * stage_of()'s own grouping rule (ladder: a stage is a consecutive run of
+	 * slots sharing one level_key; random: every slot is its own stage), computed
+	 * for every slot in one pass over an already-fetched slots list instead of
+	 * one query per slot. See bulk_slots_payload(), its only caller.
+	 *
+	 * @param object[] $slots  Run slot rows, in slot_no order (must include slot_no + level_key).
+	 * @param array    $config Decoded config snapshot (reads quiz_method).
+	 * @return array<int, array{stage_no:int, stage_count:int, is_first_of_stage:bool}> Keyed by slot_no.
+	 */
+	private static function stage_map_for_slots( array $slots, array $config ) {
+		$is_ladder = isset( $config['quiz_method'] ) && Nera_SAW_Mode::QUIZ_LADDER === $config['quiz_method'];
+		$map       = array();
+
+		if ( ! $is_ladder ) {
+			$count = count( $slots );
+			foreach ( $slots as $i => $row ) {
+				$map[ (int) $row->slot_no ] = array(
+					'stage_no'          => $i + 1,
+					'stage_count'       => $count,
+					'is_first_of_stage' => true,
+				);
+			}
+			return $map;
+		}
+
+		$stage_no   = 0;
+		$prev_level = null;
+		foreach ( $slots as $row ) {
+			$first = false;
+			if ( $row->level_key !== $prev_level ) {
+				$stage_no++;
+				$prev_level = $row->level_key;
+				$first      = true;
+			}
+			$map[ (int) $row->slot_no ] = array(
+				'stage_no'          => $stage_no,
+				'stage_count'       => null, // Filled in below, once the final count is known.
+				'is_first_of_stage' => $first,
+			);
+		}
+		foreach ( $map as $slot_no => $info ) {
+			$map[ $slot_no ]['stage_count'] = $stage_no;
+		}
+
+		return $map;
 	}
 
 	/**
