@@ -1518,10 +1518,14 @@ onUnmounted( () => {
 	box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--saw-brand) 50%, transparent);
 	transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
-.saw-btn-submit:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--saw-brand) 92%, #000);
-	transform: translateY(-1px);
-	box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--saw-brand) 55%, transparent);
+/* (hover: hover) so a tap on a touchscreen never leaves this stuck on — mobile
+   browsers apply :hover on tap and only clear it on the next tap elsewhere. */
+@media (hover: hover) and (pointer: fine) {
+	.saw-btn-submit:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--saw-brand) 92%, #000);
+		transform: translateY(-1px);
+		box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--saw-brand) 55%, transparent);
+	}
 }
 .saw-btn-submit:active:not(:disabled) { transform: translateY(0); }
 .saw-btn-submit:focus-visible {
@@ -1615,14 +1619,19 @@ onUnmounted( () => {
 	box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--saw-brand) 45%, transparent);
 	transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
-a.saw-btn:hover, button.saw-btn:hover:not(:disabled) {
-	color: #fff;
-	text-decoration: none;
-	background: color-mix(in srgb, var(--saw-brand) 90%, #000);
-	transform: translateY(-1px);
+/* (hover: hover) — see .saw-btn-submit:hover above for why. */
+@media (hover: hover) and (pointer: fine) {
+	a.saw-btn:hover, button.saw-btn:hover:not(:disabled) {
+		color: #fff;
+		text-decoration: none;
+		background: color-mix(in srgb, var(--saw-brand) 90%, #000);
+		transform: translateY(-1px);
+	}
 }
 .saw-btn-ghost { background: transparent; color: var(--saw-brand); border: 2px solid color-mix(in srgb, var(--saw-brand) 35%, transparent); box-shadow: none; }
-a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled) { color: var(--saw-brand); background: color-mix(in srgb, var(--saw-brand) 8%, #fff); }
+@media (hover: hover) and (pointer: fine) {
+	a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled) { color: var(--saw-brand); background: color-mix(in srgb, var(--saw-brand) 8%, #fff); }
+}
 .saw-notice { text-align: center; }
 .saw-error { color: #dc2626; }
 .saw-error__msg { margin: 0 0 14px; font-weight: 600; }
@@ -1665,7 +1674,9 @@ a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled)
 	font-size: 16px; font-weight: 700; color: var(--saw-text); cursor: pointer;
 	transition: border-color .12s, box-shadow .12s;
 }
-.saw-langcard__btn:hover { border-color: var(--saw-brand); box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--saw-brand) 30%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+	.saw-langcard__btn:hover { border-color: var(--saw-brand); box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--saw-brand) 30%, transparent); }
+}
 
 /* ---- the stage bar, shared by stage-break and question/reveal (25/26/27) --
    Background colour comes straight off slot.level_text_color: a value already
@@ -1698,7 +1709,9 @@ a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled)
 	padding: 12px 30px; border: 0; border-radius: 12px;
 	background: var(--saw-brand); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
 }
-.saw-stagebreak__continue:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); }
+@media (hover: hover) and (pointer: fine) {
+	.saw-stagebreak__continue:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); }
+}
 
 /* ---- question / reveal (26 / 27) ------------------------------------ */
 .saw-qbody { padding: 22px 24px 26px; }
@@ -1741,7 +1754,12 @@ a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled)
 	border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--saw-text); cursor: pointer;
 	transition: border-color .12s, background .12s, box-shadow .12s, opacity .12s;
 }
-.saw-answer:hover:not(:disabled) { border-color: var(--saw-brand); }
+/* (hover: hover) so tapping an option on a touchscreen never leaves its border
+   stuck highlighted — mobile browsers apply :hover on tap and only clear it on
+   the next tap elsewhere, which read as the option staying "selected" forever. */
+@media (hover: hover) and (pointer: fine) {
+	.saw-answer:hover:not(:disabled) { border-color: var(--saw-brand); }
+}
 .saw-answer:disabled { cursor: default; }
 .saw-answer.is-selected { border-color: var(--saw-brand); box-shadow: 0 0 0 1px var(--saw-brand); }
 .saw-answer.is-correct { background: var(--saw-ok); border-color: var(--saw-ok); color: #fff; }
@@ -1805,14 +1823,18 @@ a.saw-btn.saw-btn-ghost:hover, button.saw-btn.saw-btn-ghost:hover:not(:disabled)
 	display: block; padding: 15px; border-radius: 12px; text-align: center;
 	background: var(--saw-brand); color: #fff; font-weight: 700; font-size: 15px; text-decoration: none;
 }
-.saw-results__primary:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); color: #fff; }
+@media (hover: hover) and (pointer: fine) {
+	.saw-results__primary:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); color: #fff; }
+}
 .saw-results__primary.is-ghost { background: #fff; color: var(--saw-text); border: 1.5px solid var(--saw-surface); }
 .saw-results__secondary {
 	display: block; padding: 15px; border-radius: 12px; text-align: center;
 	background: #fff; color: var(--saw-text); font-weight: 700; font-size: 15px; text-decoration: none;
 	border: 1.5px solid var(--saw-surface);
 }
-.saw-results__secondary:hover { border-color: var(--saw-brand); color: var(--saw-brand); }
+@media (hover: hover) and (pointer: fine) {
+	.saw-results__secondary:hover { border-color: var(--saw-brand); color: var(--saw-brand); }
+}
 /* Zero-tickets: the emphasis reverses — "play again" is quiet, "back" is a bare
    link — so the screen does not read as a nudge to spend more right after a loss. */
 .saw-results__actions.is-muted .saw-results__secondary.is-link {
@@ -1886,13 +1908,17 @@ body.saw-quiz-takeover .saw-connector { display: none; }
 	cursor: pointer; box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--saw-brand) 50%, transparent);
 	transition: background .15s ease, transform .15s ease;
 }
-.saw-leave__stay:hover { background: color-mix(in srgb, var(--saw-brand) 88%, #000); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) {
+	.saw-leave__stay:hover { background: color-mix(in srgb, var(--saw-brand) 88%, #000); transform: translateY(-1px); }
+}
 .saw-leave__go {
 	display: block; width: 100%; padding: 10px 12px; border: none; border-radius: 8px;
 	background: transparent; color: var(--saw-text-muted); font-weight: 600; font-size: 14px;
 	cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
 }
-.saw-leave__go:hover { color: var(--saw-text); background: #f8fafc; }
+@media (hover: hover) and (pointer: fine) {
+	.saw-leave__go:hover { color: var(--saw-text); background: #f8fafc; }
+}
 .saw-leave__stay:focus-visible, .saw-leave__go:focus-visible, .saw-leave__backdrop:focus-visible {
 	outline: 2px solid var(--saw-brand);
 	outline-offset: 2px;
