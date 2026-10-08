@@ -62,6 +62,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_wallet_strings' ), 10, 3 );
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 
@@ -171,6 +172,55 @@ class Nera_SAW_Language {
 			$ru = array(
 				'Need support with your play?' => 'Нужна помощь с игрой?',
 				'Help & support'                => 'Помощь и поддержка',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the sibling woo-wallet plugin's My Wallet panel on the
+	 * my-account page, on the section's own screens. Reported by the user
+	 * after this session's first pass at the account page (the wallet panel
+	 * stayed entirely English despite its own accordion row label already
+	 * translating via templates/woocommerce/myaccount/my-account.php's own
+	 * hand array) — that array only ever touched the row label, never this
+	 * domain's own strings in the panel body.
+	 *
+	 * Several of the client's supplied Russian values are reused here under
+	 * a DIFFERENT English key than the one they were supplied against —
+	 * woo-wallet's own copy differs in case/wording from the client's
+	 * (`'Total Balance'` here vs the supplied `'Total balance'`, `'Wallet
+	 * topup'` vs `'Wallet top-up'`, `'Balance History'` vs `'Balance
+	 * history'`) — same Russian word either way, so the translation still
+	 * applies; the gettext filter has to match woo-wallet's own exact
+	 * source string to ever fire at all. `'For order payment #'` (the
+	 * balance-history row prefix) has no supplied Russian yet and is left
+	 * English — not in either of the client's files.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_wallet_strings( $translated, $original, $domain ) {
+		if ( 'woo-wallet' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'My Wallet'      => 'Мой кошелёк',
+				'Total Balance'  => 'Баланс',
+				'Wallet topup'   => 'Пополнить кошелёк',
+				'Transactions'   => 'Операции',
+				'Balance History' => 'История баланса',
+				'Description'    => 'Описание',
+				'Amount'         => 'Сумма',
 			);
 		}
 
@@ -290,6 +340,11 @@ class Nera_SAW_Language {
 				'Email'                               => 'Эл. почта',
 				'Order number'                       => 'Номер заказа',
 				'Subtotal'                            => 'Промежуточный итог',
+				// Addresses panel body (templates/woocommerce/myaccount/my-
+				// address.php, stock core) — only this one row-title string
+				// has a supplied Russian equivalent; "Shipping address", the
+				// "Edit %s"/"Add %s" wrapper and the empty-state copy do not.
+				'Billing address'                    => 'Платёжный адрес',
 			);
 		}
 
