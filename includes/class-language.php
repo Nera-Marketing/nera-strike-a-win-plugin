@@ -61,6 +61,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 
@@ -136,6 +137,40 @@ class Nera_SAW_Language {
 				'January' => 'Январь', 'February' => 'Февраль', 'March' => 'Март', 'April' => 'Апрель',
 				'May' => 'Май', 'June' => 'Июнь', 'July' => 'Июль', 'August' => 'Август',
 				'September' => 'Сентябрь', 'October' => 'Октябрь', 'November' => 'Ноябрь', 'December' => 'Декабрь',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the sibling responsible-play plugin's footer strip
+	 * ("Need support with your play?" / "Help & support") on the section's
+	 * own screens. Client finding #23: kept (not suppressed) on standalone by
+	 * deliberate choice — see class-standalone-chrome.php — but nothing
+	 * translated its domain before now. `is_standalone_screen()` guards this
+	 * the same way `translate_loginreg_strings()` guards `woocommerce`: this
+	 * plugin's own domain only, never hijacked on a main-site page the strip
+	 * might also appear on.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_responsible_play_strings( $translated, $original, $domain ) {
+		if ( 'nera-responsible-play-plugin' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'Need support with your play?' => 'Нужна помощь с игрой?',
+				'Help & support'                => 'Помощь и поддержка',
 			);
 		}
 
@@ -227,6 +262,34 @@ class Nera_SAW_Language {
 				'I am over the age of 18'         => 'Мне есть 18 лет',
 				'privacy policy'                   => 'политика конфиденциальности',
 				'terms and conditions'             => 'условия использования',
+				/*
+				 * Client findings #27/#28: the my-account page's own nav row
+				 * labels already translate (templates/woocommerce/myaccount/
+				 * my-account.php's own hand-translated array), but every panel
+				 * body fired via woocommerce_account_{endpoint}_endpoint, and
+				 * the checkout/order-received page, are stock WooCommerce core
+				 * templates this plugin cannot edit — gettext is the only hook
+				 * available for them, same as the rest of this array. Added
+				 * from languages/ru/02-russian-strings-prototype.json and
+				 * 02b-russian-strings-dev-build.json (confirmed exact matches
+				 * only — see this session's cross-check report for what is
+				 * NOT yet covered, e.g. "Actions", billing address fields,
+				 * shipping, coupons).
+				 */
+				'My account'                        => 'Мой аккаунт',
+				'Order details'                     => 'Детали заказа',
+				'Orders'                             => 'Заказы',
+				'Payment method'                     => 'Способ оплаты',
+				'First name'                         => 'Имя',
+				'Last name'                          => 'Фамилия',
+				'Place order'                        => 'Оплатить',
+				'Billing details'                    => 'Платёжные данные',
+				'Your order'                         => 'Ваш заказ',
+				'Date'                                => 'Дата',
+				'Total'                               => 'Итого',
+				'Email'                               => 'Эл. почта',
+				'Order number'                       => 'Номер заказа',
+				'Subtotal'                            => 'Промежуточный итог',
 			);
 		}
 
