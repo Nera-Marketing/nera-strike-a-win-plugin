@@ -29,12 +29,10 @@ $saw_languages = Nera_SAW_Language_Switcher::options();
 $saw_age       = Nera_SAW_Language_Switcher::age_state();
 
 /*
- * Same rule the language links themselves use (see the loop below): once age
- * is verified, picking a language also dismisses the gate; until then it only
- * switches which language the gate itself is showing. The close control
- * reuses this so "closed without choosing" is treated as choosing English —
- * the client's own instruction — without ever letting a close double as the
- * 18+ answer nobody gave.
+ * The language links themselves (see the loop below): once age is verified,
+ * picking a language also dismisses the gate; until then it only switches
+ * which language the gate itself is showing — a language pick must not
+ * double as the 18+ answer nobody gave.
  */
 $saw_lang_url = static function ( $code ) use ( $saw_age ) {
 	return $saw_age['verified']
@@ -45,9 +43,20 @@ $saw_lang_url = static function ( $code ) use ( $saw_age ) {
 <div class="saw-gate" role="dialog" aria-modal="true" aria-labelledby="saw-gate-title">
 	<div class="saw-gate__card">
 
+		<?php
+		/*
+		 * Unlike the language links above, closing always fully dismisses the
+		 * gate — "closed without choosing" counts as choosing English, the
+		 * client's own instruction, and as license to stop showing this
+		 * pop-up again. Safe without a real 18+ answer because it is not the
+		 * only gate: before-you-pay.php asks the same question again,
+		 * independently and required, before an order can actually be paid
+		 * for. See close_url()'s own docblock.
+		 */
+		?>
 		<a
 			class="saw-gate__close"
-			href="<?php echo esc_url( $saw_lang_url( 'en' ) ); ?>"
+			href="<?php echo esc_url( Nera_SAW_Language_Switcher::close_url( 'en' ) ); ?>"
 			aria-label="<?php echo esc_attr__( 'Close', 'nera-strikeawin' ); ?>"
 		>
 			<span aria-hidden="true">&times;</span>

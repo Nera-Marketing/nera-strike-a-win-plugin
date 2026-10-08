@@ -78,13 +78,22 @@ class Nera_SAW_Language_Switcher {
 		 * box. Recording entry on `saw_entry`'s presence alone let a bare
 		 * `?saw_entry=1` admit an unverified visitor with no age answer on
 		 * record at all — this checks for the real answer behind it: either
-		 * the checkbox form's own `saw_over18=1`, or a `nera-age-shield`
+		 * the checkbox form's own `saw_over18=1`, a `nera-age-shield`
 		 * verification already on this account (the same source the "already
-		 * verified" branch of the gate itself trusts, see age_state()).
+		 * verified" branch of the gate itself trusts, see age_state()), or
+		 * the close control's own `saw_gate_closed=1` (close_url()) — a
+		 * closed-without-answering signal kept distinct from `saw_over18`
+		 * rather than quietly set alongside it, so this cookie never reads as
+		 * a tick the player did not make. Safe to accept as license to stop
+		 * showing this pop-up specifically: before-you-pay.php asks the same
+		 * 18+ question again, independently, with its own required checkbox,
+		 * before an order can actually be paid for — this cookie only ever
+		 * controls whether the pop-up reappears, never the real gate.
 		 */
 		$ticked   = isset( $_GET['saw_over18'] ) && '1' === $_GET['saw_over18'];
+		$closed   = isset( $_GET['saw_gate_closed'] ) && '1' === $_GET['saw_gate_closed'];
 		$verified = self::age_state()['verified'];
-		if ( ! $ticked && ! $verified ) {
+		if ( ! $ticked && ! $verified && ! $closed ) {
 			return;
 		}
 		// phpcs:enable
@@ -237,6 +246,22 @@ class Nera_SAW_Language_Switcher {
 		$url = '' !== $code ? self::url_for( $code ) : home_url( isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '/' );
 
 		return add_query_arg( 'saw_entry', '1', $url );
+	}
+
+	/**
+	 * The address the pop-up's own close control uses: dismiss it — in a
+	 * given language, defaulting to English per the client's own
+	 * instruction ("closed without choosing" counts as choosing English) —
+	 * without pretending the 18+ question was answered. See the
+	 * `saw_gate_closed` handling in `remember_entry()` for why this is safe:
+	 * the real age gate is before-you-pay.php's own independent, required
+	 * checkbox, not this cookie.
+	 *
+	 * @param string $code Language to default to.
+	 * @return string
+	 */
+	public static function close_url( $code = 'en' ) {
+		return add_query_arg( 'saw_gate_closed', '1', self::entry_url( $code ) );
 	}
 
 	/**
