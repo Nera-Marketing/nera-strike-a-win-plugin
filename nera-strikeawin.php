@@ -152,6 +152,12 @@ register_activation_hook(
 		if ( class_exists( 'Nera_SAW_Reservations' ) ) {
 			Nera_SAW_Reservations::ensure_scheduled();
 		}
+
+		if ( class_exists( 'Nera_SAW_Account_Pages' ) ) {
+			Nera_SAW_Account_Pages::add_endpoints();
+			flush_rewrite_rules( false );
+			update_option( Nera_SAW_Account_Pages::REWRITE_VERSION_OPTION, Nera_SAW_Account_Pages::REWRITE_VERSION );
+		}
 	}
 );
 

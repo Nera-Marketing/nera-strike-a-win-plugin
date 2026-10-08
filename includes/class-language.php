@@ -1497,6 +1497,11 @@ class Nera_SAW_Language {
 				'Answer every question in the quiz'        => 'Ответьте на каждый вопрос',
 				'Player tip'                                => 'Совет игроку',
 				'Stay on this page while you play'         => 'Оставайтесь на этой странице во время игры',
+				// "My runs & tickets" account page (client findings #2/#45/#46).
+				'Ready to play'                             => 'Готово к игре',
+				'Completed'                                  => 'Завершено',
+				'Your runs, tickets and draw results will appear here.'
+					=> 'Здесь появятся ваши попытки, билеты и результаты розыгрышей.',
 				// Add-to-basket toast (class-router.php) — found still
 				// English on a real purchase screenshot.
 				'Entry added. Taking you to Before you pay…' => 'Участие добавлено. Переходим к оплате…',

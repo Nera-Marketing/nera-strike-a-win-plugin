@@ -69,6 +69,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-standalone-chrome.php';
 		require_once $dir . 'class-standalone-basket.php';
 		require_once $dir . 'class-standalone-account.php';
+		require_once $dir . 'class-account-pages.php';
 		require_once $dir . 'class-standalone-result-screen.php';
 		require_once $dir . 'class-spin-pool.php';
 		require_once $dir . 'class-reservations.php';
@@ -148,6 +149,7 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Standalone_Chrome::init();
 		Nera_SAW_Standalone_Basket::init();
 		Nera_SAW_Standalone_Account::init();
+		Nera_SAW_Account_Pages::init();
 		Nera_SAW_Standalone_Result_Screen::init();
 		Nera_SAW_Ticket_Award::init();
 

@@ -1463,6 +1463,70 @@ class Nera_SAW_Run {
 	}
 
 	/**
+	 * Every run this player has ever started or finished, on competitions
+	 * they have touched at all — the "My runs & tickets" account page
+	 * (client finding #45/#2): nothing before this existed to answer "what
+	 * do I hold in the draw" once the result screen has been left. Voided
+	 * runs (admin-restored, refunded back to the balance — see
+	 * `run_counts_for_order_tier()`'s own docblock) are excluded: nothing
+	 * left for a player to act on or be told about.
+	 *
+	 * @param int $user_id        Player.
+	 * @param int $competition_id Limit to one competition, or 0 for every
+	 *                            competition this player has a run on.
+	 * @return array<int, array{
+	 *     competition_id: int,
+	 *     title: string,
+	 *     in_progress: array<int, array{run_id:int, tier_key:string, started_at:string}>,
+	 *     completed: array<int, array{run_id:int, tier_key:string, finalized_at:string, correct_count:int, ticket_numbers:string[]}>
+	 * }> Keyed by competition_id, in no particular order.
+	 */
+	public static function runs_for_user( $user_id, $competition_id = 0 ) {
+		global $wpdb;
+		$t    = Nera_SAW_Database::table( 'runs' );
+		$where = array( "user_id = %d", "status IN ( 'active', 'finalized' )" );
+		$args  = array( (int) $user_id );
+		if ( $competition_id ) {
+			$where[] = 'competition_id = %d';
+			$args[]  = (int) $competition_id;
+		}
+		$sql  = "SELECT id, competition_id, tier_key, status, correct_count, started_at, finalized_at
+			FROM {$t} WHERE " . implode( ' AND ', $where ) . ' ORDER BY competition_id ASC, id DESC';
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql built from literal fragments only, $args is what prepare() binds.
+
+		$by_competition = array();
+		foreach ( (array) $rows as $row ) {
+			$cid = (int) $row->competition_id;
+			if ( ! isset( $by_competition[ $cid ] ) ) {
+				$by_competition[ $cid ] = array(
+					'competition_id' => $cid,
+					'title'          => get_the_title( $cid ),
+					'in_progress'    => array(),
+					'completed'      => array(),
+				);
+			}
+
+			if ( 'active' === $row->status ) {
+				$by_competition[ $cid ]['in_progress'][] = array(
+					'run_id'     => (int) $row->id,
+					'tier_key'   => (string) $row->tier_key,
+					'started_at' => (string) $row->started_at,
+				);
+			} else {
+				$by_competition[ $cid ]['completed'][] = array(
+					'run_id'         => (int) $row->id,
+					'tier_key'       => (string) $row->tier_key,
+					'finalized_at'   => (string) $row->finalized_at,
+					'correct_count'  => (int) $row->correct_count,
+					'ticket_numbers' => self::collect_run_ticket_numbers( (int) $row->id ),
+				);
+			}
+		}
+
+		return array_values( $by_competition );
+	}
+
+	/**
 	 * Ticket numbers earned on all finalized runs for one order line tier.
 	 *
 	 * @param int    $order_id       Order ID.
