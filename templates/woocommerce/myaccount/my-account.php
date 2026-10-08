@@ -1,60 +1,32 @@
 <?php
 /**
- * Standalone section — My account, as one accordion.
+ * Standalone section — My account.
  *
- * WooCommerce's own stock `my-account.php` renders a nav (`navigation.php`)
- * and, separately, whichever ONE endpoint the current URL names
- * (`woocommerce_account_content()` in wc-template-functions.php walks the
- * request's query vars and fires the first `woocommerce_account_{key}_endpoint`
- * action it finds, then stops) — nine rows to choose from, one page of content
- * at a time. Reading an order meant leaving Addresses; checking the wallet
- * meant leaving Orders.
+ * Rebuilt to the client's own design (client findings #2/#45/#46, confirmed
+ * with the user against the actual mock screenshot): a hub screen — avatar,
+ * name, two stat tiles, then a short list of rows to open — rather than the
+ * previous version's one page with every endpoint's content accordioned
+ * open at once. Each row now opens its own page; the hub is what a bare
+ * visit to `/my-account/` shows, and every other screen gets a "Back" link
+ * rather than staying folded into this one.
  *
- * This renders every row's content on every load instead, each inside its own
- * closed `<details>`, and lets the browser do the showing and hiding.
+ * WHAT MOVED
+ * ----------
+ * Addresses and Payment methods are gone from the nav entirely (the client's
+ * own call: a digital run has neither to manage). Orders and My Wallet no
+ * longer have rows of their own — both are folded into "Account details"
+ * alongside the account-edit form, each still its own `<details>` so
+ * reading an order does not mean losing the wallet balance. My runs &
+ * tickets / Draw results / Responsible play are new endpoints this plugin
+ * registers itself (`Nera_SAW_Account_Pages`).
  *
- * WHY EVERY PANEL, EVERY LOAD — NOT LOADED ON OPEN
- * -------------------------------------------------
- * The alternative was fetching a panel's content by script only once its
- * `<details>` opens. That needs JavaScript and an endpoint to ask it from,
- * and both are a second way for this screen to break that a plain page load
- * cannot. WooCommerce's own six render functions were checked one at a time
- * before this was built this way: none of them touch `$post` or `$wp_query`,
- * none require a query var this template does not already know how to supply
- * (`edit-address` needs an explicit empty string — its own default parameter
- * is `'billing'`, which is the individual form, not the Addresses overview
- * this row is supposed to show), and none error for a visitor who has never
- * used the feature — an empty Orders list or a never-touched wallet renders
- * its own "nothing here yet" notice, the same one it would show on its own
- * page. Six extra reads on every visit to this one screen is the honest cost
- * of a real answer instead of another click.
- *
- * FLAT, NOT GROUPED
- * -----------------
- * An earlier version of this screen folded Orders/Addresses/Payment
- * methods/Account details under one "Account" heading and Manage my
- * account/Need support under "Support" — two extra `<details>` to open before
- * reaching a row's own. Once every row already opens on its own to show its
- * content, the outer grouping was doing nothing a flat, deliberately ordered
- * list does not do better: $saw_order below is the order chosen for this
- * screen specifically (My Wallet first — it is the row most players open —
- * down to the two rows that are not content at all).
- *
- * WHAT STAYS A PLAIN LINK
- * ------------------------
- * "Need support?" points at a page of its own — Nera_RP_Settings' help page —
- * not a panel this screen owns; a support desk is not a section, so it stays
- * a normal `<a>`. Log out is a request, not something to read, and is the
- * last row for the same reason it used to be dropped to the bottom of a
- * group: past everything a visitor might actually open.
- *
- * WHAT DOES NOT APPEAR AT ALL
- * ----------------------------
- * Dashboard is WooCommerce's own default fallback — a greeting and a short
- * summary — and this page's fields already say more before a visitor opens
- * anything. Keeping a row whose only content restates what the screen already
- * shows was a row with nothing behind it; removed rather than given an empty
- * accordion body.
+ * WHY A SEPARATE "ACCOUNT DETAILS" COMPOSITE RATHER THAN THREE ROWS
+ * -------------------------------------------------------------------
+ * The hub's own row count was the point of the redesign — four rows to
+ * scan, not eight. Account details' three endpoints keep the previous
+ * version's own reasoning for being on one screen together (reading an
+ * order should not mean leaving the wallet balance), just moved under one
+ * hub row instead of three.
  *
  * Override by copying to `nera-strikeawin/woocommerce/myaccount/my-account.php`
  * in a theme (see Nera_SAW_Standalone_Chrome::unoverride_template()).
@@ -64,187 +36,184 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/**
- * Row order for this screen. An endpoint WooCommerce does not currently offer
- * (no gateway supports saved payment methods, a plugin that adds a row is
- * inactive) is simply absent from `wc_get_account_menu_items()` and skipped —
- * nothing here assumes all of these exist.
- *
- * @param string[] $order Endpoint keys, in the order to render them.
- */
-$saw_order = (array) apply_filters(
-	'nera_saw_account_nav_order',
-	array(
-		'woo-wallet',
-		'orders',
-		'payment-methods',
-		'edit-account',
-		'edit-address',
-		'account-status',
-		'nera-support',
-		'customer-logout',
-	)
-);
-
-/**
- * Endpoints left out of the accordion entirely — nothing here to open.
- *
- * @param string[] $hidden Endpoint keys.
- */
-$saw_hidden = (array) apply_filters( 'nera_saw_account_nav_hidden', array( 'dashboard' ) );
-
-/**
- * Endpoints that stay a plain link rather than becoming an accordion row —
- * an outbound page, or an action, neither of which is content to reveal.
- *
- * @param string[] $plain Endpoint keys.
- */
-$saw_plain = (array) apply_filters( 'nera_saw_account_nav_plain', array( 'nera-support', 'customer-logout' ) );
-
-/**
- * Label overrides. "Manage my account" is the self-exclusion screen's own
- * name for itself; on a row that already reads as part of a "Support" flow,
- * sitting right above "Need support?", the longer name was saying the same
- * thing twice.
- *
- * @param array $labels Endpoint key => label.
- */
-$saw_labels = (array) apply_filters( 'nera_saw_account_nav_labels', array( 'account-status' => __( 'Support', 'nera-strikeawin' ) ) );
-
-/*
- * The row labels themselves are not this plugin's copy to translate the
- * normal way (Nera_SAW_Standalone_Fields' seeded CMS fields): six of the
- * eight come straight from wc_get_account_menu_items(), gettext strings that
- * follow WordPress's own site locale, not this section's saw_lang toggle --
- * the two never switch together, since saw_lang was built to resolve this
- * plugin's own content, not to call switch_to_locale() for every plugin on
- * the page. Confirmed live: with saw_lang=ru, the page heading (a real
- * seeded field) translated correctly and every row label did not. Fixed
- * narrowly, the same way as everything else that isn't this plugin's own
- * field: a small hand-written table, read only when the section is actually
- * serving a non-default language.
- */
-if ( class_exists( 'Nera_SAW_Language' ) && Nera_SAW_Language::current() !== Nera_SAW_Language::default_code() ) {
-	$saw_row_translations = (array) apply_filters(
-		'nera_saw_account_nav_label_translations',
-		array(
-			'ru' => array(
-				'woo-wallet'       => __( 'Кошелёк', 'nera-strikeawin' ),
-				'orders'           => __( 'Заказы', 'nera-strikeawin' ),
-				'payment-methods'  => __( 'Способы оплаты', 'nera-strikeawin' ),
-				'edit-account'     => __( 'Данные аккаунта', 'nera-strikeawin' ),
-				'edit-address'     => __( 'Адреса', 'nera-strikeawin' ),
-				'account-status'   => __( 'Поддержка', 'nera-strikeawin' ),
-				'nera-support'     => __( 'Нужна помощь?', 'nera-strikeawin' ),
-				'customer-logout'  => __( 'Выйти', 'nera-strikeawin' ),
-			),
-		)
-	);
-	$saw_current_lang = Nera_SAW_Language::current();
-	if ( isset( $saw_row_translations[ $saw_current_lang ] ) ) {
-		$saw_labels = array_merge( $saw_labels, $saw_row_translations[ $saw_current_lang ] );
-	}
+$saw_user_id = get_current_user_id();
+if ( ! $saw_user_id ) {
+	return;
 }
 
 $saw_items = wc_get_account_menu_items();
 
-// Anything WooCommerce offers that $saw_order does not mention yet still
-// gets a row, appended before Log out rather than silently dropped — a
-// plugin adding a new endpoint later should not have to also know to list
-// it here.
-$saw_rest = array_values( array_diff( array_keys( $saw_items ), $saw_order, $saw_hidden ) );
-$saw_logout_pos = array_search( 'customer-logout', $saw_order, true );
-if ( false !== $saw_logout_pos && $saw_rest ) {
-	array_splice( $saw_order, $saw_logout_pos, 0, $saw_rest );
-} else {
-	$saw_order = array_merge( $saw_order, $saw_rest );
+/**
+ * Endpoints folded into the "Account details" composite rather than kept
+ * as rows of their own.
+ *
+ * @param string[] $keys Endpoint keys.
+ */
+$saw_account_details_keys = (array) apply_filters(
+	'nera_saw_account_details_endpoints',
+	array( 'edit-account', 'orders', 'woo-wallet' )
+);
+
+global $wp;
+
+/**
+ * Which hub row (if any) the current request is inside. Endpoints folded
+ * into "Account details" all answer to that one key; everything else
+ * answers to its own.
+ *
+ * @return string Row key, or '' for the hub itself.
+ */
+$saw_current_row = static function () use ( $saw_account_details_keys ) {
+	foreach ( array_merge( $saw_account_details_keys, array( 'my-runs-tickets', 'draw-results', 'responsible-play' ) ) as $saw_key ) {
+		if ( wc_is_current_account_menu_item( $saw_key ) ) {
+			return in_array( $saw_key, $saw_account_details_keys, true ) ? 'account-details' : $saw_key;
+		}
+	}
+	return '';
+};
+$saw_row = $saw_current_row();
+
+if ( '' === $saw_row ) {
+	// ---------------------------------------------------------------
+	// Hub.
+	// ---------------------------------------------------------------
+	$saw_user         = wp_get_current_user();
+	$saw_display_name = $saw_user->display_name ? $saw_user->display_name : $saw_user->user_login;
+	$saw_initial      = function_exists( 'mb_substr' ) ? mb_substr( $saw_display_name, 0, 1 ) : substr( $saw_display_name, 0, 1 );
+
+	$saw_runs_unplayed = 0;
+	if ( class_exists( 'Nera_SAW_Run_Grants' ) ) {
+		foreach ( Nera_SAW_Run_Grants::balance_by_competition( $saw_user_id ) as $saw_bal ) {
+			$saw_runs_unplayed += (int) $saw_bal['total'];
+		}
+	}
+
+	// Tickets still live: earned, but on a competition that has not drawn
+	// yet -- once a competition's own draw has happened those tickets move
+	// to "Draw results" instead (client finding #45's own "runs unplayed /
+	// tickets live" pair of stat tiles).
+	$saw_tickets_live = 0;
+	if ( class_exists( 'Nera_SAW_Run' ) ) {
+		foreach ( Nera_SAW_Run::runs_for_user( $saw_user_id ) as $saw_entry ) {
+			$saw_status = get_post_meta( $saw_entry['competition_id'], 'lty_lottery_status', true );
+			if ( 'lty_lottery_finished' === $saw_status ) {
+				continue;
+			}
+			foreach ( $saw_entry['completed'] as $saw_completed_run ) {
+				$saw_tickets_live += count( $saw_completed_run['ticket_numbers'] );
+			}
+		}
+	}
+
+	/**
+	 * The hub's own four rows, in the order the client's mock shows them.
+	 *
+	 * @param array $rows Endpoint key => label.
+	 */
+	$saw_hub_rows = (array) apply_filters(
+		'nera_saw_account_hub_rows',
+		array(
+			'my-runs-tickets'  => __( 'My runs & tickets', 'nera-strikeawin' ),
+			'draw-results'     => __( 'Draw results', 'nera-strikeawin' ),
+			'responsible-play' => __( 'Responsible play', 'nera-strikeawin' ),
+			'account-details'  => __( 'Account details', 'nera-strikeawin' ),
+		)
+	);
+	?>
+	<div class="saw-account-hub">
+
+		<div class="saw-account-hub__identity">
+			<span class="saw-account-hub__avatar" aria-hidden="true"><?php echo esc_html( strtoupper( $saw_initial ) ); ?></span>
+			<p class="saw-account-hub__name"><?php echo esc_html( $saw_display_name ); ?></p>
+			<p class="saw-account-hub__email"><?php echo esc_html( $saw_user->user_email ); ?></p>
+		</div>
+
+		<div class="saw-account-hub__stats">
+			<div class="saw-account-hub__stat">
+				<span class="saw-account-hub__stat-value"><?php echo esc_html( (string) $saw_runs_unplayed ); ?></span>
+				<span class="saw-account-hub__stat-label"><?php esc_html_e( 'Runs unplayed', 'nera-strikeawin' ); ?></span>
+			</div>
+			<div class="saw-account-hub__stat">
+				<span class="saw-account-hub__stat-value"><?php echo esc_html( (string) $saw_tickets_live ); ?></span>
+				<span class="saw-account-hub__stat-label"><?php esc_html_e( 'Tickets live', 'nera-strikeawin' ); ?></span>
+			</div>
+		</div>
+
+		<nav class="saw-account-hub__rows">
+			<?php foreach ( $saw_hub_rows as $saw_key => $saw_label ) : ?>
+				<?php
+				// account-details has no WooCommerce menu-item key of its own --
+				// it is this template's composite, not a registered endpoint --
+				// so it always gets its row; the three real endpoints only show
+				// once WooCommerce actually offers them.
+				if ( 'account-details' !== $saw_key && ! isset( $saw_items[ $saw_key ] ) ) {
+					continue;
+				}
+				$saw_url = 'account-details' === $saw_key
+					? wc_get_account_endpoint_url( 'edit-account' )
+					: wc_get_account_endpoint_url( $saw_key );
+				?>
+				<a class="saw-account-hub__row" href="<?php echo esc_url( $saw_url ); ?>">
+					<span><?php echo esc_html( $saw_label ); ?></span>
+					<span class="saw-account-hub__row-chevron" aria-hidden="true">›</span>
+				</a>
+			<?php endforeach; ?>
+		</nav>
+
+		<a class="saw-account-hub__logout" href="<?php echo esc_url( wc_logout_url() ); ?>">
+			<?php esc_html_e( 'Log out', 'nera-strikeawin' ); ?>
+		</a>
+
+	</div>
+	<?php
+	return;
 }
 
-/*
- * `view-order` is not a row of its own — it is a sub-endpoint of Orders,
- * reached only by clicking a specific order in that list, never from the nav.
- * `wc_is_current_account_menu_item()` already knows this and opens the Orders
- * row for it (see its own `elseif ( 'orders' === $endpoint && isset(
- * $wp->query_vars['view-order'] ) )` branch) — but the panel below used to
- * always fire `orders`'s own action regardless, so that row opened correctly
- * and then showed the full list again instead of the one order the player had
- * just clicked into. WooCommerce's stock `woocommerce_account_content()`
- * avoids this by firing whichever query var is actually active; this does the
- * same, narrowly, only where the two can disagree.
- */
-global $wp;
-$saw_view_order_id = isset( $wp->query_vars['view-order'] ) ? $wp->query_vars['view-order'] : '';
-
-/**
- * One endpoint's own content, exactly what its own page would show — see the
- * docblock above for why every one of these is safe to call unconditionally.
- *
- * @param string $endpoint Endpoint key.
- */
-$saw_panel = static function ( $endpoint ) use ( $saw_view_order_id ) {
-	if ( 'orders' === $endpoint && '' !== $saw_view_order_id ) {
-		if ( has_action( 'woocommerce_account_view-order_endpoint' ) ) {
-			do_action( 'woocommerce_account_view-order_endpoint', $saw_view_order_id );
-		}
-		return;
-	}
-
-	if ( has_action( 'woocommerce_account_' . $endpoint . '_endpoint' ) ) {
-		do_action( 'woocommerce_account_' . $endpoint . '_endpoint', '' );
-	}
-};
-
-/**
- * One row: an accordion item whose body is that endpoint's own panel.
- *
- * @param string $endpoint Endpoint key.
- * @param string $label    Row label.
- */
-$saw_row = static function ( $endpoint, $label ) use ( $saw_panel ) {
-	$open = wc_is_current_account_menu_item( $endpoint );
-	printf(
-		'<details class="saw-account-acc %1$s"%2$s><summary class="saw-account-acc__label">%3$s</summary><div class="saw-account-acc__panel">',
-		esc_attr( wc_get_account_menu_item_classes( $endpoint ) ),
-		$open ? ' open' : '',
-		esc_html( $label )
-	);
-	$saw_panel( $endpoint );
-	echo '</div></details>';
-};
-
-/**
- * A plain link row — no content of its own to reveal.
- *
- * @param string $endpoint Endpoint key.
- * @param string $label    Row label.
- */
-$saw_link = static function ( $endpoint, $label ) {
-	$extra = 'customer-logout' === $endpoint ? ' saw-account-link--logout' : '';
-	printf(
-		'<a class="saw-account-link%1$s %2$s" href="%3$s" %4$s>%5$s</a>',
-		esc_attr( $extra ),
-		esc_attr( wc_get_account_menu_item_classes( $endpoint ) ),
-		esc_url( wc_get_account_endpoint_url( $endpoint ) ),
-		wc_is_current_account_menu_item( $endpoint ) ? 'aria-current="page"' : '',
-		esc_html( $label )
-	);
-};
+// ---------------------------------------------------------------------
+// Any other row: a "Back" link, then that row's own content.
+// ---------------------------------------------------------------------
 ?>
+<a class="saw-account-hub__back" href="<?php echo esc_url( wc_get_account_endpoint_url( 'dashboard' ) ); ?>">
+	&larr; <?php esc_html_e( 'Account', 'nera-strikeawin' ); ?>
+</a>
 
-<div class="saw-account-nav">
+<?php if ( 'account-details' === $saw_row ) : ?>
+
 	<?php
-	foreach ( $saw_order as $saw_endpoint ) {
-		if ( ! isset( $saw_items[ $saw_endpoint ] ) || in_array( $saw_endpoint, $saw_hidden, true ) ) {
+	/**
+	 * Composite panel: the same three endpoints the previous version of
+	 * this screen always showed together, now reached from one hub row
+	 * instead of three. `view-order` is a sub-endpoint of Orders, not a row
+	 * of its own (reached only by clicking a specific order in the list),
+	 * so it opens the Orders panel the same way the previous version of
+	 * this screen did.
+	 */
+	$saw_view_order_id = isset( $wp->query_vars['view-order'] ) ? $wp->query_vars['view-order'] : '';
+
+	foreach ( $saw_account_details_keys as $saw_endpoint ) {
+		if ( ! isset( $saw_items[ $saw_endpoint ] ) ) {
 			continue;
 		}
+		$saw_open = wc_is_current_account_menu_item( $saw_endpoint );
+		printf(
+			'<details class="saw-account-acc %1$s"%2$s><summary class="saw-account-acc__label">%3$s</summary><div class="saw-account-acc__panel">',
+			esc_attr( wc_get_account_menu_item_classes( $saw_endpoint ) ),
+			$saw_open ? ' open' : '',
+			esc_html( $saw_items[ $saw_endpoint ] )
+		);
 
-		$saw_label = isset( $saw_labels[ $saw_endpoint ] ) ? $saw_labels[ $saw_endpoint ] : $saw_items[ $saw_endpoint ];
-
-		if ( in_array( $saw_endpoint, $saw_plain, true ) ) {
-			$saw_link( $saw_endpoint, $saw_label );
-		} else {
-			$saw_row( $saw_endpoint, $saw_label );
+		if ( 'orders' === $saw_endpoint && '' !== $saw_view_order_id && has_action( 'woocommerce_account_view-order_endpoint' ) ) {
+			do_action( 'woocommerce_account_view-order_endpoint', $saw_view_order_id );
+		} elseif ( has_action( 'woocommerce_account_' . $saw_endpoint . '_endpoint' ) ) {
+			do_action( 'woocommerce_account_' . $saw_endpoint . '_endpoint', '' );
 		}
+
+		echo '</div></details>';
 	}
 	?>
-</div>
+
+<?php elseif ( has_action( 'woocommerce_account_' . $saw_row . '_endpoint' ) ) : ?>
+
+	<?php do_action( 'woocommerce_account_' . $saw_row . '_endpoint', '' ); ?>
+
+<?php endif; ?>

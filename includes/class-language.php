@@ -295,6 +295,18 @@ class Nera_SAW_Language {
 				'Amount'         => 'Сумма',
 				'Manage your wallet and transactions seamlessly.' => 'Управляйте своим кошельком и операциями в одном месте.',
 				'For order payment #' => 'Оплата заказа №',
+				// My Account hub rebuild (client findings #2/#45/#46) — found
+				// while testing the new "Account details" composite: woo-
+				// wallet's own woo_wallet_menu_items() filter re-labels
+				// 'edit-account' and 'customer-logout' under ITS OWN domain
+				// ('woo-wallet', not 'woocommerce'), replacing WC core's
+				// already-translated label with this untranslated one. The
+				// old my-account.php sidestepped this with its own hand-
+				// translated nav array instead of leaning on gettext for the
+				// nav row text; the new hub/composite has no such override,
+				// so the gap needs covering here instead.
+				'Account details' => 'Данные аккаунта',
+				'Logout'           => 'Выйти',
 			);
 		}
 
@@ -1502,6 +1514,23 @@ class Nera_SAW_Language {
 				'Completed'                                  => 'Завершено',
 				'Your runs, tickets and draw results will appear here.'
 					=> 'Здесь появятся ваши попытки, билеты и результаты розыгрышей.',
+				// My Account hub rebuild (client findings #2/#45/#46) —
+				// menu-item labels for the three new account endpoints, plus
+				// the hub screen's own stat tiles and back link.
+				'My runs & tickets'                         => 'Мои забеги и билеты',
+				'Draw results'                              => 'Результаты розыгрышей',
+				'Responsible play'                          => 'Ответственная игра',
+				'Runs unplayed'                              => 'Неиспользованные забеги',
+				'Tickets live'                               => 'Активные билеты',
+				'Account'                                    => 'Аккаунт',
+				'Log out'                                    => 'Выйти',
+				// The hub's "Account details" row label is this plugin's own
+				// string (domain 'nera-strikeawin', translate_saw_strings) —
+				// a different gettext call from wc_get_account_menu_items()'s
+				// own 'Account details' (domain 'woocommerce', translated
+				// above by translate_theme_account_strings), so it needs its
+				// own entry here despite the identical English text.
+				'Account details'                           => 'Данные аккаунта',
 				// Add-to-basket toast (class-router.php) — found still
 				// English on a real purchase screenshot.
 				'Entry added. Taking you to Before you pay…' => 'Участие добавлено. Переходим к оплате…',

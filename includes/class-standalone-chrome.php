@@ -249,24 +249,66 @@ class Nera_SAW_Standalone_Chrome {
 	private static $saw_stood_in_endpoints = null;
 
 	/**
-	 * The endpoints this screen's accordion actually renders content for --
-	 * the same set templates/woocommerce/myaccount/my-account.php works out for
-	 * itself, computed the same way (every endpoint WooCommerce currently
-	 * offers, minus the ones that are hidden or stay a plain link) so the two
-	 * never drift apart into rendering one list and pretending-current a
-	 * different one.
+	 * The endpoints this screen's CURRENT request actually renders content
+	 * for -- the same thing templates/woocommerce/myaccount/my-account.php
+	 * works out for itself, computed the same way, so the two never drift
+	 * apart into standing in for one set and rendering a different one.
+	 *
+	 * Rebuilt for the hub redesign (client findings #2/#45/#46): that
+	 * template no longer renders every endpoint's content on one page --
+	 * only the hub (nothing), a single row, or (for "Account details") up
+	 * to three rows folded into one composite. "Responsible play" is the
+	 * one case that needs its own addition: it renders self-exclusion's and
+	 * the spending-limit plugin's own markup by calling their methods
+	 * directly rather than through their usual `woocommerce_account_
+	 * {endpoint}_endpoint` action (see templates/woocommerce/myaccount/
+	 * responsible-play.php's own docblock for why), so neither plugin's own
+	 * `wp_enqueue_scripts` gate -- `is_wc_endpoint_url( 'account-status' )`
+	 * and `is_wc_endpoint_url( 'edit-account' )` respectively -- would ever
+	 * see itself as "current" on that page without this standing in for
+	 * both on its behalf.
 	 *
 	 * @return string[]
 	 */
 	private static function account_content_endpoints() {
-		if ( ! function_exists( 'wc_get_account_menu_items' ) ) {
+		if ( ! function_exists( 'wc_get_account_menu_items' )
+			|| ! class_exists( 'Nera_SAW_Account_Pages' )
+			|| ! function_exists( 'wc_is_current_account_menu_item' )
+		) {
 			return array();
 		}
 
-		$hidden = (array) apply_filters( 'nera_saw_account_nav_hidden', array( 'dashboard' ) );
-		$plain  = (array) apply_filters( 'nera_saw_account_nav_plain', array( 'nera-support', 'customer-logout' ) );
+		$details_keys = (array) apply_filters(
+			'nera_saw_account_details_endpoints',
+			array( 'edit-account', 'orders', 'woo-wallet' )
+		);
 
-		return array_values( array_diff( array_keys( wc_get_account_menu_items() ), $hidden, $plain ) );
+		$single_keys = array(
+			Nera_SAW_Account_Pages::RUNS_TICKETS,
+			Nera_SAW_Account_Pages::DRAW_RESULTS,
+		);
+
+		foreach ( $details_keys as $endpoint ) {
+			if ( wc_is_current_account_menu_item( $endpoint ) ) {
+				return array_values( array_intersect( $details_keys, array_keys( wc_get_account_menu_items() ) ) );
+			}
+		}
+
+		foreach ( $single_keys as $endpoint ) {
+			if ( wc_is_current_account_menu_item( $endpoint ) ) {
+				return array( $endpoint );
+			}
+		}
+
+		if ( wc_is_current_account_menu_item( Nera_SAW_Account_Pages::RESPONSIBLE_PLAY ) ) {
+			return (array) apply_filters(
+				'nera_saw_responsible_play_stand_in_endpoints',
+				array( 'account-status', 'edit-account' )
+			);
+		}
+
+		// The hub itself -- nothing renders via an endpoint hook.
+		return array();
 	}
 
 	/**

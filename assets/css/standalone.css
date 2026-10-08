@@ -2207,6 +2207,307 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   margin-bottom: 0;
 }
 
+/*
+ * My Account hub (client findings #2/#45/#46) — avatar, two stat tiles, four
+ * nav rows, log out. What a bare visit to /my-account/ shows now; the
+ * accordion-of-everything above is what each row opens into, not the first
+ * thing shown.
+ */
+.saw-account-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.saw-account-hub__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.saw-account-hub__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 4px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border-radius: 50%;
+}
+.saw-account-hub__name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-account-hub__email {
+  margin: 0;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
+.saw-account-hub__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.saw-account-hub__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 16px 10px;
+  text-align: center;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+.saw-account-hub__stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-account-hub__stat-label {
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+.saw-account-hub__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.saw-account-hub__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ink);
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  text-decoration: none;
+}
+.saw-account-hub__row:hover {
+  border-color: var(--saw-muted);
+}
+.saw-account-hub__row-chevron {
+  color: var(--saw-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.saw-account-hub__logout {
+  display: block;
+  margin-top: 6px;
+  padding: 11px 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-muted);
+  background: transparent;
+  border: 1.5px dashed var(--saw-control);
+  border-radius: var(--saw-r-control);
+  text-decoration: none;
+}
+.saw-account-hub__logout:hover {
+  color: var(--saw-ink);
+  border-color: var(--saw-muted);
+}
+.saw-account-hub__back {
+  display: inline-block;
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-link);
+  text-decoration: none;
+}
+.saw-account-hub__back:hover {
+  text-decoration: underline;
+}
+
+/*
+ * "My runs & tickets" (client findings #2/#45/#46) — per competition: runs
+ * in progress, ready to play, completed runs with their ticket numbers.
+ */
+.saw-runs-tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.saw-runs-tickets__competition {
+  padding: 16px;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+.saw-runs-tickets__title {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-runs-tickets__draw {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+.saw-runs-tickets__group {
+  margin-top: 12px;
+}
+.saw-runs-tickets__group:first-of-type {
+  margin-top: 0;
+}
+.saw-runs-tickets__group-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--saw-muted);
+}
+.saw-runs-tickets__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--saw-body);
+  border-top: 1px solid var(--saw-rule);
+}
+.saw-runs-tickets__row:first-of-type {
+  border-top: 0;
+}
+.saw-runs-tickets__continue,
+.saw-runs-tickets__play {
+  flex: none;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--saw-on-dark);
+  background: var(--saw-primary);
+  border-radius: var(--saw-r-control);
+  text-decoration: none;
+}
+.saw-runs-tickets__ticket-count {
+  font-weight: 600;
+  color: var(--saw-ok);
+}
+.saw-runs-tickets__completed-run {
+  padding: 10px 0;
+  border-top: 1px solid var(--saw-rule);
+}
+.saw-runs-tickets__completed-run:first-of-type {
+  border-top: 0;
+}
+.saw-runs-tickets__numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.saw-numchip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--saw-ink);
+  background: var(--saw-tint);
+  border: 1px solid var(--saw-control);
+  border-radius: 999px;
+}
+.saw-numchip--more {
+  color: var(--saw-muted);
+  background: transparent;
+  border-style: dashed;
+}
+.saw-runs-empty,
+.saw-draw-results-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--saw-muted);
+}
+
+/*
+ * "Draw results" (client findings #2/#45/#46) — competitions this player
+ * entered whose draw has already happened.
+ */
+.saw-draw-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.saw-draw-results__row {
+  padding: 16px;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+.saw-draw-results__title {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--saw-ink);
+}
+.saw-draw-results__date {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--saw-muted);
+}
+.saw-draw-results__outcome {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.saw-draw-results__outcome--won {
+  color: var(--saw-ok);
+}
+.saw-draw-results__outcome--none {
+  color: var(--saw-body);
+  font-weight: 400;
+}
+
+/*
+ * "Responsible play" (client findings #2/#45) — self-exclusion,
+ * spending-limit and the help link consolidated onto one page; each section
+ * renders a sibling plugin's own markup as-is.
+ */
+.saw-responsible-play {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.saw-responsible-play__section--support {
+  padding: 16px;
+  text-align: center;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-card);
+}
+.saw-responsible-play__support-label {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--saw-body);
+}
+.saw-responsible-play__support-link {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--saw-link);
+  text-decoration: none;
+}
+.saw-responsible-play__support-link:hover {
+  text-decoration: underline;
+}
+
 .saw-woo .woocommerce-MyAccount-content > p:first-child {
   margin-top: 0;
 }
