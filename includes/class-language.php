@@ -94,6 +94,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_wallet_strings' ), 10, 3 );
+			add_filter( 'woo_wallet_locate_template', array( __CLASS__, 'override_wallet_template' ), 99, 4 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
 			add_filter( 'gettext_with_context', array( __CLASS__, 'translate_order_status_labels' ), 10, 4 );
@@ -271,6 +272,72 @@ class Nera_SAW_Language {
 		}
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Serve this plugin's own copy of woo-wallet's `wc-endpoint-wallet.php`
+	 * (`templates/woo-wallet/wc-endpoint-wallet.php`) for a Russian request,
+	 * via that plugin's own `woo_wallet_locate_template` filter — the same
+	 * technique `Nera_SAW_Standalone_Chrome::unoverride_template()` already
+	 * uses for WooCommerce's own `woocommerce_locate_template` filter.
+	 *
+	 * The one thing that copy changes is why this exists at all: a wallet
+	 * transaction's description (`$transaction->details`) is written to
+	 * woo-wallet's own database table once, when the transaction happens
+	 * (`class-woo-wallet-wallet.php`'s `debit()`/`credit()`), and this
+	 * template prints that stored value with no filter of its own in
+	 * between — `self::translate_wallet_strings()` above can translate the
+	 * live `__( 'For order payment #', 'woo-wallet' )` call at the moment a
+	 * NEW transaction is created, but an OLDER row, already saved in
+	 * English before that filter existed (or saved while a player's request
+	 * was English), has nothing left to translate by the time it is read
+	 * back — found exactly this way, from a screenshot of an existing
+	 * balance-history row still reading "For order payment #31438" after
+	 * everything else on that screen had already switched to Russian.
+	 *
+	 * @param string $template      Path woo-wallet resolved.
+	 * @param string $template_name Relative template name.
+	 * @param string $template_path Template subdirectory woo-wallet was given.
+	 * @param string $default_path  Fallback path woo-wallet was given.
+	 * @return string
+	 */
+	public static function override_wallet_template( $template, $template_name, $template_path, $default_path ) {
+		unset( $template_path, $default_path );
+		if ( 'wc-endpoint-wallet.php' !== $template_name || is_admin() || 'ru' !== self::current() ) {
+			return $template;
+		}
+
+		$ours = NERA_SAW_PLUGIN_DIR . 'templates/woo-wallet/' . $template_name;
+
+		return file_exists( $ours ) ? $ours : $template;
+	}
+
+	/**
+	 * Translate an already-stored wallet transaction description on the way
+	 * out — see `self::override_wallet_template()`'s docblock for why this
+	 * cannot be done any earlier. Only the one known prefix this plugin's
+	 * own sibling-plugin integration ever produces is recognised; anything
+	 * else (a manual adjustment, a different add-on's own wallet credit)
+	 * passes through unchanged, same caution as every map in this file.
+	 *
+	 * Public rather than this file's usual `protected`/private pattern:
+	 * called directly from `templates/woo-wallet/wc-endpoint-wallet.php`,
+	 * outside this class.
+	 *
+	 * @param string $details Stored transaction description.
+	 * @return string
+	 */
+	public static function translate_wallet_transaction_details( $details ) {
+		if ( 'ru' !== self::current() ) {
+			return $details;
+		}
+
+		$prefix = 'For order payment #';
+		if ( 0 === strpos( (string) $details, $prefix ) ) {
+			return 'Оплата заказа №' . substr( (string) $details, strlen( $prefix ) );
+		}
+
+		return $details;
 	}
 
 	/**
