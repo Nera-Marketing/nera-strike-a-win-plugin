@@ -42,6 +42,37 @@ class Nera_SAW_Language {
 	const SWITCH_ARG = 'saw_lang';
 
 	/**
+	 * Is this request the WooCommerce My Account page (any endpoint — login/
+	 * register when signed out, orders/addresses/payment-methods/wallet/
+	 * spending-limit/account-status when signed in)?
+	 *
+	 * `Nera_SAW_Router::is_standalone_screen()` answers a narrower question —
+	 * a bespoke SAW route, or a page carrying this plugin's own page-template
+	 * meta — and WooCommerce's native My Account page is neither: it is a
+	 * plain page with the `[woocommerce_my_account]` shortcode, with no SAW
+	 * route and no SAW template meta of its own, confirmed by checking this
+	 * install's own `myaccount` page directly. Every `gettext`/`ngettext`
+	 * filter below that targets this page (the login/register screen, the
+	 * sibling wallet/spending-limit/self-exclusion panels, the orders/
+	 * addresses/payment-methods chrome) was gated on
+	 * `is_standalone_screen()` alone and so never actually fired there —
+	 * found by curling the account-status and edit-account endpoints with an
+	 * authenticated cookie and `saw_lang=ru` and seeing English throughout,
+	 * including strings PR3/PR4 already believed shipped (`'My account'`,
+	 * `'My Wallet'`). `is_account_page()` is WooCommerce's own canonical
+	 * check for exactly this page, on any of its endpoints, signed in or not.
+	 *
+	 * @return bool
+	 */
+	protected static function is_account_screen() {
+		if ( class_exists( 'Nera_SAW_Router' ) && Nera_SAW_Router::is_standalone_screen() ) {
+			return true;
+		}
+
+		return function_exists( 'is_account_page' ) && is_account_page();
+	}
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -63,8 +94,13 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_wallet_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
+			add_filter( 'gettext_with_context', array( __CLASS__, 'translate_order_status_labels' ), 10, 4 );
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
+			add_filter( 'ngettext', array( __CLASS__, 'translate_woocommerce_plurals' ), 10, 5 );
+			add_filter( 'ngettext', array( __CLASS__, 'translate_spending_limit_plurals' ), 10, 5 );
 
 			// See self::current()'s docblock (step 2) for why this needs a cookie
 			// rather than the WooCommerce session this used at first.
@@ -149,10 +185,14 @@ class Nera_SAW_Language {
 	 * ("Need support with your play?" / "Help & support") on the section's
 	 * own screens. Client finding #23: kept (not suppressed) on standalone by
 	 * deliberate choice — see class-standalone-chrome.php — but nothing
-	 * translated its domain before now. `is_standalone_screen()` guards this
-	 * the same way `translate_loginreg_strings()` guards `woocommerce`: this
-	 * plugin's own domain only, never hijacked on a main-site page the strip
-	 * might also appear on.
+	 * translated its domain before now. Also covers this domain's "Need
+	 * support?" My Account nav item (`class-account.php`'s own menu-item
+	 * filter) — found untranslated alongside the rest of that nav row's
+	 * labels during the broader self-translate pass. `self::is_account_screen()`
+	 * widens the original `is_standalone_screen()`-only guard just enough to
+	 * reach that nav row too (see its own docblock for why), without
+	 * loosening anything: still this plugin's own domain only, never
+	 * hijacked on an unrelated main-site page.
 	 *
 	 * @param string $translated Text WordPress would otherwise return.
 	 * @param string $original   Original (English) string.
@@ -163,7 +203,7 @@ class Nera_SAW_Language {
 		if ( 'nera-responsible-play-plugin' !== $domain || is_admin() || 'ru' !== self::current() ) {
 			return $translated;
 		}
-		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+		if ( ! self::is_account_screen() ) {
 			return $translated;
 		}
 
@@ -172,6 +212,7 @@ class Nera_SAW_Language {
 			$ru = array(
 				'Need support with your play?' => 'Нужна помощь с игрой?',
 				'Help & support'                => 'Помощь и поддержка',
+				'Need support?'                 => 'Нужна помощь?',
 			);
 		}
 
@@ -194,9 +235,12 @@ class Nera_SAW_Language {
 	 * topup'` vs `'Wallet top-up'`, `'Balance History'` vs `'Balance
 	 * history'`) — same Russian word either way, so the translation still
 	 * applies; the gettext filter has to match woo-wallet's own exact
-	 * source string to ever fire at all. `'For order payment #'` (the
-	 * balance-history row prefix) has no supplied Russian yet and is left
-	 * English — not in either of the client's files.
+	 * source string to ever fire at all. Two strings this plugin's own
+	 * code never calls — `'Manage your wallet and transactions
+	 * seamlessly.'` (the panel subtitle) and `'For order payment #'` (the
+	 * balance-history row prefix) — had no supplied Russian in either
+	 * client file either, so both get this plugin's own translation
+	 * rather than staying English, per the broader self-translate pass.
 	 *
 	 * @param string $translated Text WordPress would otherwise return.
 	 * @param string $original   Original (English) string.
@@ -207,7 +251,7 @@ class Nera_SAW_Language {
 		if ( 'woo-wallet' !== $domain || is_admin() || 'ru' !== self::current() ) {
 			return $translated;
 		}
-		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+		if ( ! self::is_account_screen() ) {
 			return $translated;
 		}
 
@@ -221,6 +265,8 @@ class Nera_SAW_Language {
 				'Balance History' => 'История баланса',
 				'Description'    => 'Описание',
 				'Amount'         => 'Сумма',
+				'Manage your wallet and transactions seamlessly.' => 'Управляйте своим кошельком и операциями в одном месте.',
+				'For order payment #' => 'Оплата заказа №',
 			);
 		}
 
@@ -287,7 +333,7 @@ class Nera_SAW_Language {
 		if ( 'woocommerce' !== $domain || is_admin() || 'ru' !== self::current() ) {
 			return $translated;
 		}
-		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+		if ( ! self::is_account_screen() ) {
 			return $translated;
 		}
 
@@ -341,10 +387,43 @@ class Nera_SAW_Language {
 				'Order number'                       => 'Номер заказа',
 				'Subtotal'                            => 'Промежуточный итог',
 				// Addresses panel body (templates/woocommerce/myaccount/my-
-				// address.php, stock core) — only this one row-title string
-				// has a supplied Russian equivalent; "Shipping address", the
-				// "Edit %s"/"Add %s" wrapper and the empty-state copy do not.
+				// address.php, stock core) — "Billing address" is the one
+				// row-title string with a supplied Russian equivalent; the
+				// rest of this block ("Shipping address", the "Edit %s"/
+				// "Add %s" wrapper and the empty-state copy) has none in
+				// either client file, so it gets this plugin's own
+				// translation instead, per the broader self-translate pass.
 				'Billing address'                    => 'Платёжный адрес',
+				'Shipping address'                   => 'Адрес доставки',
+				'The following addresses will be used on the checkout page by default.'
+					=> 'Эти адреса будут использоваться по умолчанию на странице оформления заказа.',
+				'Edit %s'                             => 'Изменить %s',
+				'Add %s'                              => 'Добавить %s',
+				'You have not set up this type of address yet.'
+					=> 'Вы ещё не указали адрес этого типа.',
+				// Payment methods panel body (templates/woocommerce/myaccount/
+				// payment-methods.php, form-add-payment-method.php) — same
+				// situation: no supplied Russian in either client file.
+				'No saved methods found.'             => 'Сохранённые способы оплаты не найдены.',
+				'Add payment method'                  => 'Добавить способ оплаты',
+				// Orders table (templates/woocommerce/myaccount/orders.php) —
+				// column headings. "Date" and "Total" already have entries
+				// above; the rest did not.
+				'Order'                                => 'Заказ',
+				'Status'                               => 'Статус',
+				'Actions'                              => 'Действия',
+				'View'                                 => 'Просмотр',
+				// My Account nav row (wc_get_account_menu_items(), domain
+				// 'woocommerce') — found untranslated during the broader
+				// self-translate pass. "Log out" is rendered as a theme-
+				// filtered "Logout" on this site's actual nav markup, which
+				// never passes through gettext again after that filter runs,
+				// so this entry is kept for correctness but will not show on
+				// that one row — a theme-level gap this plugin cannot reach.
+				'Dashboard'                            => 'Панель управления',
+				'Payment methods'                      => 'Способы оплаты',
+				'Account details'                       => 'Данные аккаунта',
+				'Log out'                               => 'Выйти',
 			);
 		}
 
@@ -375,11 +454,397 @@ class Nera_SAW_Language {
 		if ( 'registration' !== $type || is_admin() || 'ru' !== self::current() ) {
 			return $text;
 		}
-		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+		if ( ! self::is_account_screen() ) {
 			return $text;
 		}
 
 		return 'Ваши персональные данные будут использованы для улучшения вашего опыта на этом сайте, управления доступом к вашему аккаунту, а также для других целей, описанных в нашей [privacy_policy].';
+	}
+
+	/**
+	 * WooCommerce's order-status labels (`wc-order-functions.php`,
+	 * `class-wc-post-types.php`) — the Orders table's own "Status" column and
+	 * the order-details page both print one of these. Every one of them is a
+	 * `_x( $label, 'Order status', 'woocommerce' )` call, which WordPress
+	 * routes through `gettext_with_context` rather than plain `gettext` — a
+	 * second, separate filter hook, which is why none of this ever matched
+	 * `translate_loginreg_strings()` above despite sharing its domain. No
+	 * supplied Russian in either client file, so this is this plugin's own
+	 * translation, per the broader self-translate pass.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $text       Original (English) string.
+	 * @param string $context    Disambiguating context WordPress was given.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_order_status_labels( $translated, $text, $context, $domain ) {
+		if ( 'woocommerce' !== $domain || 'Order status' !== $context || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'Pending payment' => 'Ожидает оплаты',
+				'Processing'      => 'В обработке',
+				'On hold'         => 'Отложен',
+				'Completed'       => 'Выполнен',
+				'Cancelled'       => 'Отменён',
+				'Refunded'        => 'Возвращён',
+				'Failed'          => 'Не выполнен',
+				'Draft'           => 'Черновик',
+			);
+		}
+
+		return isset( $ru[ $text ] ) ? $ru[ $text ] : $translated;
+	}
+
+	/**
+	 * The Orders table's item-count cell (`templates/myaccount/orders.php`):
+	 * `sprintf( _n( '%1$s for %2$s item', '%1$s for %2$s items', $count,
+	 * 'woocommerce' ), $total, $count )`. English only ever chooses between
+	 * its own two forms; Russian needs three (один товар / два товара / пять
+	 * товаров), the same mismatch `Nera_SAW_I18n::n()` exists to fix for this
+	 * plugin's own strings — but that class is deliberately scoped to this
+	 * plugin's own `nera-strikeawin` domain (see its docblock), so a stock
+	 * WooCommerce template needs its own `ngettext` handling rather than
+	 * reusing it. `self::ru_plural_form()` is the same one/few/many rule,
+	 * kept as a small private duplicate here rather than reaching into that
+	 * class's own (deliberately protected) implementation.
+	 *
+	 * Also covers `wc_get_account_menu_items()`'s own "Addresses" nav label —
+	 * `_n( 'Address', 'Addresses', $count, 'woocommerce' )`, the one nav-row
+	 * label built with a real plural rather than a fixed string, so it could
+	 * never live in `translate_loginreg_strings()`'s plain map either. Found
+	 * alongside the item-count plural, same domain, same filter, so handled
+	 * here rather than opening a third `ngettext` method for one more string.
+	 *
+	 * Only the two known `$single` values are ever translated; anything else
+	 * (a core update adding a new plural string to this domain) falls
+	 * through to `$translated` unchanged, same as every other filter in this
+	 * file.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $single     Singular source string.
+	 * @param string $plural     Plural source string.
+	 * @param int    $number     The count being formatted for.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_woocommerce_plurals( $translated, $single, $plural, $number, $domain ) {
+		unset( $plural );
+		if ( 'woocommerce' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		if ( '%1$s for %2$s item' === $single ) {
+			return self::ru_plural_form( (int) $number, '%1$s за %2$s товар|%1$s за %2$s товара|%1$s за %2$s товаров' );
+		}
+
+		if ( 'Address' === $single ) {
+			return 'Addresses' === $translated ? 'Адреса' : 'Адрес';
+		}
+
+		return $translated;
+	}
+
+	/**
+	 * Translate the sibling spending-limit plugin's Account Details card —
+	 * heading, fields, status messages and the small AJAX/checkout dialogs —
+	 * on the section's own screens. None of it has supplied Russian in
+	 * either client file (confirmed: not one of these English strings
+	 * matches a key in `languages/ru/02-russian-strings-prototype.json` or
+	 * `02b-russian-strings-dev-build.json`), so this is this plugin's own
+	 * translation, per the broader self-translate pass. The one genuine
+	 * count-driven plural this domain has ("N period(s) configured") is
+	 * handled separately, by `self::translate_spending_limit_plurals()`
+	 * below — `_n()` never reaches a plain `gettext` filter.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_spending_limit_strings( $translated, $original, $domain ) {
+		if ( 'nera-spending-limit' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				// Account Details card.
+				'Spending limit'   => 'Лимит расходов',
+				'Set a voluntary cap on how much you spend.' => 'Установите добровольное ограничение суммы расходов.',
+				'Amount limit'     => 'Сумма лимита',
+				'Enter the maximum amount you want to spend in the selected period.'
+					=> 'Укажите максимальную сумму, которую вы готовы потратить за выбранный период.',
+				'Limit type'       => 'Тип лимита',
+				'Custom period'    => 'Произвольный период',
+				'Save'             => 'Сохранить',
+				'Your spending limit is turned off.' => 'Ваш лимит расходов отключён.',
+				'You have not set a spending limit yet.' => 'Вы ещё не установили лимит расходов.',
+				'Select one or more periods on the calendar to activate your limit.'
+					=> 'Выберите один или несколько периодов в календаре, чтобы активировать лимит.',
+				'Your limit is %1$s (%2$s).' => 'Ваш лимит: %1$s (%2$s).',
+				'You must be logged in.' => 'Вы должны войти в аккаунт.',
+				'Security check failed. Please refresh and try again.'
+					=> 'Проверка безопасности не пройдена. Обновите страницу и попробуйте снова.',
+				'This feature is not available.' => 'Эта функция недоступна.',
+				'Your spending limit has been turned off.' => 'Ваш лимит расходов отключён.',
+				'Your spending limit has been removed. Select periods to set a new one.'
+					=> 'Ваш лимит расходов удалён. Выберите периоды, чтобы установить новый.',
+				'Your spending limit has been saved.' => 'Ваш лимит расходов сохранён.',
+				// Limit-type / custom-period dropdown options (class-settings.php) —
+				// reach this filter via wp_localize_script's own __() calls; see
+				// class-assets.php's docblock note on why that is still reachable.
+				'Daily'   => 'Ежедневно',
+				'Weekly'  => 'Еженедельно',
+				'Monthly' => 'Ежемесячно',
+				'Yearly'  => 'Ежегодно',
+				'Custom'  => 'Произвольный',
+				'Day'     => 'День',
+				'Week'    => 'Неделя',
+				'Month'   => 'Месяц',
+				'Year'    => 'Год',
+				'Custom (%s)' => 'Произвольный (%s)',
+				// Remove-period dialog, save button states (class-assets.php).
+				'Remove this period?' => 'Удалить этот период?',
+				'This period will no longer have a spending limit applied.'
+					=> 'На этот период больше не будет действовать лимит расходов.',
+				'Cancel'   => 'Отмена',
+				'Remove'   => 'Удалить',
+				'Saving…'  => 'Сохранение…',
+				'Something went wrong. Please try again.' => 'Что-то пошло не так. Пожалуйста, попробуйте снова.',
+				'Click the calendar to select the periods to limit.'
+					=> 'Нажмите на календарь, чтобы выбрать периоды для лимита.',
+				// Checkout over-limit dialog (class-assets.php, class-cart.php).
+				'You are over your spending limit' => 'Вы превысили лимит расходов',
+				'Continue anyway' => 'Всё равно продолжить',
+				// Checkout spending-limit card (class-checkout.php).
+				'Spending limit (%s)' => 'Лимит расходов (%s)',
+				'Your limit'          => 'Ваш лимит',
+				'Spent this period'   => 'Потрачено за период',
+				'Remaining'           => 'Осталось',
+				'This order'          => 'Этот заказ',
+				'Wallet balance'      => 'Баланс кошелька',
+				'This order exceeds your spending limit and your wallet balance does not cover it. Top up your wallet or reduce the order to continue.'
+					=> 'Этот заказ превышает ваш лимит расходов, а баланс кошелька его не покрывает. Пополните кошелёк или уменьшите заказ, чтобы продолжить.',
+				'This order will take you over the spending limit you set. You can continue, but you will be asked to confirm.'
+					=> 'Этот заказ превысит установленный вами лимит расходов. Вы можете продолжить, но потребуется подтверждение.',
+				'This order exceeds your spending limit and your wallet balance does not cover it. Please top up your wallet or reduce your order.'
+					=> 'Этот заказ превышает ваш лимит расходов, а баланс кошелька его не покрывает. Пожалуйста, пополните кошелёк или уменьшите заказ.',
+				'This order exceeds the spending limit you set. Please confirm you want to continue.'
+					=> 'Этот заказ превышает установленный вами лимит расходов. Подтвердите, что хотите продолжить.',
+				// Validation errors (class-user-limit.php).
+				'Please choose a valid limit type.' => 'Пожалуйста, выберите корректный тип лимита.',
+				'Please set an amount of at least 1.' => 'Пожалуйста, укажите сумму не менее 1.',
+				'Please choose a valid custom period type.' => 'Пожалуйста, выберите корректный тип произвольного периода.',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The one genuine count-driven plural the spending-limit domain has:
+	 * `class-account.php`'s "Your limit is {amount} per selected {period} —
+	 * N period(s) configured." sentence. Same reasoning as
+	 * `self::translate_woocommerce_plurals()` above — Russian's three forms
+	 * packed into one lookup, picked by `self::ru_plural_form()` rather than
+	 * the plain two-way map `self::translate_spending_limit_strings()` uses
+	 * for everything else in this domain.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $single     Singular source string.
+	 * @param string $plural     Plural source string.
+	 * @param int    $number     The count being formatted for.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_spending_limit_plurals( $translated, $single, $plural, $number, $domain ) {
+		unset( $plural );
+		if ( 'nera-spending-limit' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+		if ( 'Your limit is %1$s per selected %2$s — %3$d period configured.' !== $single ) {
+			return $translated;
+		}
+
+		return self::ru_plural_form(
+			(int) $number,
+			'Лимит: %1$s за период «%2$s» — настроен %3$d период.'
+				. '|Лимит: %1$s за период «%2$s» — настроено %3$d периода.'
+				. '|Лимит: %1$s за период «%2$s» — настроено %3$d периодов.'
+		);
+	}
+
+	/**
+	 * Translate the sibling self-exclusion plugin's "Manage my account" panel
+	 * (the pause/suspend/close forms and their status messages) and the
+	 * login/entry blocking messages it shows an excluded user. None of it
+	 * has supplied Russian in either client file, so this is this plugin's
+	 * own translation, per the broader self-translate pass.
+	 *
+	 * `'CLOSE'` itself — the placeholder and the literal word the close form
+	 * asks a player to type — is deliberately NOT in this map.
+	 * `class-account.php::handle_request()` and `assets/js/account-status.js`
+	 * both check the submitted text against the literal English word `CLOSE`
+	 * (case-sensitive, not translatable on their side), so translating the
+	 * placeholder would show the player a word that then fails that check.
+	 * The surrounding sentence (`'Type CLOSE to confirm:'` etc.) still
+	 * translates — with `CLOSE` kept in Latin letters inside the Russian
+	 * text — the same convention the client's own files use for `[BRAND]`.
+	 *
+	 * One known gap this cannot close: the login-block and entry-block
+	 * messages (`class-guard.php`) splice a reactivation date in via
+	 * `date_i18n()` and plain `sprintf()`, AFTER this filter has already
+	 * returned the (translatable) template — the date value itself is
+	 * built by `class-guard.php`'s own code, never passed through a
+	 * `gettext` call this plugin can intercept, and keeps WordPress's
+	 * actual site locale (English) regardless of `saw_lang`.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_self_exclusion_strings( $translated, $original, $domain ) {
+		if ( 'nera-self-exclusion' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				// Status labels (class-state.php) — shared by the status panel's
+				// own heading and every message below that embeds one.
+				'Paused'    => 'Приостановлен',
+				'Suspended' => 'Заблокирован',
+				'Closed'    => 'Закрыт',
+				'Active'    => 'Активен',
+				// My Account nav row (class-account.php's own menu-item filter).
+				'Manage my account' => 'Управление аккаунтом',
+				// MODE A — already-excluded status panel.
+				'Account %s' => 'Аккаунт: %s',
+				'Your account has been permanently closed. This cannot be reversed.'
+					=> 'Ваш аккаунт был закрыт навсегда. Это действие нельзя отменить.',
+				'If you believe this was an error, or you need assistance, please contact our support team.'
+					=> 'Если вы считаете, что это ошибка, или вам нужна помощь, свяжитесь с нашей службой поддержки.',
+				'Your account is %1$s until %2$s.' => 'Ваш аккаунт %1$s до %2$s.',
+				'This break cannot be ended early. Your account will reactivate automatically once the period has passed.'
+					=> 'Этот перерыв нельзя закончить досрочно. Аккаунт автоматически восстановится по окончании срока.',
+				// MODE B — the three forms.
+				'Responsible gambling tools' => 'Инструменты ответственной игры',
+				'If you want to take a break from competitions, you can pause or suspend your account for a set period, or close it permanently. These tools are here to help you stay in control.'
+					=> 'Если вы хотите сделать перерыв в участии в конкурсах, вы можете приостановить или заблокировать аккаунт на определённый срок либо закрыть его навсегда. Эти инструменты помогут вам сохранять контроль.',
+				'Take a short break' => 'Сделать короткий перерыв',
+				'Pause your account for up to 6 months. It will reactivate automatically.'
+					=> 'Приостановите аккаунт на срок до 6 месяцев. Он восстановится автоматически.',
+				'How long would you like to pause?' => 'На сколько вы хотите поставить аккаунт на паузу?',
+				'1 day'    => '1 день',
+				'1 week'   => '1 неделя',
+				'1 month'  => '1 месяц',
+				'3 months' => '3 месяца',
+				'6 months' => '6 месяцев',
+				'Or enter a custom number of days (1–183):' => 'Или укажите своё количество дней (1–183):',
+				'e.g. 14' => 'например, 14',
+				'Pause my account' => 'Поставить аккаунт на паузу',
+				'Longer suspension' => 'Длительная блокировка',
+				'Suspend your account for 6 months to 5 years. It will reactivate automatically.'
+					=> 'Заблокируйте аккаунт на срок от 6 месяцев до 5 лет. Он восстановится автоматически.',
+				'How long would you like to suspend?' => 'На какой срок вы хотите заблокировать аккаунт?',
+				'1 year'  => '1 год',
+				'2 years' => '2 года',
+				'5 years' => '5 лет',
+				'Suspend my account' => 'Заблокировать аккаунт',
+				'Permanently close account' => 'Закрыть аккаунт навсегда',
+				'This is irreversible. Once closed, your account cannot be reopened.'
+					=> 'Это необратимо. После закрытия аккаунт нельзя будет восстановить.',
+				'Warning: this action is permanent and cannot be undone.'
+					=> 'Внимание: это действие необратимо, и его нельзя отменить.',
+				'Closing your account will immediately log you out and permanently prevent you from logging back in. You will lose access to your competition history and any active entries. Please contact support before proceeding if you have any questions.'
+					=> 'Закрытие аккаунта немедленно завершит вашу сессию и навсегда лишит вас возможности войти снова. Вы потеряете доступ к истории конкурсов и всем активным заявкам. Если у вас есть вопросы, свяжитесь со службой поддержки, прежде чем продолжить.',
+				'I understand this will permanently close my account and cannot be reversed.'
+					=> 'Я понимаю, что это навсегда закроет мой аккаунт и это действие нельзя отменить.',
+				'Type CLOSE to confirm:' => 'Введите CLOSE для подтверждения:',
+				// JS confirm() dialog (class-assets.php's 'confirmClose').
+				'This will permanently close your account and cannot be reversed. Continue?'
+					=> 'Это навсегда закроет ваш аккаунт, и действие нельзя будет отменить. Продолжить?',
+				'Permanently close my account' => 'Закрыть мой аккаунт навсегда',
+				// Server-side validation / flow messages (class-account.php).
+				'Security check failed. Please refresh the page and try again.'
+					=> 'Проверка безопасности не пройдена. Обновите страницу и попробуйте снова.',
+				'Invalid request. Please try again.' => 'Некорректный запрос. Пожалуйста, попробуйте снова.',
+				'Please choose a pause duration between 1 and 183 days.'
+					=> 'Пожалуйста, выберите длительность паузы от 1 до 183 дней.',
+				'Please choose a suspension duration between 6 and 60 months.'
+					=> 'Пожалуйста, выберите длительность блокировки от 6 до 60 месяцев.',
+				'Please tick the confirmation checkbox and type CLOSE to permanently close your account.'
+					=> 'Пожалуйста, отметьте флажок подтверждения и введите CLOSE, чтобы навсегда закрыть аккаунт.',
+				'Your account has been permanently closed (%s). You will not be able to log in again. Please contact support if you need help.'
+					=> 'Ваш аккаунт был окончательно закрыт (%s). Вы больше не сможете войти. Если вам нужна помощь, свяжитесь со службой поддержки.',
+				'Your self-exclusion request has been received (%s). You have been logged out. Your account will reactivate automatically when the period ends.'
+					=> 'Ваш запрос на самоисключение получен (%s). Вы вышли из аккаунта. Он автоматически восстановится по окончании срока.',
+				// Login-block / entry-block messages (class-guard.php). The
+				// reactivation date these splice in via %2$s stays English —
+				// see this method's docblock.
+				'Your account has been permanently closed and can no longer be used to log in. Please contact support if you need help.'
+					=> 'Ваш аккаунт был окончательно закрыт, и вход больше невозможен. Если вам нужна помощь, свяжитесь со службой поддержки.',
+				'Your account is currently %1$s until %2$s. It will reactivate automatically — you cannot log in until then. Please contact support if you need help.'
+					=> 'Ваш аккаунт сейчас %1$s до %2$s. Он восстановится автоматически — до этого момента вход невозможен. Если вам нужна помощь, свяжитесь со службой поддержки.',
+				'Your account is closed, so you cannot enter competitions.'
+					=> 'Ваш аккаунт закрыт, поэтому вы не можете участвовать в конкурсах.',
+				'Your account is currently %1$s, so you cannot enter competitions. It will reactivate on %2$s.'
+					=> 'Ваш аккаунт сейчас %1$s, поэтому вы не можете участвовать в конкурсах. Он восстановится %2$s.',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Russian's three plural forms (one/few/many) from one pipe-separated
+	 * string — the same rule as `Nera_SAW_I18n::ru_plural()`, kept as a
+	 * small private duplicate here rather than reaching into that class's
+	 * own (deliberately protected) implementation; see
+	 * `self::translate_woocommerce_plurals()`'s docblock for why this file
+	 * needs its own copy rather than reusing that one.
+	 *
+	 * @param int    $n     The count.
+	 * @param string $forms Pipe-separated `one|few|many`.
+	 * @return string
+	 */
+	private static function ru_plural_form( $n, $forms ) {
+		$f = explode( '|', $forms );
+
+		$m10  = $n % 10;
+		$m100 = $n % 100;
+
+		if ( 1 === $m10 && 11 !== $m100 ) {
+			return $f[0];
+		}
+		if ( $m10 >= 2 && $m10 <= 4 && ( $m100 < 12 || $m100 > 14 ) ) {
+			return $f[1];
+		}
+
+		return $f[2];
 	}
 
 	/**
