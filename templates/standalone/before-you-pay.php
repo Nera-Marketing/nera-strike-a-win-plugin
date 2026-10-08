@@ -131,7 +131,7 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 			if ( $saw_spec['closes_timestamp'] ) {
 				$saw_facts[] = array(
 					'label' => __( 'Closes', 'nera-strikeawin' ),
-					'value' => wp_date( get_option( 'date_format' ) . ', ' . get_option( 'time_format' ), $saw_spec['closes_timestamp'] ),
+					'value' => Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], get_option( 'date_format' ) . ', ' . get_option( 'time_format' ) ),
 				);
 			}
 			?>

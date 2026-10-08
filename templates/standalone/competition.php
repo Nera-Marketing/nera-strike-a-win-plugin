@@ -75,7 +75,7 @@ $saw_sub = $saw_spec['closes_timestamp']
 	? sprintf(
 		/* translators: %s: closing date and time */
 		__( 'Closes %s', 'nera-strikeawin' ),
-		wp_date( $saw_date_fmt, $saw_spec['closes_timestamp'] )
+		Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], $saw_date_fmt )
 	)
 	: '';
 

@@ -651,6 +651,8 @@ class Nera_SAW_Language {
 			return;
 		}
 
+		self::remember_in_polylang_cookie( $current );
+
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read for a same-request equality check, never output or stored.
 		$stored = isset( $_COOKIE[ self::SWITCH_ARG ] ) ? (string) $_COOKIE[ self::SWITCH_ARG ] : '';
 
@@ -685,6 +687,29 @@ class Nera_SAW_Language {
 			is_ssl(),
 			true
 		);
+	}
+
+	/**
+	 * Also set Polylang's own cookie, so the language survives a plain page
+	 * load, a bookmark, or a link from outside the section while signed out —
+	 * the thing `self::SWITCH_ARG`'s own cookie, by itself, never gave a
+	 * reader, because nothing outside this plugin's own resolver in
+	 * `self::current()` ever looks at it. Client finding #8.
+	 *
+	 * Routed through Polylang's own `PLL_Cookie::set()` rather than a raw
+	 * `setcookie()` so this picks up whatever cookie name, domain, samesite
+	 * and expiration Polylang (or a filter on its own hooks) is actually
+	 * configured with, instead of this plugin guessing at a second copy of
+	 * that policy. A no-op when Polylang is absent, per the class docblock.
+	 *
+	 * @param string $current Language code this request resolved to.
+	 */
+	protected static function remember_in_polylang_cookie( $current ) {
+		if ( ! class_exists( 'PLL_Cookie' ) ) {
+			return;
+		}
+
+		PLL_Cookie::set( $current );
 	}
 
 	/**

@@ -60,6 +60,8 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-catalogue-isolation.php';
 		require_once $dir . 'class-router.php';
 		require_once $dir . 'class-language.php';
+		require_once $dir . 'class-date.php';
+		require_once $dir . 'class-i18n.php';
 		require_once $dir . 'class-language-reach.php';
 		require_once $dir . 'class-language-switcher.php';
 		require_once $dir . 'class-standalone-pages.php';

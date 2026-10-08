@@ -26,7 +26,15 @@ defined( 'ABSPATH' ) || exit;
 $saw_title = isset( $saw_title ) ? $saw_title : get_bloginfo( 'name' );
 $saw_inner = isset( $saw_inner ) ? (bool) $saw_inner : false;
 ?><!DOCTYPE html>
-<html <?php language_attributes(); ?>>
+<?php
+/*
+ * Not language_attributes(): that reflects the site's WordPress locale
+ * (get_locale(), confirmed en_US/en-GB here regardless of which language this
+ * section is serving), never Nera_SAW_Language::current() — so a Russian
+ * page still declared itself en-GB. Client finding #8/#47.
+ */
+?>
+<html lang="<?php echo esc_attr( Nera_SAW_Language::current() ); ?>" dir="ltr">
 <head>
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">

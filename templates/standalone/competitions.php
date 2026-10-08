@@ -138,7 +138,7 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 								sprintf(
 									/* translators: %s: closing date and time */
 									__( 'Closes %s · Drawn automatically', 'nera-strikeawin' ),
-									wp_date( 'D j M, ga', $spec['closes_timestamp'] )
+									Nera_SAW_Date::localized( $spec['closes_timestamp'], 'D j M, ga' )
 								)
 							);
 						} else {

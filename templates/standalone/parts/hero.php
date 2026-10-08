@@ -71,7 +71,7 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 	if ( $saw_spec['closes_timestamp'] ) {
 		$saw_hero_facts[] = array(
 			'label' => __( 'Closes', 'nera-strikeawin' ),
-			'value' => wp_date( $saw_hero_date_fmt, $saw_spec['closes_timestamp'] ),
+			'value' => Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], $saw_hero_date_fmt ),
 		);
 	}
 

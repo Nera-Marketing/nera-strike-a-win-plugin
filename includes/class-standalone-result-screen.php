@@ -155,7 +155,7 @@ class Nera_SAW_Standalone_Result_Screen {
 
 		$stamp = is_numeric( $end ) ? (int) $end : strtotime( (string) $end );
 
-		return $stamp ? date_i18n( get_option( 'date_format' ), $stamp ) : '';
+		return Nera_SAW_Date::localized( $stamp, get_option( 'date_format' ), false );
 	}
 
 	/**

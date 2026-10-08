@@ -59,7 +59,7 @@ if ( $saw_pop_spec ) {
 }
 
 $saw_pop_name  = $saw_pop_spec ? (string) $saw_pop_spec['name'] : get_the_title( $saw_pop_cid );
-$saw_pop_until = wp_date( get_option( 'time_format' ), (int) $saw_run->resume_until );
+$saw_pop_until = Nera_SAW_Date::localized_time( (int) $saw_run->resume_until, get_option( 'time_format' ) );
 
 if ( $saw_on_play ) {
 	$saw_pop_token = wp_create_nonce( Nera_SAW_Rest::start_token_action( $saw_pop_cid, $saw_pop_tier ) );
