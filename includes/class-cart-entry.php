@@ -371,7 +371,7 @@ class Nera_SAW_Cart_Entry {
 			? wc_price( $price )
 			: esc_html( number_format_i18n( $price, 2 ) );
 
-		return esc_html( (string) $tier['label'] ) . ' - ' . $price_html . ' / run';
+		return esc_html( (string) $tier['label'] ) . ' - ' . $price_html . esc_html__( ' / run', 'nera-strikeawin' );
 	}
 
 	/**
@@ -485,7 +485,7 @@ class Nera_SAW_Cart_Entry {
 			: esc_html( number_format_i18n( $price, 2 ) );
 
 		return '<span class="saw-order-tier-badge__label">' . $label . '</span>'
-			. '<span class="saw-order-tier-badge__price">' . wp_kses_post( $price_html ) . ' / run</span>';
+			. '<span class="saw-order-tier-badge__price">' . wp_kses_post( $price_html ) . esc_html__( ' / run', 'nera-strikeawin' ) . '</span>';
 	}
 
 	/**

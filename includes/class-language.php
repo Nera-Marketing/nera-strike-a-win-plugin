@@ -69,7 +69,22 @@ class Nera_SAW_Language {
 			return true;
 		}
 
-		return function_exists( 'is_account_page' ) && is_account_page();
+		if ( function_exists( 'is_account_page' ) && is_account_page() ) {
+			return true;
+		}
+
+		/*
+		 * Same gap, found again on a second page: the checkout page is a
+		 * plain WooCommerce page too, with no SAW route and no SAW template
+		 * meta of its own, so `is_standalone_screen()` misses it exactly
+		 * the way it missed My Account — confirmed the same way, via a
+		 * screenshot showing "Place order", the billing field labels and
+		 * the order-review totals all still English despite already being
+		 * in `self::saw_ru_strings()`'s/this file's own maps. `is_checkout()`
+		 * is WooCommerce's own canonical check, true on the checkout page
+		 * and the order-received ("thank you") page both.
+		 */
+		return function_exists( 'is_checkout' ) && is_checkout();
 	}
 
 	/**
@@ -98,8 +113,11 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_theme_account_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_theme_checkout_strings' ), 10, 3 );
+			add_filter( 'ngettext', array( __CLASS__, 'translate_theme_checkout_plurals' ), 10, 5 );
 			add_filter( 'woocommerce_locate_template', array( __CLASS__, 'override_theme_account_template' ), 100, 3 );
 			add_filter( 'gettext_with_context', array( __CLASS__, 'translate_order_status_labels' ), 10, 4 );
+			add_filter( 'woocommerce_gateway_title', array( __CLASS__, 'translate_gateway_titles' ), 5, 2 );
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_woocommerce_plurals' ), 10, 5 );
@@ -423,6 +441,10 @@ class Nera_SAW_Language {
 				'A link to set a new password will be sent to your email address.'
 					=> 'Ссылка для установки нового пароля будет отправлена на ваш email.',
 				'I agree to the %s'                => 'Принимаю %s',
+				// Checkout's own terms-and-conditions sentence — a different
+				// wrapper than registration's "I agree to the %s" above,
+				// found still English on the real checkout page.
+				'I have read and agree to the website %s' => 'Я прочитал(а) и принимаю %s сайта',
 				'Terms &amp; Conditions'           => 'Условия использования',
 				'I am over the age of 18'         => 'Мне есть 18 лет',
 				'privacy policy'                   => 'политика конфиденциальности',
@@ -529,6 +551,32 @@ class Nera_SAW_Language {
 				'Shipping:'                               => 'Доставка:',
 				'Total:'                                 => 'Итого:',
 				'Save address'                           => 'Сохранить адрес',
+				// Checkout billing/address fields (WC_Countries' own default
+				// and GB-locale field labels) and the order-notes field — found
+				// during the checkout screenshot's own full sweep, the same
+				// kind of gap as the My Account templates above: this plugin's
+				// 'woocommerce'-domain map reached "Place order"/"Billing
+				// address"/etc. already, but never these.
+				'Country / Region'                      => 'Страна',
+				'Street address'                        => 'Адрес',
+				// NOT "Apartment, suite, unit, etc." (no "(optional)") — the
+				// theme's own nera_customize_default_address_fields() (inc/
+				// woocommerce.php) overwrites that field's LABEL with its own
+				// __( …, 'nera-competitions' ) call, a different domain; see
+				// self::translate_theme_checkout_strings()'s own map. Only
+				// the PLACEHOLDER (this field, unchanged by that override)
+				// still comes from core under 'woocommerce'.
+				'Apartment, suite, unit, etc. (optional)' => 'Квартира, офис и т.д. (необязательно)',
+				'Town / City'                            => 'Город',
+				'County'                                 => 'Регион',
+				'Postcode'                               => 'Почтовый индекс',
+				'Phone'                                  => 'Телефон',
+				'optional'                               => 'необязательно',
+				'Order notes'                            => 'Комментарий к заказу',
+				'Notes about your order, e.g. special notes for delivery.'
+					=> 'Комментарий к заказу, например особые пожелания по доставке.',
+				// order-received.php (theme's own copy of this core template).
+				'Thank you. Your order has been received.' => 'Спасибо. Ваш заказ получен.',
 			);
 		}
 
@@ -606,6 +654,48 @@ class Nera_SAW_Language {
 		}
 
 		return isset( $ru[ $text ] ) ? $ru[ $text ] : $translated;
+	}
+
+	/**
+	 * Translate a payment gateway's own title, as shown in the checkout
+	 * payment-method list — `$gateway->get_title()`, resolved from whatever
+	 * the admin saved in that gateway's settings (`WC_Payment_Gateway::
+	 * $title`, a stored option), not a fresh `__()` call this plugin's own
+	 * `gettext` filters could otherwise reach. `woocommerce_gateway_title`
+	 * is WooCommerce's own filter for exactly this — the same one the
+	 * active theme already hooks, at the default priority, to append a
+	 * "Sufficient Balance" badge onto the wallet gateway's title
+	 * (`inc/woocommerce.php`'s `nera_customize_wallet_gateway_title()`) —
+	 * this runs at priority 5, BEFORE that badge is appended, so the badge
+	 * text itself (a plain `esc_html_e( …, 'nera-competitions' )` call,
+	 * already covered by `self::translate_theme_checkout_strings()`) still
+	 * translates on its own, on top of this filter's own result, rather
+	 * than this map needing to match the combined title+badge HTML.
+	 *
+	 * Matched by `$gateway_id` AND the exact known English title, not title
+	 * alone — an admin free to rename a gateway's title to anything should
+	 * see exactly what they typed, not a translation keyed to words they
+	 * may have since changed.
+	 *
+	 * @param string $title      Gateway title WooCommerce would otherwise return.
+	 * @param string $gateway_id Gateway ID.
+	 * @return string
+	 */
+	public static function translate_gateway_titles( $title, $gateway_id ) {
+		if ( is_admin() || 'ru' !== self::current() || ! self::is_account_screen() ) {
+			return $title;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'wallet'           => array( 'Wallet payment' => 'Оплата кошельком' ),
+				'cashflows_card'   => array( 'Pay with Apple / Google Pay ( Debit & Credit )' => 'Apple / Google Pay (дебетовая и кредитная карта)' ),
+				'nera_wallet_split' => array( 'Part wallet, part card' => 'Частично кошелёк, частично карта' ),
+			);
+		}
+
+		return isset( $ru[ $gateway_id ][ $title ] ) ? $ru[ $gateway_id ][ $title ] : $title;
 	}
 
 	/**
@@ -1005,6 +1095,135 @@ class Nera_SAW_Language {
 	}
 
 	/**
+	 * Translate the active theme's own `nera-competitions`-domain strings on
+	 * its checkout templates (`woocommerce/checkout/form-checkout.php`,
+	 * `form-coupon.php`, and the `template-parts/checkout/*.php` partials it
+	 * assembles — billing details, order review, payment section, the
+	 * wallet balance/partial-payment panels). A SEPARATE domain from
+	 * `self::translate_theme_account_strings()`'s own `nera-competitions-
+	 * standard` — this theme gives its My Account templates and its
+	 * checkout templates two different text domains — found only once the
+	 * checkout screenshot made clear the My Account sweep's own filter
+	 * never had a chance of reaching these.
+	 *
+	 * Also the theme's own `%d item(s) in your order` cart-count line, which
+	 * `self::translate_theme_checkout_plurals()` below handles (a real
+	 * `_n()` call, not reachable from a plain `gettext` filter).
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_theme_checkout_strings( $translated, $original, $domain ) {
+		if ( 'nera-competitions' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				// form-checkout.php / thankyou.php (progress steps, shared).
+				'Cart'     => 'Корзина',
+				'Checkout' => 'Оформление',
+				'Complete' => 'Готово',
+				'Sign in to complete your order' => 'Войдите, чтобы завершить заказ',
+				'Please log in to your account or create a new one to proceed to checkout.'
+					=> 'Пожалуйста, войдите в аккаунт или создайте новый, чтобы перейти к оформлению заказа.',
+				'Log In'         => 'Войти',
+				'Create Account' => 'Создать аккаунт',
+				'Your order has been successfully placed.' => 'Ваш заказ успешно оформлен.',
+				// billing-details.php.
+				'Billing Details'        => 'Платёжные данные',
+				'Shipping Details'       => 'Данные доставки',
+				'Additional Information' => 'Дополнительная информация',
+				// inc/woocommerce.php's nera_customize_default_address_fields()
+				// — overwrites address_2's core 'woocommerce'-domain label
+				// with this domain instead (found via this field staying
+				// English despite self::translate_loginreg_strings() already
+				// having an entry for the 'woocommerce' version).
+				'Apartment, suite, unit, etc.' => 'Квартира, офис и т.д.',
+				// order-review.php.
+				'Order Summary'      => 'Сводка заказа',
+				'Draw: %s'           => 'Розыгрыш: %s',
+				'Wallet partial payment' => 'Частичная оплата кошельком',
+				'%1$s will be debited from your wallet and %2$s will be paid through another payment method.'
+					=> '%1$s будет списано с вашего кошелька, а %2$s будет оплачено другим способом.',
+				'Use %1$s from wallet, pay %2$s with another method.'
+					=> 'Использовать %1$s с кошелька, оплатить %2$s другим способом.',
+				'Subtotal'             => 'Промежуточный итог',
+				'Total'                => 'Итого',
+				'SSL Encrypted Payment' => 'Платёж защищён SSL-шифрованием',
+				// form-coupon.php.
+				'Have a coupon code?'    => 'Есть промокод?',
+				'Enter your discount code' => 'Введите код скидки',
+				'Apply'                  => 'Применить',
+				'Remove coupon'          => 'Удалить купон',
+				// payment-section.php.
+				'Payment Method'  => 'Способ оплаты',
+				'Payment Methods' => 'Способы оплаты',
+				// wallet-payment-disabled.php / wallet-partial-payment.php /
+				// wallet-balance.php.
+				'Wallet payment'        => 'Оплата кошельком',
+				'Sufficient Balance'    => 'Достаточно средств',
+				'Insufficient Balance'  => 'Недостаточно средств',
+				'Available Balance:'    => 'Доступный баланс:',
+				'Part wallet, part card' => 'Частично кошелёк, частично карта',
+				'Amount to take from wallet' => 'Сумма списания с кошелька',
+				'of'                     => 'из',
+				'Use maximum wallet amount for this order' => 'Использовать максимальную сумму кошелька для этого заказа',
+				'%1$s from your wallet, %2$s charged to your card.'
+					=> '%1$s с вашего кошелька, %2$s будет списано с карты.',
+				'Unavailable'            => 'Недоступно',
+				'Your wallet credit will be used first' => 'Сначала будут использованы средства кошелька',
+				'Your Wallet Balance'    => 'Баланс вашего кошелька',
+				'View Transaction History' => 'История операций',
+				'Top Up Wallet'          => 'Пополнить кошелёк',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The two genuine count-driven plurals the theme's checkout templates
+	 * have: `form-checkout.php`'s "%d item(s) in your order" cart-count line
+	 * and `order-review.php`'s "%d ticket(s)" line — both real `_n()` calls
+	 * under the `nera-competitions` domain, so `self::
+	 * translate_theme_checkout_strings()`'s plain map can never reach them;
+	 * same reasoning as `self::translate_woocommerce_plurals()` above.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $single     Singular source string.
+	 * @param string $plural     Plural source string.
+	 * @param int    $number     The count being formatted for.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_theme_checkout_plurals( $translated, $single, $plural, $number, $domain ) {
+		unset( $plural );
+		if ( 'nera-competitions' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		if ( '%d item in your order' === $single ) {
+			return self::ru_plural_form( (int) $number, '%d товар в заказе|%d товара в заказе|%d товаров в заказе' );
+		}
+
+		if ( '%d ticket' === $single ) {
+			return self::ru_plural_form( (int) $number, '%d билет|%d билета|%d билетов' );
+		}
+
+		return $translated;
+	}
+
+	/**
 	 * Serve this plugin's own Russian copy of the active theme's
 	 * `woocommerce/myaccount/form-edit-account.php` override, for the two
 	 * strings on it that are literal English baked into the theme's own
@@ -1291,6 +1510,18 @@ class Nera_SAW_Language {
 				// line shown on the stage-break screen and the per-question badge.
 				'%d ticket per correct answer'                => '%d билет за правильный ответ',
 				'%d tickets per correct answer'               => '%d билетов за правильный ответ',
+				// Order-line tier badge and run stats (class-cart-entry.php) —
+				// found still English on the order-details/view-order
+				// screenshot, during the broader self-translate pass. Already
+				// has supplied Russian in the dev-build JSON file (these are
+				// exact matches, not this plugin's own translation).
+				'Tier'                  => 'Уровень',
+				'%1$s - %2$s / run'     => '%1$s - %2$s / попытка',
+				' / run'                => ' / попытка',
+				'Runs purchased'        => 'Куплено попыток',
+				'Runs in progress'      => 'Попыток в процессе',
+				'Runs completed'        => 'Сыграно попыток',
+				'Runs remaining'        => 'Осталось попыток',
 			);
 		}
 
