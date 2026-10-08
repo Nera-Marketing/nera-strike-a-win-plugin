@@ -15,13 +15,91 @@ const props = defineProps( {
 const strings = ( window.NeraSAW && window.NeraSAW.strings ) || {};
 const t = ( key, fallback ) => strings[ key ] || fallback;
 
-// Positional substitution for the results/language strings, which use PHP's
-// %1$d / %2$s convention (several take more than one value, in an order that
-// differs between languages once translated) rather than the older strings'
-// single sequential %d / %s.
+/**
+ * Russian's three plural forms (one/few/many) from a pipe-separated string —
+ * identical to the client's own supplied `_plural_helper_js`
+ * (languages/ru/02b-russian-strings-dev-build.json).
+ */
+function ruPlural( n, forms ) {
+	const f = forms.split( '|' );
+	const m10 = n % 10;
+	const m100 = n % 100;
+	if ( m10 === 1 && m100 !== 11 ) {
+		return f[ 0 ];
+	}
+	if ( m10 >= 2 && m10 <= 4 && ( m100 < 12 || m100 > 14 ) ) {
+		return f[ 1 ];
+	}
+	return f[ 2 ];
+}
+
+/**
+ * Picks the right form out of a pipe-separated plural TEMPLATE
+ * (`Nera_SAW_I18n::n_template()` on the PHP side) once the actual count is
+ * known — which, for several of these strings (a per-question ticket
+ * reward, a running tickets total), only happens client-side as the quiz
+ * runs, well after the chrome strings table is built. Two forms is English's
+ * own singular/plural rule (unchanged from what `_n()` already did at these
+ * call sites); three is Russian's one/few/many via `ruPlural()`. A value
+ * with no `|` was never plural-packed (nothing to pick) and is returned as
+ * given.
+ */
+function pickPluralForm( n, template ) {
+	const f = template.split( '|' );
+	if ( f.length === 1 ) {
+		return f[ 0 ];
+	}
+	if ( f.length === 2 ) {
+		return 1 === n ? f[ 0 ] : f[ 1 ];
+	}
+	return ruPlural( n, template );
+}
+
+/**
+ * Substitutes a string's placeholders from `args`, in the order each
+ * placeholder first appears — whichever style the resolved string actually
+ * uses. English strings here still use PHP's `%1$d` / plain `%d` / `%s`
+ * (unchanged, pre-existing); the client's supplied Russian uses `{name}`
+ * instead, so args[0] fills the first `{…}` encountered, args[1] the second,
+ * and so on — the two styles never both appear in the same string, so one
+ * shared running index is enough.
+ *
+ * When the resolved value is pipe-separated (a plural template), the right
+ * form is chosen via `pickPluralForm()` first, keyed on `args[0]` — the
+ * supplied strings always put the deciding count first.
+ *
+ * @param {string} key
+ * @param {string} fallback
+ * @param {...*}   args
+ */
 function fmt( key, fallback, ...args ) {
+	let raw = t( key, fallback );
+
+	/*
+	 * Named form — fmt( key, fallback, count, { n: …, tier: … } ) —
+	 * substitutes `{name}` by NAME rather than by order of appearance.
+	 * Needed wherever a translation reorders placeholders relative to the
+	 * English source: runsRemainingCombined's Russian few/many forms put
+	 * `{tier}` before `{n2}`, the opposite of the English template's own
+	 * order, so position-based substitution silently swapped them.
+	 */
+	if ( 2 === args.length && null !== args[ 1 ] && 'object' === typeof args[ 1 ] ) {
+		const [ count, vars ] = args;
+		if ( raw.indexOf( '|' ) !== -1 ) {
+			raw = pickPluralForm( count, raw );
+		}
+		return raw.replace( /\{(\w+)\}/g, ( _m, name ) => {
+			const v = vars[ name ];
+			return v === undefined || v === null ? '' : String( v );
+		} );
+	}
+
+	if ( raw.indexOf( '|' ) !== -1 ) {
+		raw = pickPluralForm( args[ 0 ], raw );
+	}
+
 	let i = 0;
-	return t( key, fallback )
+	return raw
 		// Positional first ( %1$d, %2$s, … ) — the multi-argument strings, where
 		// order can legitimately change between languages once translated.
 		.replace( /%(\d)\$[ds]/g, ( _m, n ) => {
@@ -31,6 +109,11 @@ function fmt( key, fallback, ...args ) {
 		// Then plain %d / %s in sequence — the single-argument strings, which have
 		// nothing to reorder.
 		.replace( /%[ds]/g, () => {
+			const v = args[ i++ ];
+			return v === undefined || v === null ? '' : String( v );
+		} )
+		// `{name}` — the client's supplied Russian strings' own placeholder style.
+		.replace( /\{\w+\}/g, () => {
 			const v = args[ i++ ];
 			return v === undefined || v === null ? '' : String( v );
 		} );
@@ -84,7 +167,23 @@ const chosenLanguage = ref( '' );
  * ------------------------------------------------------------------------- */
 const stageNo = ref( 1 );
 const stageCount = ref( 1 );
-const stageRewardLabel = ref( '' );
+// The stage-break screen's subtitle — the server's own combined, plural-aware
+// "Stage {n} of {total} · {band} · {k} ticket(s) per correct answer" sentence
+// (Nera_SAW_Competition_Config::stage_label(), client finding #47), set from
+// `next.stage_label` wherever `next.reward_label` was read before.
+const stageBreakLabel = ref( '' );
+
+// The in-question stage bar pill reads the same combined sentence off the
+// current slot once one has loaded. Before that — the language screen, which
+// has no slot yet — falls back to the old client-built fragment (stage
+// number/count and band label only, no reward clause: the pre-run seed this
+// composes from, window.NeraSAW.stageCount/firstStageLabel, carries no
+// reward count to build the full sentence from). English-only in that one,
+// brief, pre-run moment; everything after a slot has actually loaded is the
+// server's fully translated sentence.
+const stagePillLabel = computed( () =>
+	slot.stage_label || fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
+);
 
 // Pre-run header preview: lets the .saw-stagebar header (normally driven by the
 // current slot, once a run exists) also render on the language-choice screen,
@@ -150,6 +249,9 @@ const slot = reactive( {
 	timer_seconds: 0,
 	seconds_left: 0,
 	reward: 0, // tickets this question is worth if answered correctly.
+	// Server-combined "Stage n of total · band · reward" sentence — empty
+	// until a real slot loads; see stagePillLabel's own fallback for why.
+	stage_label: '',
 } );
 
 const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 0, correct_index: -1 } );
@@ -327,19 +429,25 @@ const finalSpins = computed( () =>
 	spinsFinal.value !== null && spinsFinal.value !== undefined ? spinsFinal.value : spinsSoFar.value
 );
 
+// Client's supplied Russian combines both counts into one sentence
+// ("{n} run left for this competition · {n2} run left on {tier}", plural on
+// {n} only — see runsRemainingCombined in class-frontend.php). No tier to
+// report falls back to the solo English-only line (not in the supplied
+// files in that shape).
 const runsRemainingLine = computed( () => {
 	if ( runsRemainingTotal.value === null ) {
 		return '';
 	}
 	const total = runsRemainingTotal.value;
-	const base = t( 'runsRemaining', '%d runs left for this competition' ).replace( '%d', String( total ) );
 	if ( runsRemainingTier.value !== null && tierLabel.value ) {
-		const tierLine = t( 'runsRemainingTier', '%d runs left on %s' )
-			.replace( '%d', String( runsRemainingTier.value ) )
-			.replace( '%s', tierLabel.value );
-		return `${ base } · ${ tierLine }`;
+		return fmt(
+			'runsRemainingCombined',
+			'{n} run left for this competition · {n2} run left on {tier}',
+			total,
+			{ n: total, n2: runsRemainingTier.value, tier: tierLabel.value }
+		);
 	}
-	return base;
+	return fmt( 'runsRemaining', '%d runs left for this competition', total );
 } );
 
 /* --- Results screen (28 / 29) --------------------------------------------
@@ -354,7 +462,7 @@ const resultsTitle = computed( () => hasTickets.value ? t( 'inTheDrawTitle', "Yo
 
 const resultsSubtitle = computed( () => {
 	if ( hasTickets.value ) {
-		return fmt( 'inTheDrawSubtitle', '%1$d tickets banked from %2$d correct answers.', finalSpins.value, correctCount.value );
+		return fmt( 'inTheDrawSubtitle', '{t} tickets banked from {c} correct answers.|{t} tickets banked from {c} correct answers.', finalSpins.value, correctCount.value );
 	}
 	if ( correctCount.value > 0 ) {
 		return fmt( 'zeroSomeCorrectSubtitle', '%1$d of %2$d correct, but not enough to bank a ticket.', correctCount.value, totalSlots.value );
@@ -899,7 +1007,7 @@ function maybeShowStageBreak( state ) {
 	stageCount.value = next.stage_count;
 	slot.level_label = next.level_label;
 	slot.level_text_color = next.level_text_color;
-	stageRewardLabel.value = next.reward_label;
+	stageBreakLabel.value = next.stage_label;
 	phase.value = 'stage-break';
 	return true;
 }
@@ -1201,7 +1309,7 @@ onUnmounted( () => {
 		>
 			<div class="saw-stagebar" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">
 				<div class="saw-stagebar__row">
-					<span class="saw-stagebar__pill">{{ fmt('stageOf', 'Stage %1$d of %2$d · %3$s', stageNo, stageCount, slot.level_label) }}</span>
+					<span class="saw-stagebar__pill">{{ stagePillLabel }}</span>
 					<span class="saw-stagebar__tickets">
 						<span class="saw-stagebar__ticketslabel">{{ t('ticketsLabel', 'Tickets') }}</span>
 						<span class="saw-stagebar__ticketsvalue">{{ spinsSoFar }}</span>
@@ -1237,7 +1345,7 @@ onUnmounted( () => {
 			<div v-else-if="phase === 'stage-break'" class="saw-stagebreak">
 				<div class="saw-stagebreak__badge" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">{{ stageNo }}</div>
 				<h2 class="saw-stagebreak__title">{{ t('stageBreakHeadline_' + stageNo, slot.level_label) }}</h2>
-				<p class="saw-stagebreak__sub">{{ fmt('stageOf', 'Stage %1$d of %2$d · %3$s', stageNo, stageCount, slot.level_label) }} · {{ stageRewardLabel }}</p>
+				<p class="saw-stagebreak__sub">{{ stageBreakLabel }}</p>
 				<button type="button" class="saw-stagebreak__continue" @click="continueFromStageBreak">
 					{{ t('continueLabel', 'Continue') }}
 				</button>
@@ -1246,8 +1354,8 @@ onUnmounted( () => {
 			<div v-else class="saw-qbody" :class="{ 'is-revealing': phase === 'reveal' }" :style="levelStyle">
 				<div class="saw-qbody__head">
 					<div>
-						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question %1$d of %2$d', slot.slot_no, totalSlots) }}</p>
-						<span class="saw-qbody__worth">{{ slot.reward === 1 ? fmt('worthTicket', 'Worth %d ticket', slot.reward) : fmt('worthTickets', 'Worth %d tickets', slot.reward) }}</span>
+						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}</p>
+						<span class="saw-qbody__worth">{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span>
 					</div>
 					<div
 						class="saw-qtimer"
@@ -1280,17 +1388,19 @@ onUnmounted( () => {
 
 				<div v-if="phase === 'reveal'" class="saw-banked" :class="{ 'is-zero': !lastResult.correct }">
 					{{ lastResult.correct
-						? fmt('bankedLine', '+%1$d banked. %2$d tickets total.', lastResult.spins_awarded, spinsSoFar)
+						? fmt('bankedLine', '+{k} banked. {t} tickets total.', lastResult.spins_awarded, spinsSoFar)
 						: ( lastResult.timed_out
-							? fmt('timeUpLine', "Time's up. %d tickets total.", spinsSoFar)
-							: fmt('wrongLine', 'Not this time. %d tickets total.', spinsSoFar) )
+							? fmt('timeUpLine', "Time's up. {t} tickets total.", spinsSoFar)
+							: fmt('wrongLine', 'Not this time. {t} tickets total.', spinsSoFar) )
 					}}
 					<button
 						type="button"
 						class="saw-banked__next"
 						:disabled="advancing"
 						@click="endHold"
-					>{{ revealIsFinal ? t('seeResults', 'See my results') : t('nextQuestion', 'Next question') }} ({{ Math.max(0, revealSecondsLeft) }})</button>
+					>{{ revealIsFinal
+						? t('seeResults', 'See my results') + ' (' + Math.max(0, revealSecondsLeft) + ')'
+						: fmt('nextQuestion', 'Next question ({s})', Math.max(0, revealSecondsLeft)) }}</button>
 				</div>
 			</div>
 		</div>
@@ -1303,7 +1413,7 @@ onUnmounted( () => {
 			<div class="saw-results__card">
 				<div class="saw-results__row">
 					<span class="saw-results__label">{{ t('scoreLabel', 'Score') }}</span>
-					<span class="saw-results__value">{{ fmt('scoreValue', '%1$d of %2$d correct', correctCount, totalSlots) }}</span>
+					<span class="saw-results__value">{{ fmt('scoreValue', '{c} of {total} correct', correctCount, totalSlots) }}</span>
 				</div>
 				<div class="saw-results__row">
 					<span class="saw-results__label">{{ t('ticketsEarnedLabel', 'Tickets earned') }}</span>
@@ -1324,7 +1434,7 @@ onUnmounted( () => {
 					<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
 					<div class="saw-results__numbers">
 						<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
-						<span v-if="extraTicketCount > 0" class="saw-numchip saw-numchip--more">{{ fmt('moreNumbers', '+%d more', extraTicketCount) }}</span>
+						<span v-if="extraTicketCount > 0" class="saw-numchip saw-numchip--more">{{ fmt('moreNumbers', '+{n} more', extraTicketCount) }}</span>
 					</div>
 					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are allocated at random from this draw's pool.") }}</p>
 					<div class="saw-results__divider"></div>

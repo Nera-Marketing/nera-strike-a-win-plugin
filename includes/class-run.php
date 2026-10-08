@@ -545,6 +545,13 @@ class Nera_SAW_Run {
 				'stage_count'        => $stage['stage_count'],
 				'is_first_of_stage'  => $stage['is_first_of_stage'],
 				'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
+				'stage_label'        => Nera_SAW_Competition_Config::stage_label(
+					$config,
+					$slot->level_key,
+					$stage['stage_no'],
+					$stage['stage_count'],
+					$level_def ? (string) $level_def['label'] : ''
+				),
 			);
 		}
 
@@ -627,6 +634,13 @@ class Nera_SAW_Run {
 				'stage_count'        => $stage['stage_count'],
 				'is_first_of_stage'  => $stage['is_first_of_stage'],
 				'stage_reward_label' => Nera_SAW_Competition_Config::reward_label( $config, $slot->level_key ),
+				'stage_label'        => Nera_SAW_Competition_Config::stage_label(
+					$config,
+					$slot->level_key,
+					$stage['stage_no'],
+					$stage['stage_count'],
+					$level_def ? (string) $level_def['label'] : ''
+				),
 			);
 		}
 
@@ -1722,6 +1736,13 @@ class Nera_SAW_Run {
 					// stage's colour at that moment.
 					'level_text_color'  => Nera_SAW_Constants::level_text_color( $next->level_key ),
 					'reward_label'      => Nera_SAW_Competition_Config::reward_label( $config, $next->level_key ),
+					'stage_label'       => Nera_SAW_Competition_Config::stage_label(
+						$config,
+						$next->level_key,
+						$stage['stage_no'],
+						$stage['stage_count'],
+						$level_def ? (string) $level_def['label'] : ''
+					),
 				);
 			}
 		}

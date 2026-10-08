@@ -224,13 +224,17 @@ class Nera_SAW_Frontend {
 			),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
-				'viewCompetition'    => __( 'View competition', 'nera-strikeawin' ),
+				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
 				'playAgain'          => __( 'Play again', 'nera-strikeawin' ),
 				'selectAnswer'       => __( 'Choose an answer, then confirm to lock it in.', 'nera-strikeawin' ),
 				'submitAnswer'       => __( 'Submit answer', 'nera-strikeawin' ),
 				'checkingAnswer'     => __( 'Checking…', 'nera-strikeawin' ),
-				'nextQuestion'       => __( 'Next question', 'nera-strikeawin' ),
-				'continueLabel'      => __( 'Continue', 'nera-strikeawin' ),
+				// "Next question ({s})" — the client's supplied Russian packs the
+				// countdown into the same sentence as the label, so the seconds
+				// are substituted in by App.vue via fmt() instead of appended
+				// outside the string as before.
+				'nextQuestion'       => Nera_SAW_I18n::t( 'Next question ({s})' ),
+				'continueLabel'      => Nera_SAW_I18n::t( 'Continue' ),
 				'seeResults'         => __( 'See my results', 'nera-strikeawin' ),
 				// Screen-reader-only announcements for the Answer reveal (the visual
 				// reveal is colour alone, which assistive tech cannot convey).
@@ -245,12 +249,19 @@ class Nera_SAW_Frontend {
 				// Shown instead of the above during the Answer reveal, where the
 				// current question is already scored and no clock is running.
 				'leaveDialogBodyReveal' => __( 'This answer is already saved. If you leave now, every question you have not reached scores zero.', 'nera-strikeawin' ),
-				'stayOnQuiz'         => __( 'Keep playing', 'nera-strikeawin' ),
+				'stayOnQuiz'         => Nera_SAW_I18n::t( 'Keep playing' ),
 				'leaveQuiz'          => __( 'Leave anyway', 'nera-strikeawin' ),
 				'mintingTickets'     => __( 'Adding your tickets to the draw…', 'nera-strikeawin' ),
 				'yourTicketNumbers'  => __( 'Your ticket numbers', 'nera-strikeawin' ),
+				// No tier running alongside it — not in the client's supplied
+				// files (that shape is always "n run left · n2 run left on
+				// tier"); kept as a %d fallback, English-only until added.
 				'runsRemaining'      => __( '%d runs left for this competition', 'nera-strikeawin' ),
-				'runsRemainingTier'  => __( '%d runs left on %s', 'nera-strikeawin' ),
+				// The client's supplied Russian combines both counts into one
+				// sentence, plural-aware on the first count only (client finding
+				// scope: entries page / checkout, not strictly #47, but the same
+				// mechanism).
+				'runsRemainingCombined' => Nera_SAW_I18n::t( '{n} run left for this competition · {n2} run left on {tier}' ),
 				'ticketsMintError'   => __( 'We could not add your tickets right now.', 'nera-strikeawin' ),
 				'retryTickets'       => __( 'Try again', 'nera-strikeawin' ),
 				'tryAgain'           => __( 'Try again', 'nera-strikeawin' ),
@@ -261,14 +272,21 @@ class Nera_SAW_Frontend {
 				'quizLanguageTitle'  => __( 'Quiz language', 'nera-strikeawin' ),
 				'quizLanguageIntro'  => __( 'Questions and answers will appear in this language', 'nera-strikeawin' ),
 				// Question screen.
-				'questionOf'         => __( 'Question %1$d of %2$d', 'nera-strikeawin' ),
-				'worthTickets'       => __( 'Worth %d tickets', 'nera-strikeawin' ),
-				'worthTicket'        => __( 'Worth %d ticket', 'nera-strikeawin' ),
-				'ticketsLabel'       => __( 'Tickets', 'nera-strikeawin' ),
+				'questionOf'         => Nera_SAW_I18n::t( 'Question {n} of {total}' ),
+				// Was two separate keys ('worthTicket'/'worthTickets') picked by a
+				// ternary in the template; one pipe-template now covers both,
+				// English two-form or Russian three-form, same as every other
+				// count-dependent string here (pickPluralForm() in App.vue).
+				'worthTicket'        => Nera_SAW_I18n::n_template( 'Worth {k} ticket', 'Worth {k} tickets' ),
+				'ticketsLabel'       => Nera_SAW_I18n::t( 'Tickets' ),
+				// Pre-run fallback only now (see stagePillLabel in App.vue) — the
+				// in-game stage bar pill and stage-break subtitle read the server's
+				// own combined, plural-aware sentence instead (slot.stage_label /
+				// next.stage_label, Nera_SAW_Competition_Config::stage_label()).
 				'stageOf'            => __( 'Stage %1$d of %2$d · %3$s', 'nera-strikeawin' ),
-				'bankedLine'         => __( '+%1$d banked. %2$d tickets total.', 'nera-strikeawin' ),
-				'timeUpLine'         => __( "Time's up. %d tickets total.", 'nera-strikeawin' ),
-				'wrongLine'          => __( 'Not this time. %d tickets total.', 'nera-strikeawin' ),
+				'bankedLine'         => Nera_SAW_I18n::t( '+{k} banked. {t} tickets total.' ),
+				'timeUpLine'         => Nera_SAW_I18n::t( "Time's up. {t} tickets total." ),
+				'wrongLine'          => Nera_SAW_I18n::t( 'Not this time. {t} tickets total.' ),
 				// Stage break.
 				'stageBreakEyebrow'  => __( 'Stage %1$d of %2$d', 'nera-strikeawin' ),
 				// Per-stage headline, read by App.vue as `stageBreakHeadline_{stage_no}`
@@ -276,23 +294,26 @@ class Nera_SAW_Frontend {
 				// number beyond this list (a competition can have more or fewer
 				// stages than the five named here). Stage 2's "Stepping up" is the
 				// reference design's own example; the rest follow its tone.
-				'stageBreakHeadline_1' => __( 'Warming up', 'nera-strikeawin' ),
-				'stageBreakHeadline_2' => __( 'Stepping up', 'nera-strikeawin' ),
-				'stageBreakHeadline_3' => __( 'Getting serious', 'nera-strikeawin' ),
-				'stageBreakHeadline_4' => __( 'Into the hard part', 'nera-strikeawin' ),
-				'stageBreakHeadline_5' => __( 'Final stretch', 'nera-strikeawin' ),
+				'stageBreakHeadline_1' => Nera_SAW_I18n::t( 'Warming up' ),
+				'stageBreakHeadline_2' => Nera_SAW_I18n::t( 'Stepping up' ),
+				'stageBreakHeadline_3' => Nera_SAW_I18n::t( 'Getting serious' ),
+				'stageBreakHeadline_4' => Nera_SAW_I18n::t( 'Getting tough' ),
+				'stageBreakHeadline_5' => Nera_SAW_I18n::t( 'The final stretch' ),
 				// Results.
-				'runComplete'        => __( 'Run complete', 'nera-strikeawin' ),
-				'inTheDrawTitle'     => __( "You're in the draw", 'nera-strikeawin' ),
-				'inTheDrawSubtitle'  => __( '%1$d tickets banked from %2$d correct answers.', 'nera-strikeawin' ),
-				'zeroTicketsTitle'   => __( 'No tickets this run', 'nera-strikeawin' ),
+				'runComplete'        => Nera_SAW_I18n::t( 'Run complete' ),
+				'inTheDrawTitle'     => Nera_SAW_I18n::t( "You're in the draw" ),
+				// English singular/plural are the same text here, same as this
+				// string's own pre-existing (unpluralized) English behaviour —
+				// only the Russian side needs the real one/few/many distinction.
+				'inTheDrawSubtitle'  => Nera_SAW_I18n::n_template( '{t} tickets banked from {c} correct answers.', '{t} tickets banked from {c} correct answers.' ),
+				'zeroTicketsTitle'   => Nera_SAW_I18n::t( 'No tickets this run' ),
 				'zeroCorrectSubtitle' => __( 'None of the %d answers landed in time.', 'nera-strikeawin' ),
 				'zeroSomeCorrectSubtitle' => __( '%1$d of %2$d correct, but not enough to bank a ticket.', 'nera-strikeawin' ),
-				'scoreLabel'         => __( 'Score', 'nera-strikeawin' ),
-				'scoreValue'         => __( '%1$d of %2$d correct', 'nera-strikeawin' ),
-				'ticketsEarnedLabel' => __( 'Tickets earned', 'nera-strikeawin' ),
-				'yourEntryNumbers'   => __( 'Your entry numbers', 'nera-strikeawin' ),
-				'moreNumbers'        => __( '+%d more', 'nera-strikeawin' ),
+				'scoreLabel'         => Nera_SAW_I18n::t( 'Score' ),
+				'scoreValue'         => Nera_SAW_I18n::t( '{c} of {total} correct' ),
+				'ticketsEarnedLabel' => Nera_SAW_I18n::t( 'Tickets earned' ),
+				'yourEntryNumbers'   => Nera_SAW_I18n::t( 'Your entry numbers' ),
+				'moreNumbers'        => Nera_SAW_I18n::t( '+{n} more' ),
 				'numbersPoolNote'    => __( 'Numbers are allocated at random from this draw\'s pool.', 'nera-strikeawin' ),
 				'drawInfoWithEntry'  => __( 'Random draw, independently witnessed. You\'ll be notified either way.', 'nera-strikeawin' ),
 				'drawDatePrefix'     => __( 'Draw: %s', 'nera-strikeawin' ),

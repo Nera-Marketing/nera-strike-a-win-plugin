@@ -140,6 +140,33 @@ class Nera_SAW_I18n {
 	}
 
 	/**
+	 * A plural TEMPLATE, for a caller that does not yet know the count a
+	 * plural choice would need — `wp_localize_script`'s chrome strings table
+	 * builds once per page load, before any specific question/stage/ticket
+	 * count exists; the count only appears later, client-side, as the quiz
+	 * actually runs. Russian: the supplied one/few/many string, looked up by
+	 * `$single`. English: a plain two-form `$single|$plural`, so the client
+	 * resolves it with the same kind of pipe-split logic (App.vue's
+	 * `pickPluralForm()`) rather than a second, unrelated mechanism that
+	 * exists only for English.
+	 *
+	 * Use `self::n()` instead when the count is already known at the point of
+	 * the call (e.g. a per-level reward, fixed for the whole competition) —
+	 * it resolves immediately rather than handing back a template.
+	 *
+	 * @param string $single English singular form; also the Russian lookup key.
+	 * @param string $plural English plural form.
+	 * @return string
+	 */
+	public static function n_template( $single, $plural ) {
+		if ( 'ru' === Nera_SAW_Language::current() ) {
+			return self::brand( self::strings()[ $single ] ?? ( $single . '|' . $plural ) );
+		}
+
+		return $single . '|' . $plural;
+	}
+
+	/**
 	 * Russian's three plural forms (one/few/many) from one pipe-separated
 	 * string. Identical to the client-supplied `_plural_helper_php` in
 	 * `languages/ru/02b-russian-strings-dev-build.json` — kept here as a

@@ -322,6 +322,41 @@ class Nera_SAW_Competition_Config {
 	}
 
 	/**
+	 * "Stage 2 of 5 · Getting serious · 2 tickets per correct answer" — the
+	 * stage bar pill and the stage-break subtitle, as one sentence.
+	 *
+	 * Client finding #47: the client's supplied Russian covers this as one
+	 * combined, plural-aware string (stage number, band name and per-answer
+	 * reward together), not `self::reward_label()`'s own fragment
+	 * concatenated client-side with a separately-translated stage/band label —
+	 * `_n()`'s own two-form English plural rule is exactly what made every
+	 * reward count other than 1 read as "tickets" in Russian too regardless of
+	 * its actual value. Routed through Nera_SAW_I18n::n() instead.
+	 *
+	 * @param array  $config     Config.
+	 * @param string $level_key  Level key.
+	 * @param int    $stage_no   Stage number (1-based).
+	 * @param int    $stage_count Total stages.
+	 * @param string $band_label The level's own display label ("Getting serious").
+	 * @return string
+	 */
+	public static function stage_label( array $config, $level_key, $stage_no, $stage_count, $band_label ) {
+		$reward = self::effective_reward( $config, $level_key );
+
+		return Nera_SAW_I18n::n(
+			'Stage {n} of {total} · {band} · {k} ticket per correct answer',
+			'Stage {n} of {total} · {band} · {k} tickets per correct answer',
+			$reward,
+			array(
+				'n'     => $stage_no,
+				'total' => $stage_count,
+				'band'  => $band_label,
+				'k'     => $reward,
+			)
+		);
+	}
+
+	/**
 	 * Total number of questions in a run for this config.
 	 *
 	 * @param array $config Config.
