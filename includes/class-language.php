@@ -394,6 +394,19 @@ class Nera_SAW_Language {
 				// either client file, so it gets this plugin's own
 				// translation instead, per the broader self-translate pass.
 				'Billing address'                    => 'Платёжный адрес',
+				// Edit-account form (templates/myaccount/form-edit-account.php,
+				// stock core) — found still English in the broader
+				// self-translate pass (screenshot: "Password change" etc.).
+				'Display name'                        => 'Отображаемое имя',
+				'This will be how your name will be displayed in the account section and in reviews'
+					=> 'Так ваше имя будет отображаться в разделе аккаунта и в отзывах',
+				'Password change'                     => 'Смена пароля',
+				'Current password (leave blank to leave unchanged)'
+					=> 'Текущий пароль (оставьте пустым, если не хотите менять)',
+				'New password (leave blank to leave unchanged)'
+					=> 'Новый пароль (оставьте пустым, если не хотите менять)',
+				'Confirm new password'                => 'Подтвердите новый пароль',
+				'Save changes'                        => 'Сохранить изменения',
 				'Shipping address'                   => 'Адрес доставки',
 				'The following addresses will be used on the checkout page by default.'
 					=> 'Эти адреса будут использоваться по умолчанию на странице оформления заказа.',
