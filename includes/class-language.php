@@ -121,6 +121,7 @@ class Nera_SAW_Language {
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_woocommerce_plurals' ), 10, 5 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_instant_win_threshold_strings' ), 10, 3 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_spending_limit_plurals' ), 10, 5 );
 
 			// See self::current()'s docblock (step 2) for why this needs a cookie
@@ -234,6 +235,11 @@ class Nera_SAW_Language {
 				'Need support with your play?' => 'Нужна помощь с игрой?',
 				'Help & support'                => 'Помощь и поддержка',
 				'Need support?'                 => 'Нужна помощь?',
+				// Checkout signpost (class-checkout.php), shown above the
+				// terms checkbox when a customer is over their spending
+				// limit — found still English on the checkout screenshot.
+				'Reached your spending limit? Support and advice is available.'
+					=> 'Достигли лимита расходов? Поддержка и консультация доступны.',
 			);
 		}
 
@@ -577,6 +583,33 @@ class Nera_SAW_Language {
 					=> 'Комментарий к заказу, например особые пожелания по доставке.',
 				// order-received.php (theme's own copy of this core template).
 				'Thank you. Your order has been received.' => 'Спасибо. Ваш заказ получен.',
+				// checkout/form-coupon.php (core — the theme's own coupon
+				// partial is not what actually renders on checkout; found
+				// still English on the checkout screenshot).
+				'Have a coupon?'                 => 'Есть промокод?',
+				'Click here to enter your code'  => 'Нажмите, чтобы ввести его',
+				'Coupon code'                     => 'Код купона',
+				'Apply coupon'                    => 'Применить купон',
+				'Coupon:'                         => 'Купон:',
+				// checkout/form-shipping.php's own "Additional information"
+				// heading (lowercase i — a different string than the theme's
+				// own "Additional Information", found still English
+				// alongside the coupon form on the same screenshot).
+				'Additional information'          => 'Дополнительная информация',
+				// Theme's own tabbed login/register form (woocommerce/
+				// myaccount/form-login.php) and page.php's eyebrow label —
+				// found during the follow-up sweep of the 192 supplied-JSON
+				// keys. Distinct from entries already above: different
+				// capitalisation/punctuation at these exact call sites.
+				'Confirm Password'                => 'Подтвердите пароль',
+				'Enter your username or email'    => 'Введите имя пользователя или email',
+				'Enter your password'              => 'Введите пароль',
+				'Enter your full name'             => 'Введите полное имя',
+				'Welcome Back'                      => 'С возвращением',
+				'Join us and start entering competitions today' => 'Присоединяйтесь и начните участвовать в конкурсах сегодня',
+				'Log in to your account to continue' => 'Войдите в аккаунт, чтобы продолжить',
+				'Your Account'                      => 'Ваш аккаунт',
+				'Create Account'                    => 'Создать аккаунт',
 			);
 		}
 
@@ -604,11 +637,19 @@ class Nera_SAW_Language {
 	 * @return string
 	 */
 	public static function translate_privacy_policy_text( $text, $type ) {
-		if ( 'registration' !== $type || is_admin() || 'ru' !== self::current() ) {
+		if ( ! in_array( $type, array( 'registration', 'checkout' ), true ) || is_admin() || 'ru' !== self::current() ) {
 			return $text;
 		}
 		if ( ! self::is_account_screen() ) {
 			return $text;
+		}
+
+		if ( 'checkout' === $type ) {
+			// Same stored-option gap as registration's own text below, found
+			// on the checkout screenshot: woocommerce_checkout_privacy_policy_
+			// text is saved in this site's DB with the stock English default,
+			// so the __() call building that default never runs either.
+			return 'Ваши персональные данные будут использованы для обработки вашего заказа, обеспечения работы сайта, а также для других целей, описанных в нашей [privacy_policy].';
 		}
 
 		return 'Ваши персональные данные будут использованы для улучшения вашего опыта на этом сайте, управления доступом к вашему аккаунту, а также для других целей, описанных в нашей [privacy_policy].';
@@ -745,6 +786,34 @@ class Nera_SAW_Language {
 
 		if ( 'Address' === $single ) {
 			return 'Addresses' === $translated ? 'Адреса' : 'Адрес';
+		}
+
+		return $translated;
+	}
+
+	/**
+	 * Translate the sibling "Instant Win Rules" plugin's one checkout-facing
+	 * string — the "Processing your order…" overlay message shown while a
+	 * large-quantity ticket purchase is being submitted. Everything else in
+	 * that plugin's domain is an admin update-notice, already excluded by
+	 * the `is_admin()` check below. Found still English on the checkout
+	 * screenshot during the broader self-translate pass.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_instant_win_threshold_strings( $translated, $original, $domain ) {
+		if ( 'nera-instant-win-threshold' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		if ( 'Processing your order&hellip; this can take a moment for large ticket quantities.' === $original ) {
+			return 'Обрабатываем ваш заказ&hellip; это может занять некоторое время при большом количестве билетов.';
 		}
 
 		return $translated;
@@ -1162,6 +1231,7 @@ class Nera_SAW_Language {
 				'Enter your discount code' => 'Введите код скидки',
 				'Apply'                  => 'Применить',
 				'Remove coupon'          => 'Удалить купон',
+				'Applied Coupons:'       => 'Применённые купоны:',
 				// payment-section.php.
 				'Payment Method'  => 'Способ оплаты',
 				'Payment Methods' => 'Способы оплаты',
@@ -1372,6 +1442,19 @@ class Nera_SAW_Language {
 				'questions'                               => 'вопросов',
 				'%ds'                                      => '%dс',
 				'per question'                            => 'на вопрос',
+				// Competition hub's "How to earn tickets" guide
+				// (class-frontend.php) — plain esc_html__() calls, not routed
+				// through Nera_SAW_I18n or the ACF field i18n side-table, so
+				// unlike most of this file's own copy these had no
+				// translation anywhere yet. Found during the broader
+				// self-translate pass's follow-up sweep of the 192 supplied-
+				// JSON keys not yet wired anywhere in this codebase.
+				'All entries'                              => 'Все участия',
+				'How to earn tickets'                      => 'Как получить билеты',
+				'Use a run'                                 => 'Используйте попытку',
+				'Answer every question in the quiz'        => 'Ответьте на каждый вопрос',
+				'Player tip'                                => 'Совет игроку',
+				'Stay on this page while you play'         => 'Оставайтесь на этой странице во время игры',
 				'difficulty bands'                        => 'уровней сложности',
 				'%s question'                             => '%s вопрос',
 				'%s questions'                            => '%s вопросов',
@@ -1518,6 +1601,10 @@ class Nera_SAW_Language {
 				'Tier'                  => 'Уровень',
 				'%1$s - %2$s / run'     => '%1$s - %2$s / попытка',
 				' / run'                => ' / попытка',
+				// class-product-frontend.php's tier-picker widget (JS i18n
+				// via wp_localize_script) — no leading space, a different
+				// call site than the two above.
+				'/ run'                 => '/ попытка',
 				'Runs purchased'        => 'Куплено попыток',
 				'Runs in progress'      => 'Попыток в процессе',
 				'Runs completed'        => 'Сыграно попыток',
