@@ -369,17 +369,21 @@ class Nera_SAW_Run_Grants {
 	}
 
 	/**
-	 * Run counts for a specific order line (from the grant row).
+	 * Run counts for a specific order line (from the grant row, plus the
+	 * `runs` table itself for the in-progress/completed split — see
+	 * `Nera_SAW_Run::run_counts_for_order_tier()`'s own docblock for why
+	 * `consumed` alone (this method's entire output before client finding
+	 * #41) was never enough to tell a finished run from one still live).
 	 *
 	 * @param int $order_id      Order ID.
 	 * @param int $order_item_id Order line item ID.
-	 * @return array|null { total: int, completed: int, remaining: int, status: string } or null.
+	 * @return array|null { total: int, in_progress: int, completed: int, remaining: int, status: string } or null.
 	 */
 	public static function order_line_stats( $order_id, $order_item_id ) {
 		global $wpdb;
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				'SELECT tier_key, qty, consumed, status, config_snapshot FROM ' . self::table() . ' WHERE order_id = %d AND order_item_id = %d LIMIT 1',
+				'SELECT competition_id, tier_key, qty, consumed, status, config_snapshot FROM ' . self::table() . ' WHERE order_id = %d AND order_item_id = %d LIMIT 1',
 				(int) $order_id,
 				(int) $order_item_id
 			)
@@ -387,16 +391,29 @@ class Nera_SAW_Run_Grants {
 		if ( ! $row ) {
 			return null;
 		}
-		$total     = max( 0, (int) $row->qty );
-		$completed = max( 0, min( $total, (int) $row->consumed ) );
-		$config    = $row->config_snapshot ? json_decode( $row->config_snapshot, true ) : null;
+		$total  = max( 0, (int) $row->qty );
+		$config = $row->config_snapshot ? json_decode( $row->config_snapshot, true ) : null;
+
+		$run_counts = class_exists( 'Nera_SAW_Run' )
+			? Nera_SAW_Run::run_counts_for_order_tier( (int) $order_id, (int) $row->competition_id, (string) $row->tier_key )
+			: array(
+				'in_progress' => 0,
+				'completed'   => 0,
+			);
+
+		// Never-started balance: qty bought minus whatever was ever drawn from it
+		// (consumed only ever moves forward on start — see run_counts_for_order_
+		// tier()'s own docblock on the one exception, an admin-only restore()).
+		$remaining = max( 0, $total - max( 0, (int) $row->consumed ) );
+
 		return array(
-			'tier_key'  => (string) $row->tier_key,
-			'total'     => $total,
-			'completed' => $completed,
-			'remaining' => max( 0, $total - $completed ),
-			'status'    => (string) $row->status,
-			'config'    => is_array( $config ) ? $config : null,
+			'tier_key'    => (string) $row->tier_key,
+			'total'       => $total,
+			'in_progress' => min( $total, $run_counts['in_progress'] ),
+			'completed'   => min( $total, $run_counts['completed'] ),
+			'remaining'   => $remaining,
+			'status'      => (string) $row->status,
+			'config'      => is_array( $config ) ? $config : null,
 		);
 	}
 

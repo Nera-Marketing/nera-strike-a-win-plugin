@@ -540,18 +540,27 @@ class Nera_SAW_Cart_Entry {
 	}
 
 	/**
-	 * Render purchased / completed / remaining run counts.
+	 * Render purchased / in progress / completed / remaining run counts.
+	 *
+	 * Four numbers, not three, since client finding #41: a run still live
+	 * at Stage 3 used to read "Runs completed" because this used to show
+	 * `consumed` (runs started) under that label. "Runs completed" is now
+	 * `order_line_stats()`'s own `completed` — genuinely `status =
+	 * 'finalized'` — with the runs it was counting before client finding
+	 * #41 surfaced separately as "Runs in progress".
 	 *
 	 * @param array $stats Grant stats from order_line_stats().
 	 * @return string
 	 */
 	private static function format_order_run_stats_html( array $stats ) {
-		$total     = (int) $stats['total'];
-		$completed = (int) $stats['completed'];
-		$remaining = (int) $stats['remaining'];
+		$total       = (int) $stats['total'];
+		$in_progress = (int) $stats['in_progress'];
+		$completed   = (int) $stats['completed'];
+		$remaining   = (int) $stats['remaining'];
 
 		$html  = '<dl class="saw-order-runs">';
 		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs purchased', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $total ) . '</dd></div>';
+		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs in progress', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $in_progress ) . '</dd></div>';
 		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs completed', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $completed ) . '</dd></div>';
 		$html .= '<div class="saw-order-runs__stat saw-order-runs__stat--remaining"><dt>' . esc_html__( 'Runs remaining', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $remaining ) . '</dd></div>';
 		$html .= '</dl>';

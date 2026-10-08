@@ -1512,6 +1512,48 @@ class Nera_SAW_Run {
 		return array_values( array_unique( array_map( 'strval', $numbers ) ) );
 	}
 
+	/**
+	 * How many of an order line's runs are actually finished vs. still live —
+	 * the distinction `Nera_SAW_Run_Grants::order_line_stats()` never made
+	 * (client finding #41): that method's own "completed" was really
+	 * `grants.consumed`, a count of runs drawn from the balance at the
+	 * moment they START, not finished — so a run still live at Stage 3
+	 * already read "Runs completed". Finished is this row's own
+	 * `status = 'finalized'` (set once, only by `finalize_scoring()`); live
+	 * is `status = 'active'` — the same two states `abandon()`/normal
+	 * completion ever leave a started run in, short of the admin-only
+	 * `restore()` path, which refunds the grant and voids the run rather
+	 * than leaving it in either bucket. The same `order_id` +
+	 * `competition_id` + `tier_key` scoping as `ticket_numbers_for_order_
+	 * tier()` above, for the same reason: `runs` has no `order_item_id` of
+	 * its own to join on more precisely.
+	 *
+	 * @param int    $order_id       Order ID.
+	 * @param int    $competition_id Competition product ID.
+	 * @param string $tier_key       Tier key.
+	 * @return array{in_progress: int, completed: int}
+	 */
+	public static function run_counts_for_order_tier( $order_id, $competition_id, $tier_key ) {
+		global $wpdb;
+		$t      = Nera_SAW_Database::table( 'runs' );
+		$counts = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT
+					SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS in_progress,
+					SUM(CASE WHEN status = 'finalized' THEN 1 ELSE 0 END) AS completed
+				FROM {$t} WHERE order_id = %d AND competition_id = %d AND tier_key = %s",
+				(int) $order_id,
+				(int) $competition_id,
+				(string) $tier_key
+			)
+		);
+
+		return array(
+			'in_progress' => $counts ? (int) $counts->in_progress : 0,
+			'completed'   => $counts ? (int) $counts->completed : 0,
+		);
+	}
+
 
 	/**
 	 * Finalize runs whose last slot deadline has passed (abandoned). Cron-driven.
