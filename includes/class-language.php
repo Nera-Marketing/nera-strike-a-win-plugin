@@ -97,6 +97,8 @@ class Nera_SAW_Language {
 			add_filter( 'woo_wallet_locate_template', array( __CLASS__, 'override_wallet_template' ), 99, 4 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_theme_account_strings' ), 10, 3 );
+			add_filter( 'woocommerce_locate_template', array( __CLASS__, 'override_theme_account_template' ), 100, 3 );
 			add_filter( 'gettext_with_context', array( __CLASS__, 'translate_order_status_labels' ), 10, 4 );
 			add_filter( 'woocommerce_get_privacy_policy_text', array( __CLASS__, 'translate_privacy_policy_text' ), 10, 2 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_saw_plurals' ), 10, 5 );
@@ -504,6 +506,29 @@ class Nera_SAW_Language {
 				'Payment methods'                      => 'Способы оплаты',
 				'Account details'                       => 'Данные аккаунта',
 				'Log out'                               => 'Выйти',
+				// Theme's own order/address card templates (woocommerce/myaccount/
+				// orders.php, view-order.php, my-address.php, form-edit-address.php
+				// — found during the broader self-translate pass, after the
+				// edit-account screenshot prompted a full sweep of this theme's
+				// other My Account templates for the same class of gap).
+				'Addresses'                             => 'Адреса',
+				'Order #%1$s'                           => 'Заказ №%1$s',
+				'Placed on %1$s'                        => 'Оформлен %1$s',
+				'Pay'                                    => 'Оплатить',
+				'Pay now'                                => 'Оплатить сейчас',
+				'Previous'                               => 'Назад',
+				'Next'                                   => 'Далее',
+				'Order items'                            => 'Товары заказа',
+				'Quantity:'                              => 'Количество:',
+				'Order updates'                          => 'Обновления заказа',
+				'Phone:'                                 => 'Телефон:',
+				'Email:'                                 => 'Эл. почта:',
+				'N/A'                                    => 'Не указано',
+				'Subtotal:'                              => 'Промежуточный итог:',
+				'Discount:'                              => 'Скидка:',
+				'Shipping:'                               => 'Доставка:',
+				'Total:'                                 => 'Итого:',
+				'Save address'                           => 'Сохранить адрес',
 			);
 		}
 
@@ -897,6 +922,126 @@ class Nera_SAW_Language {
 		}
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the active theme's own `nera-competitions-standard`-domain
+	 * strings on its My Account templates (`woocommerce/myaccount/
+	 * form-edit-account.php`, `form-edit-address.php`, `my-address.php`,
+	 * `orders.php`, `dashboard.php`) — found during a full sweep of those
+	 * templates prompted by the client's edit-account screenshot. These are
+	 * genuine `__()`/`esc_html_e()` calls under the theme's own text domain,
+	 * so a plain `gettext` filter reaches them the same way as any sibling
+	 * plugin's domain above — no template override needed for these.
+	 *
+	 * A SEPARATE, larger group of strings on these same templates (dashboard
+	 * stat-card labels, "Total Orders"/"Wallet Balance"/etc., the orders
+	 * card's "Items:"/"Total:" summary line, "Personal Information"/
+	 * "Password change" on edit-account, "Not set"/"Active" on my-address)
+	 * are literal English baked directly into the theme's markup, calling no
+	 * translation function at all — not reachable by this filter, or by any
+	 * filter, without a template override. `self::override_wallet_template()`
+	 * is one example of that approach, applied so far only to woo-wallet's
+	 * single most-reported string; the much longer list of theme-hardcoded
+	 * strings this sweep turned up has not been overridden the same way
+	 * pending the user's own call on taking on that many template copies —
+	 * see this session's own report for the full list.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_theme_account_strings( $translated, $original, $domain ) {
+		if ( 'nera-competitions-standard' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				// form-edit-account.php.
+				'Back to Dashboard' => 'Назад на панель управления',
+				'Update your account information and password' => 'Обновите данные аккаунта и пароль',
+				'Leave blank to keep your current password' => 'Оставьте пустым, если не хотите менять пароль',
+				'Deactivate account' => 'Деактивировать аккаунт',
+				'Permanently delete your account and personal data associated with it. This cannot be undone.'
+					=> 'Безвозвратно удалить ваш аккаунт и связанные с ним персональные данные. Это действие нельзя отменить.',
+				'Deactivate Account' => 'Деактивировать аккаунт',
+				'Delete your account?' => 'Удалить аккаунт?',
+				'This will permanently remove your account. If you are sure, click Yes.'
+					=> 'Это безвозвратно удалит ваш аккаунт. Если вы уверены, нажмите «Да».',
+				'Cancel' => 'Отмена',
+				'Yes' => 'Да',
+				// form-edit-address.php.
+				'Back to addresses' => 'Назад к адресам',
+				'Update your address information' => 'Обновите информацию об адресе',
+				// my-address.php.
+				'Manage your billing and shipping addresses' => 'Управляйте адресами для выставления счетов и доставки',
+				'Add your address for faster checkout' => 'Добавьте адрес для быстрого оформления заказа',
+				'Address Information' => 'Информация об адресе',
+				'These addresses will be pre-filled during checkout. Make sure they are accurate to ensure smooth delivery of your prizes.'
+					=> 'Эти адреса будут автоматически подставляться при оформлении заказа. Убедитесь, что они указаны верно, чтобы призы были доставлены без задержек.',
+				// orders.php.
+				'View and manage your competition orders' => 'Просматривайте и управляйте заказами по конкурсам',
+				'Tickets' => 'Билеты',
+				// Not a real count-driven plural on this call site (a plain
+				// esc_html__(), not _n() — no count reaches this filter), so
+				// this is the "many" Russian form only, same approximation
+				// `Nera_SAW_I18n` exists to avoid elsewhere but cannot here
+				// without this theme's own call site switching to _n().
+				'+%d more' => 'ещё +%d',
+				'Orders list pages' => 'Страницы списка заказов',
+				'+%d more tickets' => 'ещё +%d билетов',
+				// dashboard.php.
+				'Ready to win big? Check out our latest competitions!' => 'Готовы выиграть по-крупному? Загляните в наши последние конкурсы!',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Serve this plugin's own Russian copy of the active theme's
+	 * `woocommerce/myaccount/form-edit-account.php` override, for the two
+	 * strings on it that are literal English baked into the theme's own
+	 * markup ("Personal Information", "Password change") — calling no
+	 * translation function at all, so no `gettext` filter (including
+	 * `self::translate_theme_account_strings()` above) can reach them.
+	 * Flagged directly in the client's edit-account screenshot.
+	 *
+	 * Uses WooCommerce's own `woocommerce_locate_template` filter, the same
+	 * one `Nera_SAW_Standalone_Chrome::unoverride_template()` already hooks
+	 * for a different purpose (swapping a theme's WooCommerce template for
+	 * this plugin's own, on the section's own screens) — this hooks the
+	 * same filter independently, for a different template and a different
+	 * condition (`self::is_account_screen()` rather than that class's own
+	 * `bypassing_theme()`), so the two never compete over the same request.
+	 * The replacement file lives outside `templates/woocommerce/` specifically
+	 * so the two mechanisms never resolve the same path by coincidence.
+	 *
+	 * @param string $template      Path WooCommerce resolved (the theme's own file).
+	 * @param string $template_name Relative template name, as WooCommerce's
+	 *                              own template loader passes it — no
+	 *                              `woocommerce/` prefix.
+	 * @param string $template_path Template subdirectory WooCommerce was given.
+	 * @return string
+	 */
+	public static function override_theme_account_template( $template, $template_name, $template_path ) {
+		unset( $template_path );
+		if ( 'myaccount/form-edit-account.php' !== $template_name || is_admin() || 'ru' !== self::current() ) {
+			return $template;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $template;
+		}
+
+		$ours = NERA_SAW_PLUGIN_DIR . 'templates/myaccount-ru/form-edit-account.php';
+
+		return file_exists( $ours ) ? $ours : $template;
 	}
 
 	/**
