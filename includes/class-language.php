@@ -1608,6 +1608,7 @@ class Nera_SAW_Language {
 					=> 'На этот раз не повезло — но каждая попытка приближает вас к победе. Впереди ещё много конкурсов!',
 				'Browse more competitions'                  => 'Смотреть другие конкурсы',
 				// Entry gate (age/language pop-up).
+				'Close'                                      => 'Закрыть',
 				'Before you start'                          => 'Прежде чем начать',
 				'Choose your language'                      => 'Выберите язык',
 				'Verified: you have confirmed you are over 18.' => 'Подтверждено: вы указали, что вам больше 18 лет.',

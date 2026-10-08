@@ -1505,6 +1505,7 @@ a.saw-card__title:hover { color: var(--saw-link); }
   backdrop-filter: blur(6px);
 }
 .saw-gate__card {
+  position: relative;
   width: 100%;
   max-width: 400px;
   max-height: 90vh;
@@ -1516,6 +1517,27 @@ a.saw-card__title:hover { color: var(--saw-link); }
   border-radius: var(--saw-r-card);
   box-shadow: 0 24px 60px rgba(33, 26, 20, 0.28);
 }
+/*
+ * Closing without picking anything is treated as choosing English (the
+ * client's own instruction) rather than as leaving the gate unanswered —
+ * see templates/standalone/entry-gate.php's own docblock on why this link
+ * carries saw_lang=en rather than just hiding the dialog.
+ */
+.saw-gate__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--saw-muted);
+  text-decoration: none;
+  border-radius: 999px;
+}
+.saw-gate__close:hover { color: var(--saw-ink); background: var(--saw-tint); }
 .saw-gate__title {
   margin: 0 0 18px;
   font-size: 20px;

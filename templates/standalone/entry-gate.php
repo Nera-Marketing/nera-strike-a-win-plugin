@@ -27,9 +27,31 @@ defined( 'ABSPATH' ) || exit;
 
 $saw_languages = Nera_SAW_Language_Switcher::options();
 $saw_age       = Nera_SAW_Language_Switcher::age_state();
+
+/*
+ * Same rule the language links themselves use (see the loop below): once age
+ * is verified, picking a language also dismisses the gate; until then it only
+ * switches which language the gate itself is showing. The close control
+ * reuses this so "closed without choosing" is treated as choosing English —
+ * the client's own instruction — without ever letting a close double as the
+ * 18+ answer nobody gave.
+ */
+$saw_lang_url = static function ( $code ) use ( $saw_age ) {
+	return $saw_age['verified']
+		? Nera_SAW_Language_Switcher::entry_url( $code )
+		: Nera_SAW_Language_Switcher::url_for( $code );
+};
 ?>
 <div class="saw-gate" role="dialog" aria-modal="true" aria-labelledby="saw-gate-title">
 	<div class="saw-gate__card">
+
+		<a
+			class="saw-gate__close"
+			href="<?php echo esc_url( $saw_lang_url( 'en' ) ); ?>"
+			aria-label="<?php echo esc_attr__( 'Close', 'nera-strikeawin' ); ?>"
+		>
+			<span aria-hidden="true">&times;</span>
+		</a>
 
 		<h2 id="saw-gate-title" class="saw-gate__title">
 			<?php esc_html_e( 'Before you start', 'nera-strikeawin' ); ?>
@@ -40,17 +62,6 @@ $saw_age       = Nera_SAW_Language_Switcher::age_state();
 
 			<div class="saw-gate__languages">
 				<?php
-				/*
-				 * entry_url() marks the pop-up as answered (saw_entry=1) — correct once
-				 * $saw_age['verified'] already, but if age is still unconfirmed a
-				 * language pick must not double as the 18+ answer nobody gave. Use the
-				 * plain language switch (stays on the gate) until then.
-				 */
-				$saw_lang_url = static function ( $code ) use ( $saw_age ) {
-					return $saw_age['verified']
-						? Nera_SAW_Language_Switcher::entry_url( $code )
-						: Nera_SAW_Language_Switcher::url_for( $code );
-				};
 				foreach ( $saw_languages as $saw_lang ) :
 					?>
 					<a
