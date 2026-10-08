@@ -229,6 +229,7 @@ const advancing = ref( false ); // past the reveal, waiting on the next slot / r
 const ticketsLoading = ref( false );
 const ticketsError = ref( '' );
 const ticketNumbers = ref( [] );
+const showAllTicketNumbers = ref( false ); // client finding: "+N more" did nothing when tapped.
 const runsRemainingTotal = ref( null );
 const runsRemainingTier = ref( null );
 const tierLabel = ref( '' );
@@ -485,8 +486,13 @@ const resultChips = computed( () =>
 	} )
 );
 
-const visibleTicketNumbers = computed( () => ticketNumbers.value.slice( 0, 6 ) );
+const visibleTicketNumbers = computed( () =>
+	showAllTicketNumbers.value ? ticketNumbers.value : ticketNumbers.value.slice( 0, 6 )
+);
 const extraTicketCount = computed( () => Math.max( 0, ticketNumbers.value.length - 6 ) );
+function revealAllTicketNumbers() {
+	showAllTicketNumbers.value = true;
+}
 
 function isPlaying() {
 	return quizSessionActive && ( phase.value === 'loading' || phase.value === 'question' || phase.value === 'reveal' );
@@ -1223,6 +1229,7 @@ async function fetchRunComplete() {
 			spinsFinal.value = summary.spins_final;
 		}
 		ticketNumbers.value = Array.isArray( summary.ticket_numbers ) ? summary.ticket_numbers : [];
+		showAllTicketNumbers.value = false;
 		runsRemainingTotal.value = summary.runs_remaining_total ?? 0;
 		runsRemainingTier.value = summary.runs_remaining_tier ?? 0;
 		tierLabel.value = summary.tier_label || summary.tier_key || '';
@@ -1434,7 +1441,12 @@ onUnmounted( () => {
 					<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
 					<div class="saw-results__numbers">
 						<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
-						<span v-if="extraTicketCount > 0" class="saw-numchip saw-numchip--more">{{ fmt('moreNumbers', '+{n} more', extraTicketCount) }}</span>
+						<button
+							v-if="!showAllTicketNumbers && extraTicketCount > 0"
+							type="button"
+							class="saw-numchip saw-numchip--more"
+							@click="revealAllTicketNumbers"
+						>{{ fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
 					</div>
 					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are allocated at random from this draw's pool.") }}</p>
 					<div class="saw-results__divider"></div>
@@ -1923,7 +1935,10 @@ onUnmounted( () => {
 	padding: 6px 12px; border-radius: 999px; background: var(--saw-tint, #fcf4ec);
 	border: 1px solid var(--saw-control, var(--saw-surface)); font-size: 13px; font-weight: 700; color: var(--saw-text);
 }
-.saw-numchip--more { color: var(--saw-brand); border-color: transparent; background: transparent; }
+.saw-numchip--more {
+	color: var(--saw-brand); border-color: transparent; background: transparent;
+	font: inherit; cursor: pointer;
+}
 .saw-results__note { margin: 0; font-size: 12px; color: var(--saw-text-muted); }
 .saw-results__fineprint { margin: 0; font-size: 13px; line-height: 1.6; color: var(--saw-text); }
 .saw-results__fineprint--muted { color: var(--saw-text-muted); margin-top: 4px; }
