@@ -111,6 +111,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_wallet_strings' ), 10, 3 );
 			add_filter( 'woo_wallet_locate_template', array( __CLASS__, 'override_wallet_template' ), 99, 4 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
+			add_filter( 'acf/load_value/name=nera_sl_over_limit_message', array( __CLASS__, 'translate_spending_limit_over_message' ), 20, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_theme_account_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_theme_checkout_strings' ), 10, 3 );
@@ -921,6 +922,47 @@ class Nera_SAW_Language {
 	}
 
 	/**
+	 * Translate the spending-limit plugin's over-limit confirmation message
+	 * — an ADMIN-EDITABLE ACF option field (`nera_sl_over_limit_message`),
+	 * not a `__()` call at all, so none of this file's `gettext` filters
+	 * could ever reach it. `class-checkout.php` reads it via
+	 * `Nera_SL_Settings::over_limit_message()`, which falls back to a plain
+	 * PHP constant (`DEFAULT_OVER_LIMIT_MESSAGE`) when the field is empty —
+	 * found still English on a real confirmation-dialog screenshot despite
+	 * the surrounding dialog's title/buttons (`confirmTitle`/`cancel`/
+	 * `continue`, already in `self::translate_spending_limit_strings()`'s
+	 * own map) rendering correctly in Russian.
+	 *
+	 * Hooked on ACF's own `acf/load_value/name=…` filter — the field's
+	 * name, not its key, so this does not need to know that field's key —
+	 * rather than editing that plugin's file. Only replaces the value when
+	 * it still reads exactly the stock English default: an admin who wrote
+	 * their own message (in English or already in Russian) sees exactly
+	 * what they typed, never silently overwritten.
+	 *
+	 * @param mixed      $value   Field value ACF would otherwise return.
+	 * @param int|string $post_id Post/options ID the field belongs to.
+	 * @param array      $field   ACF field settings.
+	 * @return mixed
+	 */
+	public static function translate_spending_limit_over_message( $value, $post_id, $field ) {
+		unset( $post_id, $field );
+		if ( is_admin() || 'ru' !== self::current() ) {
+			return $value;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $value;
+		}
+
+		$default = 'This order will take you over the spending limit you set. Do you want to continue anyway?';
+		if ( $default !== $value ) {
+			return $value;
+		}
+
+		return 'Этот заказ превысит установленный вами лимит расходов. Хотите продолжить?';
+	}
+
+	/**
 	 * The one genuine count-driven plural the spending-limit domain has:
 	 * `class-account.php`'s "Your limit is {amount} per selected {period} —
 	 * N period(s) configured." sentence. Same reasoning as
@@ -1455,6 +1497,9 @@ class Nera_SAW_Language {
 				'Answer every question in the quiz'        => 'Ответьте на каждый вопрос',
 				'Player tip'                                => 'Совет игроку',
 				'Stay on this page while you play'         => 'Оставайтесь на этой странице во время игры',
+				// Add-to-basket toast (class-router.php) — found still
+				// English on a real purchase screenshot.
+				'Entry added. Taking you to Before you pay…' => 'Участие добавлено. Переходим к оплате…',
 				'difficulty bands'                        => 'уровней сложности',
 				'%s question'                             => '%s вопрос',
 				'%s questions'                            => '%s вопросов',
