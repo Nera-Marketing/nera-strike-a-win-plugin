@@ -123,10 +123,11 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 						</span>
 					<?php endif; ?>
 
-					<span class="saw-card__price">
+					<?php // "Draw End" already shows once, in the pill above — the price slot stays blank for a drawn competition rather than repeating it. ?>
+					<span class="saw-card__price"<?php echo $drawn ? ' style="display:none"' : ''; ?>>
 						<?php
 						if ( $drawn ) {
-							esc_html_e( 'Draw End', 'nera-strikeawin' );
+							// Intentionally empty — see comment above.
 						} elseif ( $sold_out ) {
 							esc_html_e( 'Sold out', 'nera-strikeawin' );
 						} else {
