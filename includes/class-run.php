@@ -536,7 +536,7 @@ class Nera_SAW_Run {
 				'slot_no'            => (int) $slot->slot_no,
 				'level'              => $slot->level_key,
 				'level_label'        => $level_def ? (string) $level_def['label'] : '',
-				'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+				'level_text_color'   => Nera_SAW_Constants::contrast_safe_text( Nera_SAW_Competition_Spec::ramp_color_for_level( $config, $slot->level_key ) ),
 				'question'           => (string) $snapshot['question_text'],
 				'answers'            => $answers,
 				'reward'             => (int) $slot->reward_base * $multiplier,
@@ -623,7 +623,7 @@ class Nera_SAW_Run {
 				'slot_no'            => (int) $slot->slot_no,
 				'level'              => $slot->level_key,
 				'level_label'        => $level_def ? (string) $level_def['label'] : '',
-				'level_text_color'   => Nera_SAW_Constants::level_text_color( $slot->level_key ),
+				'level_text_color'   => Nera_SAW_Constants::contrast_safe_text( Nera_SAW_Competition_Spec::ramp_color_for_level( $config, $slot->level_key ) ),
 				'question'           => (string) $snapshot['question_text'],
 				'answers'            => $answers,
 				// See this method's own docblock: obfuscated, not protected.
@@ -1853,17 +1853,72 @@ class Nera_SAW_Run {
 	}
 
 	/**
+	 * "Run X of N" for one run — client finding #36 / `requirements.md`'s own
+	 * "Run 1 of 3" line: N is how many runs THIS SAME purchase bought for
+	 * this tier (`run_grants.qty`, summed across that order+competition+
+	 * tier — ordinarily one grant row, but never assume it), and X is this
+	 * run's own position in the order they were started (ascending `id`,
+	 * the same FIFO order `Nera_SAW_Run_Grants::consume_fifo()` draws
+	 * grants in) among every run this order+tier has ever started.
+	 *
+	 * Scoped to one order on purpose, not a lifetime total across every
+	 * order this player ever placed on the tier — "Run 1 of 3" describes
+	 * what THIS purchase bought, not a running career total; a second,
+	 * later purchase starts its own "Run 1 of N" again.
+	 *
+	 * @param object $run Run row (reads order_id, competition_id, tier_key, id).
+	 * @return array{index:int, total:int}
+	 */
+	public static function run_ordinal_for_order_tier( $run ) {
+		global $wpdb;
+		$grants_t = Nera_SAW_Database::table( 'run_grants' );
+		$runs_t   = Nera_SAW_Database::table( 'runs' );
+
+		$total = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(qty),0) FROM {$grants_t} WHERE order_id = %d AND competition_id = %d AND tier_key = %s",
+				(int) $run->order_id,
+				(int) $run->competition_id,
+				(string) $run->tier_key
+			)
+		);
+
+		$index = 1 + (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$runs_t} WHERE order_id = %d AND competition_id = %d AND tier_key = %s AND id < %d",
+				(int) $run->order_id,
+				(int) $run->competition_id,
+				(string) $run->tier_key,
+				(int) $run->id
+			)
+		);
+
+		// A run with no real granting order (order_id = 0 — test/seed data)
+		// or a total that has somehow fallen behind the started count never
+		// shows "Run 2 of 1"; the started count becomes the floor instead.
+		$total = max( $total, $index );
+
+		return array(
+			'index' => $index,
+			'total' => $total,
+		);
+	}
+
+	/**
 	 * Build the client-safe run state payload.
 	 *
 	 * @param object $run Run row.
 	 * @return array
 	 */
 	private static function state( $run ) {
-		$next = self::next_unanswered_slot( (int) $run->id );
+		$next    = self::next_unanswered_slot( (int) $run->id );
+		$ordinal = self::run_ordinal_for_order_tier( $run );
 
 		$out = array(
 			'run_id'       => (int) $run->id,
 			'status'       => $run->status,
+			'run_index'    => $ordinal['index'],
+			'run_total'    => $ordinal['total'],
 			'total_slots'  => (int) self::count_slots( (int) $run->id ),
 			'next_slot'    => $next ? (int) $next->slot_no : null,
 			'spins_so_far' => (int) self::spins_so_far( (int) $run->id ),
@@ -1897,7 +1952,7 @@ class Nera_SAW_Run {
 					// BEFORE that slot is fetched (see the note above this block), so
 					// slot.level_text_color on the client still holds the previous
 					// stage's colour at that moment.
-					'level_text_color'  => Nera_SAW_Constants::level_text_color( $next->level_key ),
+					'level_text_color'  => Nera_SAW_Constants::contrast_safe_text( Nera_SAW_Competition_Spec::ramp_color_for_level( $config, $next->level_key ) ),
 					'reward_label'      => Nera_SAW_Competition_Config::reward_label( $config, $next->level_key ),
 					'stage_label'       => Nera_SAW_Competition_Config::stage_label(
 						$config,

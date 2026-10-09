@@ -9,6 +9,7 @@
   "Stage {n} of {total} · {band} · {k} ticket per correct answer": "Этап {n} из {total} · {band} · {k} билет за правильный ответ|Этап {n} из {total} · {band} · {k} билета за правильный ответ|Этап {n} из {total} · {band} · {k} билетов за правильный ответ",
   "Continue": "Продолжить",
   "Question {n} of {total}": "Вопрос {n} из {total}",
+  "Run {n} of {total}": "Попытка {n} из {total}",
   "Worth {k} ticket": "Стоит {k} билет|Стоит {k} билета|Стоит {k} билетов",
   "Time's up. {t} tickets total.": "Время вышло. Всего билетов: {t}.",
   "Not this time. {t} tickets total.": "Не в этот раз. Всего билетов: {t}.",

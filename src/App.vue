@@ -185,6 +185,13 @@ const stagePillLabel = computed( () =>
 	slot.stage_label || fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
 );
 
+// "Run X of N" (client finding #36 / requirements.md's own "Run 1 of 3"):
+// blank — not "Run 1 of 1" — when only one run was bought, per
+// requirements.md's own "when several runs were bought" qualifier.
+const runOfTotalLabel = computed( () =>
+	runTotal.value > 1 ? fmt( 'runOfTotal', 'Run {n} of {total}', runIndex.value, runTotal.value ) : ''
+);
+
 // Pre-run header preview: lets the .saw-stagebar header (normally driven by the
 // current slot, once a run exists) also render on the language-choice screen,
 // matching the reference design's screen 24. Localised server-side from the
@@ -211,6 +218,13 @@ const competitionId = ref( 0 );
 const totalSlots = ref( 0 );
 const spinsSoFar = ref( 0 );
 const spinsFinal = ref( null );
+// "Run X of N" (client finding #36 / requirements.md's own "Run 1 of 3"):
+// N is how many runs THIS purchase bought for this tier, X is this run's
+// own place among them — see Nera_SAW_Run::run_ordinal_for_order_tier().
+// runTotal defaults to 1, not 0, so "Run 1 of 1" (the common case, one run
+// bought) never flashes as "Run 1 of 0" before the first state response.
+const runIndex = ref( 1 );
+const runTotal = ref( 1 );
 
 // EXPERIMENTAL (see Nera_SAW_Run::submit_all_experimental() docblock): the
 // run-wide timer (CMS config, not per-run state) and the XOR seed Start/Resume
@@ -962,6 +976,12 @@ function applyState( state ) {
 	competitionId.value = state.competition_id || competitionId.value;
 	totalSlots.value = state.total_slots || totalSlots.value;
 	spinsSoFar.value = state.spins_so_far || 0;
+	if ( state.run_index ) {
+		runIndex.value = state.run_index;
+	}
+	if ( state.run_total ) {
+		runTotal.value = state.run_total;
+	}
 	if ( state.spins_final !== null && state.spins_final !== undefined ) {
 		spinsFinal.value = state.spins_final;
 	}
@@ -1316,7 +1336,10 @@ onUnmounted( () => {
 		>
 			<div class="saw-stagebar" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">
 				<div class="saw-stagebar__row">
-					<span class="saw-stagebar__pill">{{ stagePillLabel }}</span>
+					<div class="saw-stagebar__pills">
+						<span class="saw-stagebar__pill">{{ stagePillLabel }}</span>
+						<span v-if="runOfTotalLabel" class="saw-stagebar__run">{{ runOfTotalLabel }}</span>
+					</div>
 					<span class="saw-stagebar__tickets">
 						<span class="saw-stagebar__ticketslabel">{{ t('ticketsLabel', 'Tickets') }}</span>
 						<span class="saw-stagebar__ticketsvalue">{{ spinsSoFar }}</span>
@@ -1353,6 +1376,7 @@ onUnmounted( () => {
 				<div class="saw-stagebreak__badge" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">{{ stageNo }}</div>
 				<h2 class="saw-stagebreak__title">{{ t('stageBreakHeadline_' + stageNo, slot.level_label) }}</h2>
 				<p class="saw-stagebreak__sub">{{ stageBreakLabel }}</p>
+				<p v-if="runOfTotalLabel" class="saw-stagebreak__run">{{ runOfTotalLabel }}</p>
 				<button type="button" class="saw-stagebreak__continue" @click="continueFromStageBreak">
 					{{ t('continueLabel', 'Continue') }}
 				</button>
@@ -1363,6 +1387,7 @@ onUnmounted( () => {
 					<div>
 						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}</p>
 						<span class="saw-qbody__worth">{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span>
+						<span v-if="runOfTotalLabel" class="saw-qbody__run">{{ runOfTotalLabel }}</span>
 					</div>
 					<div
 						class="saw-qtimer"
@@ -1528,7 +1553,11 @@ onUnmounted( () => {
 
 <style>
 .saw-app {
-	--saw-brand: var(--color-primary, #1313ec);
+	/* Client finding #30/#32: brand orange fallback, not the starter theme's
+	   navy placeholder (--color-primary has never been repointed — a theme
+	   fix, out of this plugin's scope; still preferred first so a later
+	   theme fix changes nothing here). */
+	--saw-brand: var(--color-primary, #eb580c);
 	--saw-accent: var(--color-accent, #fbbf24);
 	--saw-surface: #e8edf5;
 	--saw-text: var(--color-text-primary, #0d0d1b);
@@ -1807,9 +1836,16 @@ onUnmounted( () => {
    arithmetic works unchanged whichever of the two colours plays "background". */
 .saw-stagebar { padding: 18px 22px 14px; color: var(--saw-on-dark, #fff); }
 .saw-stagebar__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.saw-stagebar__pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .saw-stagebar__pill {
 	display: inline-block; padding: 5px 12px; border-radius: 999px;
 	background: rgba(0, 0, 0, .18); font-size: 13px; font-weight: 700;
+}
+/* "Run X of N" (client finding #36) -- a quieter sibling pill next to the
+   stage pill, not competing with it for attention. */
+.saw-stagebar__run {
+	display: inline-block; padding: 5px 12px; border-radius: 999px;
+	background: rgba(0, 0, 0, .1); font-size: 12px; font-weight: 600; opacity: .9;
 }
 .saw-stagebar__tickets { text-align: right; }
 .saw-stagebar__ticketslabel { display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
@@ -1827,6 +1863,10 @@ onUnmounted( () => {
 }
 .saw-stagebreak__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-text); }
 .saw-stagebreak__sub { margin: 0 0 26px; color: var(--saw-text-muted); font-size: 14px; }
+.saw-stagebreak__run { margin: -18px 0 26px; color: var(--saw-text-muted); font-size: 13px; font-weight: 600; }
+/* Only renders alongside .saw-stagebreak__sub (both share one v-if ancestor,
+   .saw-stagebreak), so the negative top margin above just closes the gap its
+   own 26px bottom margin left — never applied with nothing above it. */
 .saw-stagebreak__continue {
 	padding: 12px 30px; border: 0; border-radius: 12px;
 	background: var(--saw-brand); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
@@ -1844,6 +1884,7 @@ onUnmounted( () => {
 	border: 1.5px solid var(--saw-level, var(--saw-brand)); color: var(--saw-level, var(--saw-brand));
 	font-size: 12px; font-weight: 700;
 }
+.saw-qbody__run { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--saw-text-muted); }
 
 /* The circular per-question countdown, replacing the old horizontal bar to
    match the reference. A ring drawn twice — a faint full track, and a solid
@@ -1982,7 +2023,7 @@ body.saw-quiz-takeover .saw-result-teaser,
 body.saw-quiz-takeover .saw-footnote,
 body.saw-quiz-takeover .saw-connector { display: none; }
 .saw-leave {
-	--saw-brand: var(--color-primary, #1313ec);
+	--saw-brand: var(--color-primary, #eb580c);
 	--saw-text: var(--color-text-primary, #0d0d1b);
 	--saw-text-muted: var(--color-text-secondary, #64748b);
 	--saw-danger: #dc2626;

@@ -186,7 +186,7 @@ class Nera_SAW_Frontend {
 				foreach ( Nera_SAW_Constants::ladder() as $level ) {
 					if ( ! empty( $distribution[ $level['key'] ] ) ) {
 						$first_stage_label = (string) $level['label'];
-						$first_stage_color = Nera_SAW_Constants::level_text_color( $level['key'] );
+						$first_stage_color = Nera_SAW_Constants::contrast_safe_text( Nera_SAW_Competition_Spec::ramp_color_for_level( $config, $level['key'] ) );
 						break;
 					}
 				}
@@ -273,6 +273,11 @@ class Nera_SAW_Frontend {
 				'quizLanguageIntro'  => __( 'Questions and answers will appear in this language', 'nera-strikeawin' ),
 				// Question screen.
 				'questionOf'         => Nera_SAW_I18n::t( 'Question {n} of {total}' ),
+				// Client finding #36 / requirements.md's own "Run 1 of 3" —
+				// stage bar and stage-break screen, shown only when more than
+				// one run was bought in the same purchase (App.vue's own
+				// runTotal > 1 check).
+				'runOfTotal'         => Nera_SAW_I18n::t( 'Run {n} of {total}' ),
 				// Was two separate keys ('worthTicket'/'worthTickets') picked by a
 				// ternary in the template; one pipe-template now covers both,
 				// English two-form or Russian three-form, same as every other

@@ -46,6 +46,48 @@ class Nera_SAW_Competition_Spec {
 	}
 
 	/**
+	 * A level's ramp colour for one competition — the same by-position rule
+	 * `quiz()` uses below (only levels this config's own distribution
+	 * actually assigns questions to, counted in ladder rank order), exposed
+	 * on its own so the live run engine can colour a slot/stage-break/
+	 * question the same way the pre-play quiz-spec preview already does
+	 * (client findings #30/#32/#34/#35 — the live quiz was instead reading
+	 * `Nera_SAW_Constants::level_color()`, the Difficulty Ladder admin
+	 * screen's own per-level colour-dot pick, which this ramp exists
+	 * specifically to not depend on).
+	 *
+	 * Reads only `$config['distribution']`, not the database — the caller
+	 * already has the run's own frozen `config_snapshot` in hand, so this
+	 * needs no competition_id and stays safe to call in a hot per-question
+	 * path.
+	 *
+	 * @param array  $config    Competition config (reads 'distribution').
+	 * @param string $level_key Level key.
+	 * @return string Hex colour.
+	 */
+	public static function ramp_color_for_level( array $config, $level_key ) {
+		$distribution = isset( $config['distribution'] ) && is_array( $config['distribution'] ) ? $config['distribution'] : array();
+		$ramp         = self::ramp();
+		$index        = 0;
+		foreach ( Nera_SAW_Constants::ladder() as $level ) {
+			$key   = (string) $level['key'];
+			$count = isset( $distribution[ $key ] ) ? (int) $distribution[ $key ] : 0;
+			if ( $count < 1 ) {
+				continue;
+			}
+			if ( $key === (string) $level_key ) {
+				return isset( $ramp[ $index ] ) ? $ramp[ $index ] : end( $ramp );
+			}
+			++$index;
+		}
+		// Not in this config's own distribution (should not happen for a
+		// real slot) -- fall back to the level's plain rank position.
+		$level = Nera_SAW_Constants::level( $level_key );
+		$rank  = $level ? max( 1, (int) $level['rank'] ) : 1;
+		return isset( $ramp[ $rank - 1 ] ) ? $ramp[ $rank - 1 ] : end( $ramp );
+	}
+
+	/**
 	 * The whole contract for one competition.
 	 *
 	 * @param int $competition_id Competition product ID.

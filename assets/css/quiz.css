@@ -1,7 +1,13 @@
 /* Strike A Win — hub / overview components inside .saw-root-wrap */
 
 .saw-hub {
-	--saw-brand: var(--color-primary, #1313ec);
+	/* Client finding #30/#32: falls back to the brand orange (same value as
+	   assets/css/standalone.css's --saw-primary), not the starter theme's own
+	   navy placeholder — the theme's --color-primary has never been
+	   repointed to the client's real brand colour, and that is a theme fix,
+	   out of this plugin's scope; this still prefers it first, so a later
+	   theme fix changes nothing here. */
+	--saw-brand: var(--color-primary, #eb580c);
 	--saw-accent: var(--color-accent, #fbbf24);
 	--saw-text: var(--color-text-primary, #0d0d1b);
 	--saw-text-muted: var(--color-text-secondary, #64748b);

@@ -411,7 +411,25 @@ class Nera_SAW_Constants {
 	 *                caller should then fall back to its normal text colour).
 	 */
 	public static function level_text_color( $key ) {
-		$rgb = self::hex_to_rgb( self::level_color( $key ) );
+		return self::contrast_safe_text( self::level_color( $key ) );
+	}
+
+	/**
+	 * Darken any hex colour toward black until it clears the WCAG AA text
+	 * contrast floor against white — the computation `level_text_color()`
+	 * applies to a ladder level's own admin-picked colour, factored out so
+	 * the live run engine can apply the exact same safety step to the
+	 * front end's own ramp colour (`Nera_SAW_Competition_Spec::ramp()`)
+	 * instead, per the client's own brief (see
+	 * `Nera_SAW_Competition_Spec::ramp()`'s docblock): the ramp is correct
+	 * by brand, not guaranteed readable as-is any more than an admin's own
+	 * pick is.
+	 *
+	 * @param string $hex Hex colour.
+	 * @return string Hex colour, contrast-safe as text on white, or '' if unparseable.
+	 */
+	public static function contrast_safe_text( $hex ) {
+		$rgb = self::hex_to_rgb( $hex );
 		if ( null === $rgb ) {
 			return '';
 		}

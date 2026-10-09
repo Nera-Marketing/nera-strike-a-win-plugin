@@ -45,6 +45,9 @@ class Nera_SAW_Seeder {
 	const DEMO_CATEGORY           = 'Strike A Win Demo';
 	const PURCHASE_BATCH_MIN      = 1; // runs bought per tier when a player needs a run.
 	const PURCHASE_BATCH_MAX      = 4;
+	// Player-facing (client finding #31 — the old copy here was an internal
+	// tooling instruction, never meant for a player to see).
+	const DEMO_DESCRIPTION        = 'A demo competition used for testing Strike A Win.';
 
 	/**
 	 * Is this environment safe to seed without forcing?
@@ -1803,7 +1806,14 @@ class Nera_SAW_Seeder {
 			$product->set_sold_individually( true );
 			$product->set_manage_stock( true );
 			$product->set_stock_quantity( $max_tickets );
-			$product->set_description( 'Demo Giveaway seeded by Nera Strike A Win. Safe to wipe from Tools → Strike A Win Demo.' );
+			// Client finding #31: the old wording here ("Safe to wipe from
+			// Tools → Strike A Win Demo") is an internal tooling instruction,
+			// not player-facing copy — it leaked onto the public Overview
+			// screen because that screen falls back to this field whenever a
+			// competition has no short description, which a seeded one never
+			// had. Both fields now hold copy a player could actually read.
+			$product->set_short_description( self::DEMO_DESCRIPTION );
+			$product->set_description( self::DEMO_DESCRIPTION );
 			$product->set_regular_price( $price );
 			$product->set_price( $price );
 			$product_id = $product->save();
@@ -1834,7 +1844,8 @@ class Nera_SAW_Seeder {
 			$product->set_sold_individually( true );
 			$product->set_manage_stock( true );
 			$product->set_stock_quantity( $max_tickets );
-			$product->set_description( 'Demo Giveaway seeded by Nera Strike A Win. Safe to wipe from Tools → Strike A Win Demo.' );
+			$product->set_short_description( self::DEMO_DESCRIPTION );
+			$product->set_description( self::DEMO_DESCRIPTION );
 			$product_id = $product->save();
 
 			wp_set_object_terms( $product_id, 'lottery', 'product_type' );
