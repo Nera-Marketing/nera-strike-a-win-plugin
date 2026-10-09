@@ -57,6 +57,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-log.php';
 		require_once $dir . 'class-competition-config.php';
 		require_once $dir . 'class-competition-spec.php';
+		require_once $dir . 'class-draw-prizes.php';
 		require_once $dir . 'class-catalogue-isolation.php';
 		require_once $dir . 'class-router.php';
 		require_once $dir . 'class-language.php';
@@ -103,6 +104,7 @@ class Nera_SAW_Plugin {
 			Nera_SAW_Ladder_Admin::init();
 			Nera_SAW_Settings_Admin::init();
 			Nera_SAW_Competition_Admin::init();
+			Nera_SAW_Draw_Prizes::init();
 			Nera_SAW_Seeder_Admin::init();
 			Nera_SAW_Report_Admin::init();
 			Nera_SAW_Log_Admin::init();

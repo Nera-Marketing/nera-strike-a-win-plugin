@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 
 $saw_hero_stock    = $saw_spec['stock'];
 $saw_hero_sold_out = ! empty( $saw_hero_stock['sold_out'] );
+$saw_hero_drawn    = ! empty( $saw_spec['drawn'] );
 $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_format' );
 ?>
 <section class="saw-hero">
@@ -29,7 +30,9 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 				decoding="async">
 		<?php endif; ?>
 
-		<?php if ( $saw_hero_sold_out ) : ?>
+		<?php if ( $saw_hero_drawn ) : ?>
+			<span class="saw-card__pill"><?php esc_html_e( 'Draw End', 'nera-strikeawin' ); ?></span>
+		<?php elseif ( $saw_hero_sold_out ) : ?>
 			<span class="saw-card__pill"><?php esc_html_e( 'Sold out', 'nera-strikeawin' ); ?></span>
 		<?php elseif ( ! empty( $saw_hero_stock['low_stock'] ) ) : ?>
 			<span class="saw-card__pill">

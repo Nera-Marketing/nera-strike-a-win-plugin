@@ -1577,6 +1577,63 @@ class Nera_SAW_Run {
 	}
 
 	/**
+	 * Reverse index of every minted ticket number on a competition, to its
+	 * owning run — the Strike A Win draw-entry feature's own need (client
+	 * follow-up on Draw results): an admin keys in the ticket numbers an
+	 * offline draw actually picked, and the system has to say whether each
+	 * one is real and, if so, whose run it belongs to.
+	 *
+	 * Built once per competition (every finalized run's slots decoded) since
+	 * nothing about the admin's job here is a hot path — entering a
+	 * handful of winning numbers after a competition closes — unlike the
+	 * per-request `collect_run_ticket_numbers()` calls elsewhere.
+	 *
+	 * @param int $competition_id Competition product ID.
+	 * @return array<string, array{run_id:int, user_id:int, order_id:int}> Ticket number => owner.
+	 */
+	public static function ticket_owner_map_for_competition( $competition_id ) {
+		global $wpdb;
+		$runs  = Nera_SAW_Database::table( 'runs' );
+		$slots = Nera_SAW_Database::table( 'run_slots' );
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT r.id AS run_id, r.user_id, r.order_id, s.awarded_numbers
+				 FROM {$runs} r
+				 INNER JOIN {$slots} s ON s.run_id = r.id
+				 WHERE r.competition_id = %d AND r.status = 'finalized'
+				   AND s.awarded_numbers IS NOT NULL AND s.awarded_numbers != ''",
+				(int) $competition_id
+			)
+		);
+
+		$map = array();
+		foreach ( (array) $rows as $row ) {
+			$chunk = json_decode( (string) $row->awarded_numbers, true );
+			if ( ! is_array( $chunk ) ) {
+				continue;
+			}
+			foreach ( $chunk as $num ) {
+				$num = (string) $num;
+				if ( '' === $num ) {
+					continue;
+				}
+				// First owner wins if a number were ever duplicated across
+				// runs (should not happen — minting is unique per
+				// competition — but a map needs a single answer regardless).
+				if ( ! isset( $map[ $num ] ) ) {
+					$map[ $num ] = array(
+						'run_id'   => (int) $row->run_id,
+						'user_id'  => (int) $row->user_id,
+						'order_id' => (int) $row->order_id,
+					);
+				}
+			}
+		}
+		return $map;
+	}
+
+	/**
 	 * How many of an order line's runs are actually finished vs. still live —
 	 * the distinction `Nera_SAW_Run_Grants::order_line_stats()` never made
 	 * (client finding #41): that method's own "completed" was really

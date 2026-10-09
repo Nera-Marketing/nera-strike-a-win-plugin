@@ -87,8 +87,9 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 		foreach ( $saw_specs as $spec ) :
 			$url      = Nera_SAW_Router::url( 'competition', get_post_field( 'post_name', $spec['id'] ) );
 			$sold_out = ! empty( $spec['stock']['sold_out'] );
+			$drawn    = ! empty( $spec['drawn'] );
 			?>
-			<li class="saw-card<?php echo $sold_out ? ' saw-card--sold-out' : ''; ?>">
+			<li class="saw-card<?php echo ( $sold_out || $drawn ) ? ' saw-card--sold-out' : ''; ?>">
 
 				<div class="saw-card__media">
 					<?php if ( $spec['image']['url'] ) : ?>
@@ -99,9 +100,14 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 
 					<?php
 					// The low-stock pill is the prototype's urgency cue, and it must
-					// not appear alongside "Sold out" — one of them is always wrong.
-					if ( $sold_out ) :
+					// not appear alongside "Sold out"/"Draw End" — one of them is
+					// always wrong. Drawn (client follow-up: the offline-draw
+					// toggle) takes priority — it is why entries stopped, not
+					// stock running out, even if both happen to be true.
+					if ( $drawn ) :
 						?>
+						<span class="saw-card__pill"><?php esc_html_e( 'Draw End', 'nera-strikeawin' ); ?></span>
+					<?php elseif ( $sold_out ) : ?>
 						<span class="saw-card__pill"><?php esc_html_e( 'Sold out', 'nera-strikeawin' ); ?></span>
 					<?php elseif ( ! empty( $spec['stock']['low_stock'] ) ) : ?>
 						<span class="saw-card__pill">
@@ -119,7 +125,9 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 
 					<span class="saw-card__price">
 						<?php
-						if ( $sold_out ) {
+						if ( $drawn ) {
+							esc_html_e( 'Draw End', 'nera-strikeawin' );
+						} elseif ( $sold_out ) {
 							esc_html_e( 'Sold out', 'nera-strikeawin' );
 						} else {
 							/* translators: %s: lowest tier price */

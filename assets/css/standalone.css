@@ -2430,6 +2430,31 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   background: transparent;
   border-style: dashed;
 }
+/*
+ * The "+N more" chip is a <details>'s own <summary> (client complaint: the
+ * full ticket-number list had no way to open on this page) -- always its
+ * own full-width row rather than trying to sit inline after the visible
+ * six, so the expanded panel's own wrapped chips have the whole row to
+ * wrap into instead of being squeezed by whatever space was left after
+ * chip six on its line.
+ */
+.saw-numchip-more {
+  flex-basis: 100%;
+  margin-top: 2px;
+}
+.saw-numchip-more > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.saw-numchip-more > summary::-webkit-details-marker {
+  display: none;
+}
+.saw-numchip-more__panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
 .saw-runs-empty,
 .saw-draw-results-empty {
   padding: 24px 16px;
@@ -2463,6 +2488,11 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   font-size: 12px;
   color: var(--saw-muted);
 }
+.saw-draw-results__stats {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--saw-muted);
+}
 .saw-draw-results__outcome {
   margin: 0;
   font-size: 14px;
@@ -2474,6 +2504,41 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
 .saw-draw-results__outcome--none {
   color: var(--saw-body);
   font-weight: 400;
+}
+/*
+ * Offline-draw prizes (client follow-up on Draw results) -- same flat,
+ * ungrouped list lottery-for-woocommerce's own instant-win account tab
+ * uses: prize name, then the specific entry number(s) that won it.
+ */
+.saw-draw-results__prizes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saw-draw-results__prize {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--saw-rule);
+}
+.saw-draw-results__prize:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.saw-draw-results__prize-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-ok);
+}
+.saw-draw-results__prize-numbers {
+  font-size: 12px;
+  color: var(--saw-muted);
+  text-align: right;
 }
 
 /*

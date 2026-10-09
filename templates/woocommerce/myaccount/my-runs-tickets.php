@@ -162,15 +162,22 @@ if ( empty( $saw_competition_ids ) ) {
 										<span class="saw-numchip"><?php echo esc_html( $saw_num ); ?></span>
 									<?php endforeach; ?>
 									<?php if ( $saw_extra > 0 ) : ?>
-										<span class="saw-numchip saw-numchip--more">
-											<?php
-											printf(
-												/* translators: %d: how many more entry numbers there are */
-												esc_html__( '+%d more', 'nera-strikeawin' ),
-												(int) $saw_extra
-											);
-											?>
-										</span>
+										<details class="saw-numchip-more">
+											<summary class="saw-numchip saw-numchip--more">
+												<?php
+												printf(
+													/* translators: %d: how many more entry numbers there are */
+													esc_html__( '+%d more', 'nera-strikeawin' ),
+													(int) $saw_extra
+												);
+												?>
+											</summary>
+											<div class="saw-numchip-more__panel">
+												<?php foreach ( array_slice( $saw_numbers, 6 ) as $saw_num ) : ?>
+													<span class="saw-numchip"><?php echo esc_html( $saw_num ); ?></span>
+												<?php endforeach; ?>
+											</div>
+										</details>
 									<?php endif; ?>
 								</div>
 							<?php endif; ?>

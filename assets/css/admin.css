@@ -509,3 +509,23 @@ body.saw-import-open { overflow: hidden; }
 	font-size: 13px;
 	color: var(--saw-accent-ink, #b8440a);
 }
+
+/* --- Offline draw prize table (Strike A Win product tab) --------------- */
+.saw-draw-panel {
+	padding-top: 10px;
+}
+.saw-draw-prizes th,
+.saw-draw-prizes td {
+	padding: 8px 10px;
+	vertical-align: middle;
+}
+.saw-draw-prizes__row td input[type="text"],
+.saw-draw-prizes__row td input[type="number"] {
+	width: 100%;
+}
+.saw-draw-prizes__remove {
+	color: #b32d2e;
+}
+#saw-draw-prize-row-template {
+	display: none;
+}

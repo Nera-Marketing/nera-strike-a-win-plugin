@@ -10,14 +10,17 @@
  * yet; "My runs & tickets" is where an open competition's own tickets live
  * until then.
  *
- * Whether this player won anything is lottery-for-woocommerce's own
- * `lty_lottery_winner` post type (post_parent = the competition, meta
- * `lty_user_id` = the winner) — created by that plugin's own
- * `LTY_Lottery_Winner::handle_lottery_winner()` when a draw closes. Reading
- * it here is the same kind of read-only, filter-free reuse this plugin
- * already does elsewhere for a sibling plugin's own data (e.g.
- * `Nera_DCMS_Storage::is_verified()` for age verification) — never writing
- * to that post type, never duplicating what it already records.
+ * Whether this player won anything checks TWO sources, since a competition
+ * can have been drawn either way:
+ *   - lottery-for-woocommerce's own `lty_lottery_winner` post type
+ *     (post_parent = the competition, meta `lty_user_id` = the winner) —
+ *     created by that plugin's own `LTY_Lottery_Winner::handle_lottery_
+ *     winner()`. Read-only, never written, from this plugin.
+ *   - This plugin's own offline-draw prize table (`Nera_SAW_Draw_Prizes`,
+ *     client follow-up): a competition drawn BY HAND outside the system
+ *     never gets an `lty_lottery_winner` post at all, so Draw results has
+ *     to also check the admin-entered prize numbers against this player's
+ *     own ticket numbers directly.
  *
  * @package Nera_Strikeawin
  */
@@ -67,12 +70,37 @@ foreach ( $saw_runs as $saw_entry ) {
 		}
 	}
 
+	// Client follow-up: the row showed the outcome but not what was actually
+	// played -- how many runs this competition's balance was spent on, and
+	// how many tickets came out of them.
+	$saw_runs_played   = count( $saw_entry['completed'] );
+	$saw_tickets_total = 0;
+	$saw_my_numbers    = array();
+	foreach ( $saw_entry['completed'] as $saw_completed_run ) {
+		$saw_tickets_total += count( $saw_completed_run['ticket_numbers'] );
+		$saw_my_numbers     = array_merge( $saw_my_numbers, $saw_completed_run['ticket_numbers'] );
+	}
+
+	// Offline-draw prizes (client follow-up): which of this player's own
+	// numbers match a configured prize on this competition.
+	$saw_prize_wins = array();
+	if ( class_exists( 'Nera_SAW_Draw_Prizes' ) ) {
+		$saw_comp_config = Nera_SAW_Competition_Config::get( $saw_competition_id );
+		$saw_prize_wins  = Nera_SAW_Draw_Prizes::my_wins(
+			isset( $saw_comp_config['prizes'] ) && is_array( $saw_comp_config['prizes'] ) ? $saw_comp_config['prizes'] : array(),
+			$saw_my_numbers
+		);
+	}
+
 	$saw_draw_rows[] = array(
 		'competition_id' => $saw_competition_id,
 		'title'          => $saw_entry['title'],
 		'finished_date'  => $saw_finished_date,
-		'won'            => ! empty( $saw_prizes ),
+		'won'            => ! empty( $saw_prizes ) || ! empty( $saw_prize_wins ),
 		'prizes'         => $saw_prizes,
+		'prize_wins'     => $saw_prize_wins,
+		'runs_played'    => $saw_runs_played,
+		'tickets_total'  => $saw_tickets_total,
 	);
 }
 
@@ -103,7 +131,47 @@ if ( empty( $saw_draw_rows ) ) {
 				</p>
 			<?php endif; ?>
 
-			<?php if ( $saw_row['won'] ) : ?>
+			<p class="saw-draw-results__stats">
+				<?php
+				// Reuses the "%s run"/"%s runs" and "%s ticket"/"%s tickets"
+				// pairs before-you-pay and "My runs & tickets" already carry
+				// (saw_ru_strings()) rather than minting a new pair here.
+				echo esc_html(
+					sprintf(
+						/* translators: %s: number of runs played */
+						_n( '%s run', '%s runs', $saw_row['runs_played'], 'nera-strikeawin' ),
+						number_format_i18n( $saw_row['runs_played'] )
+					)
+				);
+				echo ' &middot; '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static markup.
+				echo esc_html(
+					sprintf(
+						/* translators: %s: tickets earned */
+						_n( '%s ticket', '%s tickets', $saw_row['tickets_total'], 'nera-strikeawin' ),
+						number_format_i18n( $saw_row['tickets_total'] )
+					)
+				);
+				?>
+			</p>
+
+			<?php if ( ! empty( $saw_row['prize_wins'] ) ) : ?>
+				<ul class="saw-draw-results__prizes">
+					<?php foreach ( $saw_row['prize_wins'] as $saw_win ) : ?>
+						<li class="saw-draw-results__prize">
+							<span class="saw-draw-results__prize-name"><?php echo esc_html( $saw_win['name'] ); ?></span>
+							<span class="saw-draw-results__prize-numbers">
+								<?php
+								printf(
+									/* translators: %s: comma-separated winning entry numbers */
+									esc_html__( 'Entry %s', 'nera-strikeawin' ),
+									esc_html( implode( ', ', $saw_win['ticket_numbers'] ) )
+								);
+								?>
+							</span>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php elseif ( $saw_row['won'] ) : ?>
 				<p class="saw-draw-results__outcome saw-draw-results__outcome--won">
 					<?php echo esc_html( implode( ', ', $saw_row['prizes'] ) ); ?>
 				</p>

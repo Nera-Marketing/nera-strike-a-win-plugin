@@ -1531,6 +1531,13 @@ class Nera_SAW_Language {
 				// above by translate_theme_account_strings), so it needs its
 				// own entry here despite the identical English text.
 				'Account details'                           => 'Данные аккаунта',
+				// Offline draw entry (client follow-up on Draw results) — the
+				// "Sold out" badge's own "closed for a different reason"
+				// sibling, and the per-prize winning-number line on Draw
+				// results (styled after lottery-for-woocommerce's own
+				// instant-win account tab).
+				'Draw End'                                   => 'Розыгрыш окончен',
+				'Entry %s'                                   => 'Номер %s',
 				// Add-to-basket toast (class-router.php) — found still
 				// English on a real purchase screenshot.
 				'Entry added. Taking you to Before you pay…' => 'Участие добавлено. Переходим к оплате…',

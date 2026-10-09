@@ -43,6 +43,14 @@ class Nera_SAW_Competition_Config {
 			'distribution'   => array(), // level_key => count.
 			'level_rewards'  => array(), // level_key => tickets override.
 			'tier_overrides' => array(), // tier_key => { enabled, price, multiplier, ceiling } (blank = inherit global).
+			// Draw entry (client follow-up on Draw results): an offline, by-hand
+			// draw rather than lottery-for-woocommerce's own auto/manual-from-
+			// sold-tickets draw. 'draw_closed' is the admin's own on/off record
+			// of having entered results, separate from -- but the trigger for --
+			// the competition's lty_lottery_status meta the rest of this plugin
+			// already reads (Draw results, the hub's "Tickets live" stat).
+			'draw_closed'    => false,
+			'prizes'         => array(), // see Nera_SAW_Draw_Prizes for the row shape.
 		);
 	}
 

@@ -79,7 +79,14 @@ class Nera_SAW_Competition_Spec {
 
 		$spec = array_merge( $spec, self::dates( $competition_id ) );
 		$spec['entry_from'] = self::entry_from( $spec['tiers'] );
-		$spec['open']       = ! $spec['stock']['sold_out'] && ! $spec['closed'] && ! empty( $spec['tiers'] );
+		// Client follow-up on Draw results: a competition closed via the new
+		// Strike A Win offline-draw toggle (`lty_lottery_status`, no leading
+		// underscore — see Nera_SAW_Draw_Prizes) reads "Closed"/"Draw End"
+		// on the card, not "Sold out"; these are different reasons for being
+		// unavailable, and a drawn competition can precede both selling out
+		// and its own end date if the admin closes it early for the draw.
+		$spec['drawn'] = 'lty_lottery_finished' === get_post_meta( $competition_id, 'lty_lottery_status', true );
+		$spec['open']  = ! $spec['stock']['sold_out'] && ! $spec['closed'] && ! $spec['drawn'] && ! empty( $spec['tiers'] );
 
 		/**
 		 * Filter the assembled competition spec.
