@@ -283,7 +283,12 @@ class Nera_SAW_Competition_Admin {
 	 * @param array $config     Resolved config (has 'draw_closed' and 'prizes').
 	 */
 	private static function draw_panel( $product_id, array $config ) {
-		$draw_closed = ! empty( $config['draw_closed'] );
+		// Reflects reality (lty_lottery_status), not just this feature's own
+		// flag — a competition can already read as drawn by some other means
+		// (an actual pre-existing lottery-for-woocommerce draw, or test-data
+		// meta set directly) and the checkbox must not show unchecked under
+		// a front end that already calls it closed.
+		$draw_closed = Nera_SAW_Draw_Prizes::is_closed( $product_id, $config );
 		$prizes      = isset( $config['prizes'] ) && is_array( $config['prizes'] ) ? $config['prizes'] : array();
 		?>
 		<div class="options_group saw-draw-panel">

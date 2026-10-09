@@ -264,6 +264,31 @@ class Nera_SAW_Draw_Prizes {
 	}
 
 	/**
+	 * Whether a competition reads as "closed for the draw" right now —
+	 * either because this feature's own checkbox was saved on (the
+	 * `draw_closed` config flag), or because `lty_lottery_status` already
+	 * says `lty_lottery_finished` by some OTHER means (an actual
+	 * lottery-for-woocommerce draw from before this feature existed, or
+	 * the meta set directly during this project's own test-data seeding).
+	 *
+	 * Without this, the product-edit checkbox could show unchecked for a
+	 * competition the front end already displays as drawn (Draw results,
+	 * the "Sold out" → "Draw End" badge) — confusing rather than merely
+	 * cosmetic, since saving the page in that state would otherwise look
+	 * like it is closing an already-closed competition for the first time.
+	 *
+	 * @param int   $product_id Competition product ID.
+	 * @param array $config     Nera_SAW_Competition_Config::get() result.
+	 * @return bool
+	 */
+	public static function is_closed( $product_id, array $config ) {
+		if ( ! empty( $config['draw_closed'] ) ) {
+			return true;
+		}
+		return 'lty_lottery_finished' === get_post_meta( (int) $product_id, 'lty_lottery_status', true );
+	}
+
+	/**
 	 * Entry point from the product-edit save handler.
 	 *
 	 * @param int   $product_id      Competition product ID.
@@ -277,7 +302,7 @@ class Nera_SAW_Draw_Prizes {
 		}
 		$prizes = self::sanitize_from_request( $posted, (array) ( $existing_config['prizes'] ?? array() ) );
 
-		$was_closed = ! empty( $existing_config['draw_closed'] );
+		$was_closed = self::is_closed( $product_id, $existing_config );
 		$now_closed = ! empty( $_POST['saw_draw_closed'] );
 
 		$invalid = self::invalid_ticket_numbers( $product_id, $prizes );
