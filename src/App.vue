@@ -471,6 +471,11 @@ const runsRemainingLine = computed( () => {
  * not a re-derivation from slotResults, so the two can never disagree.
  * ------------------------------------------------------------------------- */
 const correctCount = computed( () => slotResults.value.filter( ( r ) => 'correct' === r.outcome ).length );
+// Client finding #38: zero-ticket runs are not all the same story — every
+// slot timing out reads differently from every slot being answered wrong
+// (or a mix of the two), so resultsSubtitle below picks between three
+// zero-ticket lines, not one, instead of always saying "landed in time".
+const allTimedOut = computed( () => slotResults.value.length > 0 && slotResults.value.every( ( r ) => 'timeout' === r.outcome ) );
 const hasTickets = computed( () => finalSpins.value > 0 );
 
 const resultsTitle = computed( () => hasTickets.value ? t( 'inTheDrawTitle', "You're in the draw" ) : t( 'zeroTicketsTitle', 'No tickets this run' ) );
@@ -482,7 +487,10 @@ const resultsSubtitle = computed( () => {
 	if ( correctCount.value > 0 ) {
 		return fmt( 'zeroSomeCorrectSubtitle', '%1$d of %2$d correct, but not enough to bank a ticket.', correctCount.value, totalSlots.value );
 	}
-	return fmt( 'zeroCorrectSubtitle', 'None of the %d answers landed in time.', totalSlots.value );
+	if ( allTimedOut.value ) {
+		return fmt( 'zeroCorrectSubtitle', 'None of the %d answers landed in time.', totalSlots.value );
+	}
+	return fmt( 'zeroWrongSubtitle', 'None of the {n} answers were correct.', totalSlots.value );
 } );
 
 // One chip per slot: "+N" (correct), "0" (wrong), "–" (timeout) — matches the
@@ -1497,16 +1505,19 @@ onUnmounted( () => {
 				<p v-if="runsRemainingLine" class="saw-runs-left">{{ runsRemainingLine }}</p>
 			</div>
 
-			<div class="saw-results__actions" :class="{ 'is-muted': !hasTickets }">
-				<a
-					v-if="runsRemainingTotal > 0"
-					class="saw-results__primary"
-					:class="{ 'is-ghost': !hasTickets }"
-					:href="playAgainUrl"
-				>{{ t('playAnotherRun', 'Play another run') }}</a>
+			<!-- Client finding #39: the primary action is always the next thing a
+			     player would do — continue playing while runs remain, buy once
+			     they don't — regardless of this run's own ticket outcome. The
+			     earlier zero-tickets de-emphasis (a quiet "play again" + bare-link
+			     "back") contradicted that and is gone; playAgainUrl lands back on
+			     the hub either way, which already shows the right one of
+			     play/buy for the player's current balance. -->
+			<div class="saw-results__actions">
+				<a class="saw-results__primary" :href="playAgainUrl">
+					{{ runsRemainingTotal > 0 ? t('playAnotherRun', 'Play your next run') : t('buyAnotherRun', 'Buy another run') }}
+				</a>
 				<a
 					class="saw-results__secondary"
-					:class="{ 'is-link': !hasTickets }"
 					:href="competitionsListUrl || competitionUrl"
 				>{{ t('backToCompetitions', 'Back to competitions') }}</a>
 			</div>
@@ -1992,7 +2003,6 @@ onUnmounted( () => {
 @media (hover: hover) and (pointer: fine) {
 	.saw-results__primary:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); color: #fff; }
 }
-.saw-results__primary.is-ghost { background: #fff; color: var(--saw-text); border: 1.5px solid var(--saw-surface); }
 .saw-results__secondary {
 	display: block; padding: 15px; border-radius: 12px; text-align: center;
 	background: #fff; color: var(--saw-text); font-weight: 700; font-size: 15px; text-decoration: none;
@@ -2000,11 +2010,6 @@ onUnmounted( () => {
 }
 @media (hover: hover) and (pointer: fine) {
 	.saw-results__secondary:hover { border-color: var(--saw-brand); color: var(--saw-brand); }
-}
-/* Zero-tickets: the emphasis reverses — "play again" is quiet, "back" is a bare
-   link — so the screen does not read as a nudge to spend more right after a loss. */
-.saw-results__actions.is-muted .saw-results__secondary.is-link {
-	border: 0; background: transparent; font-weight: 600; color: var(--saw-brand); text-decoration: underline; text-underline-offset: 3px;
 }
 
 @media (max-width: 480px) {

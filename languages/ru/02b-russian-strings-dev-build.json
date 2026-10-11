@@ -35,6 +35,7 @@
   "{n} run left for this competition · {n2} run left on {tier}": "В конкурсе осталась {n} попытка · на уровне {tier}: {n2}|В конкурсе осталось {n} попытки · на уровне {tier}: {n2}|В конкурсе осталось {n} попыток · на уровне {tier}: {n2}",
   "No tickets this run": "Без билетов в этой попытке",
   "No tickets this run. No answer was correct before the clock ran out.": "Без билетов в этой попытке. Ни один ответ не был верным до истечения времени.",
+  "None of the {n} answers were correct.": "Ни один из {n} ответов не был правильным.",
   "Play another run": "Сыграть ещё раз",
   "Play your next run": "Сыграть следующую попытку",
   "Buy another run": "Купить ещё попытку",

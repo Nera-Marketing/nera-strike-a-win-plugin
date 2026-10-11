@@ -255,13 +255,22 @@ class Nera_SAW_Frontend {
 				'yourTicketNumbers'  => __( 'Your ticket numbers', 'nera-strikeawin' ),
 				// No tier running alongside it — not in the client's supplied
 				// files (that shape is always "n run left · n2 run left on
-				// tier"); kept as a %d fallback, English-only until added.
-				'runsRemaining'      => __( '%d runs left for this competition', 'nera-strikeawin' ),
+				// tier"); kept as a fallback, English-only until added.
+				// Client finding #38: "1 runs left" — n_template() (not t())
+				// so English picks its own two-form plural the same way
+				// App.vue's fmt()/pickPluralForm() already does for Russian.
+				'runsRemaining'      => Nera_SAW_I18n::n_template( '%d run left for this competition', '%d runs left for this competition' ),
 				// The client's supplied Russian combines both counts into one
-				// sentence, plural-aware on the first count only (client finding
-				// scope: entries page / checkout, not strictly #47, but the same
-				// mechanism).
-				'runsRemainingCombined' => Nera_SAW_I18n::t( '{n} run left for this competition · {n2} run left on {tier}' ),
+				// sentence, plural-aware on the FIRST count only — n_template()
+				// now gives English that same (shared, not independent) plural
+				// pick, rather than no plural handling at all (client finding
+				// #38's exact reported case, n = n2 = 1, is fully correct
+				// either way; n != n2 inherits the same one-shared-form
+				// limitation the supplied Russian already has, unchanged).
+				'runsRemainingCombined' => Nera_SAW_I18n::n_template(
+					'{n} run left for this competition · {n2} run left on {tier}',
+					'{n} runs left for this competition · {n2} runs left on {tier}'
+				),
 				'ticketsMintError'   => __( 'We could not add your tickets right now.', 'nera-strikeawin' ),
 				'retryTickets'       => __( 'Try again', 'nera-strikeawin' ),
 				'tryAgain'           => __( 'Try again', 'nera-strikeawin' ),
@@ -319,13 +328,32 @@ class Nera_SAW_Frontend {
 				'ticketsEarnedLabel' => Nera_SAW_I18n::t( 'Tickets earned' ),
 				'yourEntryNumbers'   => Nera_SAW_I18n::t( 'Your entry numbers' ),
 				'moreNumbers'        => Nera_SAW_I18n::t( '+{n} more' ),
-				'numbersPoolNote'    => __( 'Numbers are allocated at random from this draw\'s pool.', 'nera-strikeawin' ),
+				// Client finding #46: the numbers shown are sequential (this
+				// competition's own ticket-number-type setting — see
+				// Nera_SAW_Ticket_Award::pick_numbers()), never random; the
+				// random step is the draw itself, not the numbering. The old
+				// copy claimed the opposite. Corrected wording per the
+				// client's own copy sheet — already translated and sitting
+				// unused under this exact English key in the supplied RU
+				// files until now.
+				'numbersPoolNote'    => Nera_SAW_I18n::t( 'Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.' ),
 				'drawInfoWithEntry'  => __( 'Random draw, independently witnessed. You\'ll be notified either way.', 'nera-strikeawin' ),
 				'drawDatePrefix'     => __( 'Draw: %s', 'nera-strikeawin' ),
 				'noEntryNote'        => __( 'No tickets were earned, so there is no entry in this draw, and no refund is due.', 'nera-strikeawin' ),
 				'drawClosesPrefix'   => __( 'The draw closes %s.', 'nera-strikeawin' ),
-				'playAnotherRun'     => __( 'Play another run', 'nera-strikeawin' ),
-				'backToCompetitions' => __( 'Back to competitions', 'nera-strikeawin' ),
+				// Client finding #38: the old single zero-tickets subtitle
+				// ('zeroCorrectSubtitle' below) said "landed in time" even
+				// when every answer was simply wrong, not timed out. App.vue
+				// now picks between the two based on each slot's own recorded
+				// outcome, so this one covers "wrong" (and mixed wrong/
+				// timeout) specifically.
+				'zeroWrongSubtitle'  => Nera_SAW_I18n::t( 'None of the {n} answers were correct.' ),
+				// Client finding #39: three distinct labels, not two — which
+				// one of the first pair shows depends on runs remaining
+				// (App.vue's own ternary), not on this run's ticket outcome.
+				'playAnotherRun'     => Nera_SAW_I18n::t( 'Play your next run' ),
+				'buyAnotherRun'      => Nera_SAW_I18n::t( 'Buy another run' ),
+				'backToCompetitions' => Nera_SAW_I18n::t( 'Back to competitions' ),
 			),
 		);
 
