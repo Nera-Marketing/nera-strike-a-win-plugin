@@ -66,6 +66,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-language-reach.php';
 		require_once $dir . 'class-language-switcher.php';
 		require_once $dir . 'class-standalone-pages.php';
+		require_once $dir . 'class-standalone-legal-pages.php';
 		require_once $dir . 'class-standalone-fields.php';
 		require_once $dir . 'class-standalone-chrome.php';
 		require_once $dir . 'class-standalone-basket.php';
@@ -145,6 +146,7 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Catalogue_Isolation::init();
 		Nera_SAW_Router::init();
 		Nera_SAW_Standalone_Pages::init();
+		Nera_SAW_Standalone_Legal_Pages::init();
 		Nera_SAW_Standalone_Fields::init();
 		Nera_SAW_Language::init();
 		Nera_SAW_Language_Reach::init();

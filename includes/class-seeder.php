@@ -315,8 +315,14 @@ class Nera_SAW_Seeder {
 			'Winners'               => self::permalink_by_path( 'winners-page' ),
 			'Cart'                  => function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : '',
 			'User Dashboard'        => function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : '',
-			'Privacy Policy'        => self::permalink_by_option( 'wp_page_for_privacy_policy' ),
-			'Terms and Conditions'  => self::permalink_by_path( 'terms-and-conditions' ),
+			// Nera_SAW_Standalone_Pages::url() first -- the skinned
+			// standalone mirror, once Nera_SAW_Standalone_Legal_Pages has
+			// registered it -- falling back to the old bare page's own
+			// permalink (which itself now 301s there anyway, see
+			// Nera_SAW_Stock_Page_Redirects) when it hasn't, e.g. the site
+			// isn't in standalone mode at all.
+			'Privacy Policy'        => self::legal_page_url( 'privacy-policy', 'wp_page_for_privacy_policy' ),
+			'Terms and Conditions'  => self::legal_page_url( 'terms-and-conditions', '', 'terms-and-conditions' ),
 		);
 
 		$fixed = 0;
@@ -350,6 +356,28 @@ class Nera_SAW_Seeder {
 	private static function permalink_by_path( $slug ) {
 		$page = get_page_by_path( $slug );
 		return $page ? (string) get_permalink( $page ) : '';
+	}
+
+	/**
+	 * A legal/help page's URL: the standalone-section mirror
+	 * (`Nera_SAW_Standalone_Pages`/`Nera_SAW_Standalone_Legal_Pages`) when
+	 * it exists, else the old bare page's own permalink (itself redirected
+	 * there anyway by `Nera_SAW_Stock_Page_Redirects` whenever it does).
+	 *
+	 * @param string $route        Standalone registry route key.
+	 * @param string $option_name  Old page's ID held in a WP option (Privacy
+	 *                             Policy's own case), or '' to look up by slug instead.
+	 * @param string $slug         Old page's own slug, when not option-held.
+	 * @return string
+	 */
+	private static function legal_page_url( $route, $option_name = '', $slug = '' ) {
+		if ( class_exists( 'Nera_SAW_Standalone_Pages' ) ) {
+			$url = Nera_SAW_Standalone_Pages::url( $route );
+			if ( $url ) {
+				return $url;
+			}
+		}
+		return $option_name ? self::permalink_by_option( $option_name ) : self::permalink_by_path( $slug );
 	}
 
 	/**
