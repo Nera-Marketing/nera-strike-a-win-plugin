@@ -69,6 +69,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-standalone-fields.php';
 		require_once $dir . 'class-standalone-chrome.php';
 		require_once $dir . 'class-standalone-basket.php';
+		require_once $dir . 'class-stock-page-redirects.php';
 		require_once $dir . 'class-standalone-account.php';
 		require_once $dir . 'class-account-pages.php';
 		require_once $dir . 'class-standalone-result-screen.php';
@@ -150,6 +151,7 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Language_Switcher::init();
 		Nera_SAW_Standalone_Chrome::init();
 		Nera_SAW_Standalone_Basket::init();
+		Nera_SAW_Stock_Page_Redirects::init();
 		Nera_SAW_Standalone_Account::init();
 		Nera_SAW_Account_Pages::init();
 		Nera_SAW_Standalone_Result_Screen::init();

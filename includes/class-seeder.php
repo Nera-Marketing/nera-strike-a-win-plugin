@@ -147,6 +147,21 @@ class Nera_SAW_Seeder {
 			);
 		}
 
+		// Client findings #4/#9/#48/#50: stock theme/WooCommerce leftovers
+		// (Lorem Ipsum footer text, a placeholder contact email, dead footer
+		// links, an orphaned duplicate Shop page) that make real pages read
+		// as unfinished. Site content, not demo data, but run from here on
+		// the user's own instruction — so re-running the seeder on staging
+		// re-applies the same fix there, the same way it re-applies demo
+		// competitions/customers locally. Every lookup below is by slug,
+		// stock WP/WooCommerce option, or a sibling plugin's own public
+		// getter — never a hardcoded post ID, since staging's IDs differ
+		// from this box's.
+		$site_fix = self::fix_stock_site_content();
+		foreach ( $site_fix['messages'] as $site_fix_message ) {
+			$messages[] = $site_fix_message;
+		}
+
 		return array(
 			'questions'       => $questions_created,
 			'competitions'    => count( $new_products ),
@@ -155,8 +170,216 @@ class Nera_SAW_Seeder {
 			'submissions'     => (int) $sub_result['success'] + (int) $sub_result['errored'],
 			'tickets_minted'  => (int) $sub_result['tickets_minted'],
 			'total_in_bank'   => Nera_SAW_Question_Bank::count( self::BATCH_ID ),
+			'site_fix'        => $site_fix,
 			'messages'        => $messages,
 		);
+	}
+
+	/**
+	 * Clean up stock theme/WooCommerce leftovers that make real pages read
+	 * as unfinished (client findings #4/#9/#48/#50): a Lorem Ipsum footer
+	 * paragraph, a placeholder "xxx@xxx.co.uk" contact line, six dead "#"
+	 * links in the footer's own nav menu, and an orphaned duplicate Shop
+	 * page WooCommerce never cleaned up once `woocommerce_shop_page_id` was
+	 * repointed elsewhere.
+	 *
+	 * Every lookup is by slug, a stock WP/WooCommerce option, or a sibling
+	 * plugin's own already-public getter/option — never a hardcoded post
+	 * ID. This runs from `seed()` specifically so re-running the seeder on
+	 * staging (this install's own content, not demo data) re-applies the
+	 * same fix there, per the user's own instruction, rather than needing
+	 * a hand-edit repeated in two places.
+	 *
+	 * Idempotent: safe to call on an already-fixed site (each step checks
+	 * for the stock marker text/URL before changing anything).
+	 *
+	 * @return array{changed: string[], messages: string[]}
+	 */
+	public static function fix_stock_site_content() {
+		$messages = array();
+		$changed  = array();
+
+		if ( self::fix_footer_widgets() ) {
+			$messages[] = __( 'Replaced placeholder footer widget text (Lorem Ipsum paragraph, "xxx@xxx.co.uk" contact line).', 'nera-strikeawin' );
+			$changed[]  = 'footer_widgets';
+		}
+
+		$menu_fixed = self::fix_dead_footer_menu_links();
+		if ( $menu_fixed > 0 ) {
+			$messages[] = sprintf(
+				/* translators: %d: number of menu links fixed */
+				__( 'Pointed %d dead footer menu link(s) (still "#") at their real pages.', 'nera-strikeawin' ),
+				$menu_fixed
+			);
+			$changed[] = 'footer_menu';
+		}
+
+		if ( self::trash_orphaned_shop_page() ) {
+			$messages[] = __( 'Trashed the orphaned duplicate Shop page (the real one is whatever woocommerce_shop_page_id already points to).', 'nera-strikeawin' );
+			$changed[]  = 'orphan_shop';
+		}
+
+		return array(
+			'changed'  => $changed,
+			'messages' => $messages,
+		);
+	}
+
+	/**
+	 * The footer's own "About" paragraph and contact line, both still the
+	 * theme's starter-content placeholders. Only ever touches a block whose
+	 * CURRENT content is exactly the stock placeholder text — a block an
+	 * admin already edited for real content is left alone, on either run.
+	 *
+	 * @return bool Whether anything changed.
+	 */
+	private static function fix_footer_widgets() {
+		$opt = get_option( 'widget_block' );
+		if ( ! is_array( $opt ) ) {
+			return false;
+		}
+
+		$changed = false;
+		foreach ( $opt as $id => $block ) {
+			if ( ! is_array( $block ) || ! isset( $block['content'] ) ) {
+				continue;
+			}
+
+			if ( false !== strpos( $block['content'], 'Lorem Ipsum is simply dummy text' ) ) {
+				// Reuses the already-approved footer legal line (see
+				// saw_ru_strings()'s own '[BRAND]. Skill-based prize
+				// competitions under the Gambling Act 2005.') rather than
+				// inventing new marketing copy here.
+				$opt[ $id ]['content'] = "<!-- wp:paragraph -->\n<p>"
+					. esc_html__( 'NERA Competitions. Skill-based prize competitions under the Gambling Act 2005.', 'nera-strikeawin' )
+					. "</p>\n<!-- /wp:paragraph -->";
+				$changed               = true;
+			}
+
+			if ( false !== strpos( $block['content'], 'xxx@xxx.co.uk' ) ) {
+				// The Contact page's own already-real, client-entered email
+				// (ACF field 'contact_email') — not invented here, just
+				// reused in the one other place it was still a placeholder.
+				$email                 = self::real_contact_email();
+				$opt[ $id ]['content'] = "<!-- wp:list -->\n<ul class=\"wp-block-list\"><!-- wp:list-item -->\n<li>"
+					. esc_html( $email )
+					. "</li>\n<!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
+				$changed               = true;
+			}
+		}
+
+		if ( $changed ) {
+			update_option( 'widget_block', $opt );
+		}
+		return $changed;
+	}
+
+	/**
+	 * The Contact page's own real, client-entered email, read generically
+	 * (works whether or not ACF is active) rather than assumed.
+	 *
+	 * @return string
+	 */
+	private static function real_contact_email() {
+		$contact = get_page_by_path( 'contact-us' );
+		if ( $contact && function_exists( 'get_field' ) ) {
+			$email = get_field( 'contact_email', $contact->ID );
+			if ( $email && is_email( $email ) ) {
+				return $email;
+			}
+		}
+		return get_option( 'admin_email' );
+	}
+
+	/**
+	 * "Footer Menu 3"'s six items are all still the theme's stock `#`
+	 * placeholder links. Matched by the menu's own name and each item's own
+	 * label — not post IDs, which differ on staging — and only a link
+	 * still literally `#` is touched, so an admin's own real link survives
+	 * a later re-run.
+	 *
+	 * @return int How many links were fixed.
+	 */
+	private static function fix_dead_footer_menu_links() {
+		$menu = wp_get_nav_menu_object( 'Footer Menu 3' );
+		if ( ! $menu ) {
+			return 0;
+		}
+		$items = wp_get_nav_menu_items( $menu->term_id );
+		if ( ! $items ) {
+			return 0;
+		}
+
+		$targets = array(
+			'Live Competitions'     => function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : '',
+			'Winners'               => self::permalink_by_path( 'winners-page' ),
+			'Cart'                  => function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : '',
+			'User Dashboard'        => function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : '',
+			'Privacy Policy'        => self::permalink_by_option( 'wp_page_for_privacy_policy' ),
+			'Terms and Conditions'  => self::permalink_by_path( 'terms-and-conditions' ),
+		);
+
+		$fixed = 0;
+		foreach ( $items as $item ) {
+			if ( '#' !== $item->url ) {
+				continue; // An admin already pointed this one somewhere real.
+			}
+			$url = isset( $targets[ $item->title ] ) ? $targets[ $item->title ] : '';
+			if ( ! $url ) {
+				continue; // That real page doesn't exist on this install either; leave it rather than guess.
+			}
+			wp_update_nav_menu_item(
+				$menu->term_id,
+				$item->ID,
+				array(
+					'menu-item-title'     => $item->title,
+					'menu-item-url'       => $url,
+					'menu-item-status'    => 'publish',
+					'menu-item-type'      => 'custom',
+				)
+			);
+			++$fixed;
+		}
+		return $fixed;
+	}
+
+	/**
+	 * @param string $slug Page slug.
+	 * @return string Permalink, or '' if no such page exists on this install.
+	 */
+	private static function permalink_by_path( $slug ) {
+		$page = get_page_by_path( $slug );
+		return $page ? (string) get_permalink( $page ) : '';
+	}
+
+	/**
+	 * @param string $option_name A WP option holding a post ID.
+	 * @return string Permalink, or '' if the option is unset or the post is gone.
+	 */
+	private static function permalink_by_option( $option_name ) {
+		$id = (int) get_option( $option_name );
+		return $id ? (string) get_permalink( $id ) : '';
+	}
+
+	/**
+	 * WooCommerce auto-creates a "Shop" page on activation; if
+	 * `woocommerce_shop_page_id` was later repointed at a different, real
+	 * page (this site's own "All Competitions"), the original stock one is
+	 * usually left behind, still published and still reachable by URL.
+	 *
+	 * @return bool Whether a page was trashed.
+	 */
+	private static function trash_orphaned_shop_page() {
+		$stock = get_page_by_path( 'shop' );
+		if ( ! $stock ) {
+			return false;
+		}
+		$real_id = function_exists( 'wc_get_page_id' ) ? (int) wc_get_page_id( 'shop' ) : 0;
+		if ( ! $real_id || $real_id === $stock->ID ) {
+			return false; // Either no shop configured, or 'shop' IS the real one -- nothing orphaned.
+		}
+		wp_trash_post( $stock->ID );
+		return true;
 	}
 
 	/**
