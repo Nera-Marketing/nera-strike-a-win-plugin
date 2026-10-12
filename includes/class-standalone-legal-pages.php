@@ -55,6 +55,10 @@ class Nera_SAW_Standalone_Legal_Pages {
 		// see maybe_enqueue_complaints_css()'s own docblock for why that
 		// plugin's usual, page-ID-gated enqueue never fires here at all.
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'maybe_enqueue_complaints_css' ), 5 );
+
+		if ( is_admin() ) {
+			add_action( 'admin_init', array( __CLASS__, 'ensure_ru_translations' ) );
+		}
 	}
 
 	/**
@@ -139,6 +143,106 @@ class Nera_SAW_Standalone_Legal_Pages {
 		$id = Nera_SAW_Standalone_Pages::page_id( 'complaints' );
 		if ( $id && is_page( $id ) ) {
 			Nera_CMP_Assets::enqueue_styles();
+		}
+	}
+
+	/**
+	 * Create a Russian Polylang translation of the mirrored Terms and
+	 * Privacy Policy pages, once, from a machine-translated starting file —
+	 * never a copy baked into this plugin's own code.
+	 *
+	 * Terms/Privacy are real WordPress pages an administrator edits
+	 * directly in wp-admin (see `templates/standalone/legal-terms.php`'s own
+	 * docblock) — there is no per-plugin string table to hook the way the
+	 * other three screens are translated. Polylang, already relied on
+	 * elsewhere in this plugin (`Nera_SAW_Language::set_for_post()`, the
+	 * seeded question bank), is this site's own existing mechanism for a
+	 * second real page in a second language, so a translation is created as
+	 * one: a normal, Polylang-linked `page` post the admin can keep editing
+	 * like any other, not a second copy this class re-generates each run.
+	 *
+	 * Runs once per source page, ever: if a Russian translation is already
+	 * linked (`pll_get_post()` returns something), this leaves it
+	 * completely alone — same "existing content is the administrator's"
+	 * rule `Nera_SAW_Standalone_Pages::ensure()` follows for the pages
+	 * themselves. The seed text comes from `languages/ru/legal-terms-
+	 * content.html` / `legal-privacy-content.html` — a first-pass machine
+	 * translation, pending the client's own legal review on staging.
+	 */
+	public static function ensure_ru_translations() {
+		if ( ! function_exists( 'pll_set_post_language' ) || ! function_exists( 'pll_save_post_translations' ) ) {
+			return;
+		}
+		if ( ! class_exists( 'Nera_SAW_Language' ) || ! Nera_SAW_Language::has( 'ru' ) ) {
+			return;
+		}
+
+		self::ensure_ru_translation(
+			get_page_by_path( 'terms-and-conditions' ),
+			'Условия использования (RU)',
+			'terms-and-conditions-ru',
+			NERA_SAW_PLUGIN_DIR . 'languages/ru/legal-terms-content.html'
+		);
+
+		$privacy_id = (int) get_option( 'wp_page_for_privacy_policy' );
+		self::ensure_ru_translation(
+			$privacy_id ? get_post( $privacy_id ) : null,
+			'Политика конфиденциальности (RU)',
+			'privacy-policy-ru',
+			NERA_SAW_PLUGIN_DIR . 'languages/ru/legal-privacy-content.html'
+		);
+	}
+
+	/**
+	 * Create and link one page's Russian translation, if it does not
+	 * already have one.
+	 *
+	 * @param WP_Post|null $source     The English (or site-default-language) page to translate.
+	 * @param string       $post_title Title for the new Russian page.
+	 * @param string       $slug       Slug for the new Russian page.
+	 * @param string       $content_file Path to the seed `post_content` HTML.
+	 */
+	private static function ensure_ru_translation( $source, $post_title, $slug, $content_file ) {
+		if ( ! $source instanceof WP_Post ) {
+			return;
+		}
+		if ( function_exists( 'pll_get_post' ) ) {
+			$existing = pll_get_post( $source->ID, 'ru' );
+			if ( $existing ) {
+				return; // Already linked — an administrator may have taken it over since.
+			}
+		}
+		if ( ! is_readable( $content_file ) ) {
+			return;
+		}
+
+		$new_id = wp_insert_post(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_title'   => $post_title,
+				'post_name'    => $slug,
+				'post_content' => (string) file_get_contents( $content_file ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin file, not a remote URL.
+			),
+			true
+		);
+		if ( is_wp_error( $new_id ) || ! $new_id ) {
+			return;
+		}
+
+		Nera_SAW_Language::set_for_post( $new_id, 'ru' );
+
+		$source_lang = Nera_SAW_Language::for_post( $source->ID );
+		if ( '' === $source_lang && function_exists( 'pll_default_language' ) ) {
+			$source_lang = (string) pll_default_language();
+		}
+		if ( '' !== $source_lang ) {
+			pll_save_post_translations(
+				array(
+					$source_lang => $source->ID,
+					'ru'         => $new_id,
+				)
+			);
 		}
 	}
 }

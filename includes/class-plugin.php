@@ -67,6 +67,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-language-switcher.php';
 		require_once $dir . 'class-standalone-pages.php';
 		require_once $dir . 'class-standalone-legal-pages.php';
+		require_once $dir . 'class-standalone-legal-ru-content.php';
 		require_once $dir . 'class-standalone-fields.php';
 		require_once $dir . 'class-standalone-chrome.php';
 		require_once $dir . 'class-standalone-basket.php';

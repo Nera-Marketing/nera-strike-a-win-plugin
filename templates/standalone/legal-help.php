@@ -48,7 +48,11 @@ Nera_SAW_Router::part(
 <div class="saw-screen saw-screen--narrow">
 	<div class="saw-stack saw-legal-mirror">
 		<?php
-		if ( class_exists( 'Nera_RP_Page' ) && method_exists( 'Nera_RP_Page', 'render_block' ) ) {
+		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() && class_exists( 'Nera_SAW_Standalone_Legal_RU_Content' ) ) {
+			// The directory's rows (names/blurbs) and intro copy are plain
+			// data, not gettext — see class-standalone-legal-ru-content.php.
+			echo Nera_SAW_Standalone_Legal_RU_Content::render_help_directory(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already-escaped HTML.
+		} elseif ( class_exists( 'Nera_RP_Page' ) && method_exists( 'Nera_RP_Page', 'render_block' ) ) {
 			echo Nera_RP_Page::render_block(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- that plugin's own, already-escaped HTML.
 		}
 		?>

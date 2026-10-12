@@ -126,6 +126,7 @@ class Nera_SAW_Language {
 			add_filter( 'ngettext', array( __CLASS__, 'translate_woocommerce_plurals' ), 10, 5 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_instant_win_threshold_strings' ), 10, 3 );
 			add_filter( 'ngettext', array( __CLASS__, 'translate_spending_limit_plurals' ), 10, 5 );
+			add_filter( 'the_title', array( __CLASS__, 'translate_standalone_page_titles' ), 10, 2 );
 
 			// See self::current()'s docblock (step 2) for why this needs a cookie
 			// rather than the WooCommerce session this used at first.
@@ -519,6 +520,40 @@ class Nera_SAW_Language {
 		}
 
 		return $details;
+	}
+
+	/**
+	 * Translate a standalone page's own `post_title` (the H1 `screen-head.php`
+	 * renders via `get_the_title()`), for the 5 new legal/help child pages only.
+	 *
+	 * `post_title` is written once, in English, when `Nera_SAW_Standalone_Pages
+	 * ::ensure()` first creates the page — always in an `is_admin()` context,
+	 * where the registry's own `__( 'Terms and Conditions', 'nera-strikeawin' )`
+	 * call never actually returns Russian (every gettext translator in this file
+	 * is `is_admin()`-gated). So the stored title is permanently English and
+	 * `get_the_title()` would echo it unchanged on every later request — this
+	 * is the one title-level filter in the whole file, scoped tightly by
+	 * `$post_id` so it cannot relabel an unrelated post's title rendered
+	 * incidentally on the same screen (e.g. a "recent posts" widget).
+	 *
+	 * @param string $title   Title WordPress would otherwise return.
+	 * @param int    $post_id Post the title belongs to.
+	 * @return string
+	 */
+	public static function translate_standalone_page_titles( $title, $post_id = 0 ) {
+		if ( is_admin() || 'ru' !== self::current() ) {
+			return $title;
+		}
+		if ( ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return $title;
+		}
+		if ( (int) $post_id !== (int) get_queried_object_id() ) {
+			return $title;
+		}
+
+		$ru = self::saw_ru_strings();
+
+		return isset( $ru[ $title ] ) ? $ru[ $title ] : $title;
 	}
 
 	/**
@@ -1838,6 +1873,17 @@ class Nera_SAW_Language {
 				'Runs in progress'      => 'Попыток в процессе',
 				'Runs completed'        => 'Сыграно попыток',
 				'Runs remaining'        => 'Осталось попыток',
+				// Standalone-section page titles for the 5 new legal/help
+				// child pages (class-standalone-legal-pages.php) — these use
+				// this plugin's own 'nera-strikeawin' domain since the
+				// registry itself defines the title, not the sibling plugin
+				// being mirrored.
+				'Terms and Conditions'  => 'Условия использования',
+				'Privacy Policy'        => 'Политика конфиденциальности',
+				'Complaints'            => 'Жалобы',
+				'Help and support'      => 'Помощь и поддержка',
+				'Our commitment to player protection'
+					=> 'Наши обязательства по защите игроков',
 			);
 		}
 

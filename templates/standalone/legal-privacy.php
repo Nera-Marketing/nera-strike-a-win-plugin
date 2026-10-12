@@ -26,6 +26,20 @@ defined( 'ABSPATH' ) || exit;
 $saw_source_id = (int) get_option( 'wp_page_for_privacy_policy' );
 $saw_source     = $saw_source_id ? get_post( $saw_source_id ) : null;
 
+// A machine-translated Russian version of this exact page, linked via
+// Polylang (see Nera_SAW_Standalone_Legal_Pages::ensure_ru_translations()) —
+// an administrator may since have edited it directly in wp-admin. Falls
+// back to the English source, same as when no translation exists yet.
+if ( $saw_source && class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() && function_exists( 'pll_get_post' ) ) {
+	$saw_ru_id = pll_get_post( $saw_source->ID, 'ru' );
+	if ( $saw_ru_id ) {
+		$saw_ru_post = get_post( $saw_ru_id );
+		if ( $saw_ru_post && 'publish' === $saw_ru_post->post_status ) {
+			$saw_source = $saw_ru_post;
+		}
+	}
+}
+
 Nera_SAW_Router::part(
 	'header.php',
 	array(
