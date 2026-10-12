@@ -108,6 +108,8 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_complaints_strings' ), 10, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_player_protection_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_wallet_strings' ), 10, 3 );
 			add_filter( 'woo_wallet_locate_template', array( __CLASS__, 'override_wallet_template' ), 99, 4 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
@@ -241,6 +243,146 @@ class Nera_SAW_Language {
 				// limit — found still English on the checkout screenshot.
 				'Reached your spending limit? Support and advice is available.'
 					=> 'Достигли лимита расходов? Поддержка и консультация доступны.',
+				// Nera_RP_Services::render_directory() — the "Support
+				// organisations" list, found when the standalone section's
+				// own Help and support page (templates/standalone/
+				// legal-help.php) called straight into this plugin's block
+				// render method. The organisations' own names (Citizens
+				// Advice, Samaritans…) and one-line blurbs are plain data
+				// (get_field()/default_services()), not gettext calls, and
+				// stay English either way — a separate, flagged question,
+				// not fixed by this filter.
+				'Help is available — free, confidential services:'
+					=> 'Помощь доступна — бесплатные, конфиденциальные услуги:',
+				'Support organisations'        => 'Организации поддержки',
+				'No support services are currently listed.'
+					=> 'Сейчас нет доступных служб поддержки.',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the sibling nera-complaints-plugin's Complaints page, on
+	 * the section's own screens — reached from the new standalone section
+	 * page (templates/standalone/legal-complaints.php), which calls
+	 * straight into that plugin's own `Nera_CMP_Shortcodes::render_page()`.
+	 * Admin-only strings (the Fluent Forms import tool, the admin entries
+	 * list table) are out of scope here — `is_admin()` already excludes
+	 * them, same as every other map in this file.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_complaints_strings( $translated, $original, $domain ) {
+		if ( 'nera-complaints' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'Your rights'      => 'Ваши права',
+				'Raising a complaint' => 'Подача жалобы',
+				'We take every complaint seriously and aim to resolve it as quickly and fairly as possible. This page explains how to raise a complaint, what happens at each stage, and what to do if you remain dissatisfied after our final response.'
+					=> 'Мы серьёзно относимся к каждой жалобе и стремимся разрешить её максимально быстро и справедливо. На этой странице объясняется, как подать жалобу, что происходит на каждом этапе, и что делать, если вас не устроил наш окончательный ответ.',
+				'How to raise a complaint' => 'Как подать жалобу',
+				'Use the form below, or contact us by email or post using the details in our Terms and Conditions. Every complaint is logged, tracked, and handled by a dedicated member of our team.'
+					=> 'Используйте форму ниже или свяжитесь с нами по email или почте, используя данные из наших Условий использования. Каждая жалоба регистрируется, отслеживается и обрабатывается отдельным сотрудником нашей команды.',
+				'View Terms and Conditions' => 'Посмотреть Условия использования',
+				'What to include'           => 'Что указать',
+				'The more detail you provide, the faster we can investigate.'
+					=> 'Чем больше деталей вы предоставите, тем быстрее мы сможем провести расследование.',
+				'Your full name and contact details (email and phone number).'
+					=> 'Ваше полное имя и контактные данные (email и номер телефона).',
+				'Your order reference number, if applicable.'
+					=> 'Номер вашего заказа, если применимо.',
+				'A clear description of what went wrong and when it happened.'
+					=> 'Чёткое описание того, что пошло не так и когда это произошло.',
+				'Any steps you have already taken to resolve the issue.'
+					=> 'Любые шаги, которые вы уже предприняли для решения проблемы.',
+				'The outcome you are seeking.' => 'Результат, которого вы добиваетесь.',
+				'What happens next'            => 'Что будет дальше',
+				'We receive your complaint'    => 'Мы получаем вашу жалобу',
+				'Your submission is logged and assigned a reference number.'
+					=> 'Ваше обращение регистрируется и получает номер для отслеживания.',
+				'We acknowledge it' => 'Мы подтверждаем получение',
+				'You receive confirmation with your reference and our target response times.'
+					=> 'Вы получаете подтверждение с номером обращения и нашими ориентировочными сроками ответа.',
+				'We investigate' => 'Мы проводим расследование',
+				'A team member reviews the details and keeps you updated if we need more information.'
+					=> 'Сотрудник команды изучает детали и сообщает вам, если нужна дополнительная информация.',
+				'We respond' => 'Мы отвечаем',
+				'You receive our findings and, where appropriate, the steps we will take.'
+					=> 'Вы получаете наши выводы и, при необходимости, информацию о дальнейших шагах.',
+				'If your complaint is complex and we need longer to investigate, we will contact you to explain why and give you a revised timescale.'
+					=> 'Если ваша жалоба сложная и нам нужно больше времени на расследование, мы свяжемся с вами, объясним причину и сообщим новый срок.',
+				'Submit your complaint' => 'Отправить жалобу',
+				'Complete all required fields so we can begin an investigation.'
+					=> 'Заполните все обязательные поля, чтобы мы могли начать расследование.',
+				'If you are still not satisfied' => 'Если вас всё ещё не устроил ответ',
+				'After our final response, you may refer your complaint to an independent Alternative Dispute Resolution (ADR) body within 12 months. Using the ADR service is free of charge and does not affect your statutory rights.'
+					=> 'После нашего окончательного ответа вы можете в течение 12 месяцев обратиться в независимый орган по разрешению споров (ADR). Услуга ADR бесплатна и не влияет на ваши законные права.',
+				'Independent dispute resolution provider' => 'Независимый орган по разрешению споров',
+				'Provider' => 'Организация',
+				'Website'  => 'Веб-сайт',
+				'Email'    => 'Email',
+				'Phone'    => 'Телефон',
+				'Acknowledgement' => 'Подтверждение',
+				// render_timeframes()'s own two SLA grid boxes — second box's
+				// own label isn't a separate literal string in that file
+				// (built from the same 'Acknowledgement'/response pairing),
+				// so only the day/days units need their own entries here.
+				'day'  => 'день',
+				'days' => 'дней',
+				'We aim to acknowledge your complaint within %1$d working %2$s and provide a full response within %3$d working %4$s.'
+					=> 'Мы стремимся подтвердить получение вашей жалобы в течение %1$d рабочих %2$s и дать полный ответ в течение %3$d рабочих %4$s.',
+			);
+		}
+
+		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * Translate the sibling nera-voluntary-code-plugin's "Our commitment to
+	 * player protection" page, on the section's own screens — reached from
+	 * the new standalone section page
+	 * (templates/standalone/legal-player-protection.php), which calls
+	 * straight into that plugin's own `Nera_VC_Page::render_block()`.
+	 *
+	 * The intro paragraph and every measure's own title/body (Age
+	 * verification, Spending limits…) are plain data
+	 * (Nera_VC_Settings::intro_copy()/Nera_VC_Content::default_protections())
+	 * stored as HTML, not gettext calls — they stay English either way; a
+	 * separate, flagged question, not fixed by this filter.
+	 *
+	 * @param string $translated Text WordPress would otherwise return.
+	 * @param string $original   Original (English) string.
+	 * @param string $domain     Text domain the call was made with.
+	 * @return string
+	 */
+	public static function translate_player_protection_strings( $translated, $original, $domain ) {
+		if ( 'nera-voluntary-code-plugin' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		if ( ! self::is_account_screen() ) {
+			return $translated;
+		}
+
+		static $ru = null;
+		if ( null === $ru ) {
+			$ru = array(
+				'Player protections'           => 'Защита игроков',
+				'Transparency'                 => 'Прозрачность',
+				'Accountability'                => 'Подотчётность',
+				'Read the full Code on GOV.UK' => 'Полный текст Кодекса на GOV.UK',
+				'Read our complaints procedure' => 'Наша процедура рассмотрения жалоб',
 			);
 		}
 
