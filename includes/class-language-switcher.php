@@ -177,6 +177,94 @@ class Nera_SAW_Language_Switcher {
 	}
 
 	/**
+	 * A small flag glyph for the header's mobile "swap" pill (client finding
+	 * #25) — inline SVG, not an image file, copied from the client's own
+	 * accepted prototype (`option-toggle/index.html`) so the two renderings
+	 * match pixel for pixel. English and Russian only: this plugin's own
+	 * language list is the same two codes everywhere else (the entry
+	 * pop-up, the header pill below), and a third code would have no flag
+	 * to reach for — callers fall back to no flag rather than guessing one.
+	 *
+	 * @param string $code Language code.
+	 * @return string Raw `<svg>` markup, or '' when there is no flag for it.
+	 */
+	public static function flag_svg( $code ) {
+		switch ( $code ) {
+			case 'en':
+				return '<svg width="20" height="14" viewBox="0 0 60 42" aria-hidden="true">'
+					. '<rect width="60" height="42" fill="#012169"/>'
+					. '<path d="M0 0L60 42M60 0L0 42" stroke="#fff" stroke-width="8"/>'
+					. '<path d="M0 0L60 42M60 0L0 42" stroke="#C8102E" stroke-width="3"/>'
+					. '<path d="M30 0V42M0 21H60" stroke="#fff" stroke-width="12"/>'
+					. '<path d="M30 0V42M0 21H60" stroke="#C8102E" stroke-width="7"/>'
+					. '</svg>';
+			case 'ru':
+				return '<svg width="20" height="14" viewBox="0 0 60 42" aria-hidden="true">'
+					. '<rect width="60" height="14" fill="#fff"/>'
+					. '<rect y="14" width="60" height="14" fill="#0039A6"/>'
+					. '<rect y="28" width="60" height="14" fill="#D52B1E"/>'
+					. '</svg>';
+			default:
+				return '';
+		}
+	}
+
+	/**
+	 * `wp_kses()` allow-list for `flag_svg()`'s own, fixed markup — not a
+	 * general SVG sanitiser, just the handful of tags/attributes those two
+	 * strings actually use.
+	 *
+	 * @return array
+	 */
+	public static function flag_svg_allowed_html() {
+		return array(
+			'svg'  => array(
+				'width'       => true,
+				'height'      => true,
+				'viewbox'     => true,
+				'aria-hidden' => true,
+			),
+			'rect' => array(
+				'width'  => true,
+				'height' => true,
+				'fill'   => true,
+				'y'      => true,
+			),
+			'path' => array(
+				'd'            => true,
+				'stroke'       => true,
+				'stroke-width' => true,
+			),
+		);
+	}
+
+	/**
+	 * Accessible label for the mobile swap pill — "currently showing X, tap
+	 * for Y", worded the same way the client's own prototype worded it
+	 * (`option-toggle/index.html`'s `aria-label`), not a generic translation
+	 * of it.
+	 *
+	 * @param string $shown_code Language the pill is currently showing.
+	 * @param string $other_code Language a tap switches to.
+	 * @return string
+	 */
+	public static function swap_aria_label( $shown_code, $other_code ) {
+		if ( 'ru' === $shown_code ) {
+			return 'Язык: Русский. Нажмите для English';
+		}
+		if ( 'en' === $shown_code ) {
+			return 'Language: English. Tap for Russian';
+		}
+
+		// Any other pairing: build from each language's own display name
+		// rather than leaving the pill unlabelled.
+		$shown = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $shown_code ) : $shown_code;
+		$other = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $other_code ) : $other_code;
+		/* translators: 1: current language name, 2: other language name. */
+		return sprintf( __( 'Language: %1$s. Tap for %2$s', 'nera-strikeawin' ), $shown, $other );
+	}
+
+	/**
 	 * This page, in another language.
 	 *
 	 * Polylang's own translation of the current page when there is one — that is the

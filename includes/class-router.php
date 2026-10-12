@@ -319,6 +319,24 @@ class Nera_SAW_Router {
 		);
 
 		/*
+		 * Client finding #25: the header's language control needed a one-link
+		 * "swap" form on mobile to fit 360px — see language-toggle.php's own
+		 * docblock. This script only paints the swap link's visible flag/code
+		 * instantly on click, matching the client's chosen prototype; the
+		 * link's `href` always works without it, so it is enqueued on every
+		 * standalone screen that offers languages at all, never required.
+		 */
+		if ( class_exists( 'Nera_SAW_Language_Switcher' ) && Nera_SAW_Language_Switcher::offering_languages() ) {
+			wp_enqueue_script(
+				'nera-saw-lang-swap',
+				NERA_SAW_PLUGIN_URL . 'assets/js/lang-swap.js',
+				array(),
+				NERA_SAW_VERSION,
+				true
+			);
+		}
+
+		/*
 		 * "Enter now" confirms before it leaves, on the competition screen only.
 		 */
 		if ( 'competition' === self::current_route() ) {

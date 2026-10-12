@@ -124,7 +124,12 @@ body.saw-app {
 .saw-header {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* minmax(0, 1fr), not bare 1fr: a grid track's automatic minimum is its
+     content's own max-content width, not 0 — so without this the tools
+     strip refused to shrink below its natural width and pushed the whole
+     page past the viewport at 360px (client finding #25) regardless of how
+     narrow its own content was made. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 20px 20px 8px;
@@ -1489,6 +1494,45 @@ a.saw-card__title:hover { color: var(--saw-link); }
 .saw-lang__option.is-current {
   color: var(--saw-on-dark);
   background: var(--saw-primary);
+}
+
+/*
+ * The mobile "swap" pill (client finding #25) — one flag + one code, not
+ * the two-segment `.saw-lang` above. Still a plain `<a href>`; `lang-swap.js`
+ * only repaints it, never required for the link itself to work. Hidden on
+ * desktop/shown on mobile below, at the same <900px breakpoint the rest of
+ * this header already collapses at.
+ */
+.saw-lang-swap {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px 0 8px;
+  background: var(--saw-card);
+  border: 1.5px solid var(--saw-control);
+  border-radius: 999px;
+  color: var(--saw-ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  flex: none;
+}
+.saw-lang-swap [data-saw-lang-swap-flag] {
+  display: inline-flex;
+  width: 20px;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex: none;
+  box-shadow: 0 0 0 1px var(--saw-control);
+}
+.saw-lang-swap [data-saw-lang-swap-flag] svg { display: block; }
+
+@media (max-width: 899px) {
+  .saw-lang { display: none; }
+  .saw-lang-swap { display: inline-flex; }
 }
 
 /* The pop-up. */
@@ -3847,7 +3891,7 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
     top: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     padding: 0 48px;
     height: 76px;
