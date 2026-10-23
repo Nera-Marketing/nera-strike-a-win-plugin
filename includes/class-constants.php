@@ -47,19 +47,24 @@ class Nera_SAW_Constants {
 	const LATENCY_GRACE_SECONDS = 1.5;
 
 	/* ---------------------------------------------------------------------
-	 * Interrupted runs (ADR 0030).
+	 * Interrupted runs (ADR 0030, amended by ADR 0039).
 	 *
-	 * No periodic client ping any more (see App.vue's checkAfterReturn(), and
-	 * the grilling session that replaced HEARTBEAT_SECONDS's polling with
-	 * event-driven checks on tab focus/pagehide instead — a fixed interval
-	 * short enough to matter against a 10-second question timer cost more in
-	 * request volume than it was worth). `last_seen_at` is now only ever
-	 * refreshed by one of those real events, but the same staleness test still
-	 * applies: a run whose last check-in is older than HEARTBEAT_STALE_SECONDS
-	 * is interrupted, its clock frozen where that check-in left it, and the
-	 * player offered Resume for the configured window.
+	 * The quiz itself still runs in the browser and sends its answers once, at
+	 * the end. Alongside it, the client sends one small ping every
+	 * HEARTBEAT_SECONDS_DEFAULT seconds while a run is on screen, and one more
+	 * when a backgrounded tab regains focus. The ping carries nothing and only
+	 * refreshes `last_seen_at`: it is how the server tells a player who is still
+	 * here from one who has gone. A run whose last check-in is older than the
+	 * stale threshold is interrupted: under "let the player continue" it is held
+	 * and offered Resume for the configured window; otherwise it is closed.
+	 *
+	 * The interval is filterable (`nera_saw_heartbeat_seconds`, 0 switches the
+	 * ping off) so its cost can be measured; the stale threshold follows it.
 	 * ------------------------------------------------------------------- */
-	const HEARTBEAT_STALE_SECONDS = 15;
+	const HEARTBEAT_SECONDS_DEFAULT = 10;
+
+	/** Fixed stale threshold when the ping runs at its default rate (3.5 beats). */
+	const HEARTBEAT_STALE_SECONDS = 35;
 
 	/** Minutes a run is held when the admin field is saved blank. */
 	const RESUME_WINDOW_BLANK_MINUTES = 5;
@@ -176,6 +181,16 @@ class Nera_SAW_Constants {
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,
 			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
+			// The site's name as players see it (Nera_SAW_Brand). One place, not typed into templates.
+			'brand_name'         => 'Strike And Win',
+			// Wallet top-up limits (Nera_SAW_Wallet). Provisional until the client
+			// confirms them; 0 means no limit.
+			'wallet_topup_max_per_transaction' => 100,
+			'wallet_topup_max_per_day'         => 250,
+			// Checkout (Nera_SAW_Checkout): which payment methods show -- Wallet only until a
+			// provider is agreed -- and whether the coupon prompt does.
+			'checkout_gateways'                => array( 'wallet' ),
+			'checkout_show_coupon'             => false,
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),
@@ -184,7 +199,7 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Default feature flags. Both are edited on the demo page (Tools → Strike A Win
+	 * Default feature flags. Both are edited on the demo page (Tools → Strike And Win
 	 * Demo → Feature flags); Settings owns only the Answer reveal's hold duration.
 	 * save_feature_flags() is still a partial write, so a future second screen can
 	 * own a flag without resetting the others.
@@ -350,7 +365,8 @@ class Nera_SAW_Constants {
 		$level = (array) $level;
 		return array(
 			'key'     => isset( $level['key'] ) ? (string) $level['key'] : '',
-			'label'   => isset( $level['label'] ) ? (string) $level['label'] : '',
+			// The stored English name, shown to a Russian player in Russian (never in the admin).
+			'label'   => isset( $level['label'] ) ? (string) ( class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::translate_level_label( (string) $level['label'] ) : $level['label'] ) : '',
 			'rank'    => isset( $level['rank'] ) ? (int) $level['rank'] : 0,
 			'reward'  => isset( $level['reward'] ) ? (int) $level['reward'] : 0,
 			'color'   => ! empty( $level['color'] ) ? (string) $level['color'] : '',
@@ -521,7 +537,7 @@ class Nera_SAW_Constants {
 	 * Whether frontend UI overrides are active (product tier widget, cart /
 	 * checkout tier labels, my-account order tier line).
 	 *
-	 * Toggle on Tools → Strike A Win Demo → Feature flags.
+	 * Toggle on Tools → Strike And Win Demo → Feature flags.
 	 *
 	 * @return bool
 	 */
@@ -531,7 +547,7 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Whether the Tools → Strike A Win Demo admin page is registered.
+	 * Whether the Tools → Strike And Win Demo admin page is registered.
 	 *
 	 * Only when wp-config.php sets `define( 'NERA_SAW_DEMO_SEEDER', true );`
 	 * shows the Tools menu item. The page stays at tools.php?page=nera-saw-demo
@@ -549,12 +565,32 @@ class Nera_SAW_Constants {
 	/**
 	 * Whether the quiz UI shows per-question correct / wrong feedback.
 	 *
-	 * Toggle on Tools → Strike A Win Demo → Feature flags.
+	 * Toggle on Tools → Strike And Win Demo → Feature flags.
 	 *
 	 * @return bool
 	 */
 	public static function quiz_feedback_enabled() {
 		$flags = self::feature_flags();
 		return (bool) apply_filters( 'nera_saw_quiz_feedback_enabled', ! empty( $flags['quiz_feedback'] ) );
+	}
+
+	/**
+	 * Seconds between client pings while a run is on screen (0 = no ping).
+	 *
+	 * @return int
+	 */
+	public static function heartbeat_seconds() {
+		return max( 0, (int) apply_filters( 'nera_saw_heartbeat_seconds', self::HEARTBEAT_SECONDS_DEFAULT ) );
+	}
+
+	/**
+	 * How old `last_seen_at` may be before a run counts as interrupted: three and a
+	 * half beats, never under the fixed floor.
+	 *
+	 * @return int
+	 */
+	public static function heartbeat_stale_seconds() {
+		$beat = self::heartbeat_seconds();
+		return $beat > 0 ? max( self::HEARTBEAT_STALE_SECONDS, (int) ceil( $beat * 3.5 ) ) : self::HEARTBEAT_STALE_SECONDS;
 	}
 }

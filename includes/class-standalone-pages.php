@@ -22,8 +22,8 @@
  *   - the fields are registered in PHP, so they are versioned with the plugin and
  *     cannot be edited into a different shape from the ACF admin.
  *
- * The section's URL is the root page's slug. Changing the address is therefore
- * editing that page, which is where an administrator would look for it anyway.
+ * The section owns the site root: the root page is the front page, and every
+ * other screen is a top-level page beside it (ADR 0032).
  *
  * @package Nera_Strikeawin
  */
@@ -54,8 +54,9 @@ class Nera_SAW_Standalone_Pages {
 	/**
 	 * The screens, in the order they are created.
 	 *
-	 * `parent` names the route a page hangs under, which is what produces
-	 * /strikeawin/how-it-works/ from a page called "How it works".
+	 * `parent` names the route a page hangs under. Empty for every screen: the
+	 * section owns the site root, so a page called "How it works" is
+	 * /how-it-works/ (ADR 0032). The key stays for a site that wants a prefix.
 	 *
 	 * @return array
 	 */
@@ -65,7 +66,7 @@ class Nera_SAW_Standalone_Pages {
 			array(
 				'competitions' => array(
 					'title'    => __( 'Competitions', 'nera-strikeawin' ),
-					'slug'     => 'strikeawin',
+					'slug'     => 'competitions',
 					'template' => 'competitions.php',
 					'parent'   => '',
 				),
@@ -73,25 +74,25 @@ class Nera_SAW_Standalone_Pages {
 					'title'    => __( 'How it works', 'nera-strikeawin' ),
 					'slug'     => 'how-it-works',
 					'template' => 'how-it-works.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 				),
 				'walkthrough'    => array(
 					'title'    => __( 'Quick walkthrough', 'nera-strikeawin' ),
 					'slug'     => 'walkthrough',
 					'template' => 'walkthrough.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 				),
 				'before-you-pay' => array(
 					'title'    => __( 'Before you pay', 'nera-strikeawin' ),
 					'slug'     => 'before-you-pay',
 					'template' => 'before-you-pay.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 				),
 				'play'           => array(
-					'title'    => __( 'Play Strike A Win', 'nera-strikeawin' ),
+					'title'    => __( 'Play [BRAND]', 'nera-strikeawin' ),
 					'slug'     => 'play',
 					'template' => 'play.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 					// The same shortcode the mix-mode play page carries: one run engine,
 					// one app, two frames.
 					'content'  => '<!-- wp:shortcode -->[strikeawin_quiz]<!-- /wp:shortcode -->',
@@ -100,7 +101,7 @@ class Nera_SAW_Standalone_Pages {
 					'title'    => __( 'Checkout', 'nera-strikeawin' ),
 					'slug'     => 'checkout',
 					'template' => 'checkout.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 					// The shortcode is the page's content on purpose: WooCommerce's own
 					// checkout, rendered by WooCommerce, on a page the section owns. The
 					// main site's checkout is left exactly as it was.
@@ -110,7 +111,7 @@ class Nera_SAW_Standalone_Pages {
 					'title'    => __( 'My account', 'nera-strikeawin' ),
 					'slug'     => 'my-account',
 					'template' => 'my-account.php',
-					'parent'   => 'competitions',
+					'parent'   => '',
 					// Same reasoning as checkout above: WooCommerce's own account
 					// shortcode — login, register, orders, view-order, edit-account, the
 					// lot — rendered by WooCommerce, on a page the section owns.
@@ -276,7 +277,16 @@ class Nera_SAW_Standalone_Pages {
 	public static function url( $route ) {
 		$id = self::page_id( $route );
 		if ( $id && 'publish' === get_post_status( $id ) ) {
-			return (string) get_permalink( $id );
+			$url = (string) get_permalink( $id );
+
+			// The front page's permalink is built without user_trailingslashit(), the
+			// one hook that stamps the current language onto a section link, so the
+			// home link would drop it. Say it here (ADR 0032).
+			if ( 'competitions' === $route && class_exists( 'Nera_SAW_Language' ) ) {
+				$url = Nera_SAW_Language::carry_current_language( $url );
+			}
+
+			return $url;
 		}
 		return '';
 	}
@@ -299,7 +309,7 @@ class Nera_SAW_Standalone_Pages {
 		foreach ( self::registry() as $screen ) {
 			$templates[ self::TEMPLATE_PREFIX . $screen['template'] ] = sprintf(
 				/* translators: %s: screen name */
-				__( 'Strike A Win — %s', 'nera-strikeawin' ),
+				__( 'Strike And Win — %s', 'nera-strikeawin' ),
 				$screen['title']
 			);
 		}
@@ -340,7 +350,7 @@ class Nera_SAW_Standalone_Pages {
 	 */
 	public static function post_state( $states, $post ) {
 		if ( 'page' === $post->post_type && self::route_of( $post->ID ) ) {
-			$states['nera_saw'] = __( 'Strike A Win', 'nera-strikeawin' );
+			$states['nera_saw'] = __( 'Strike And Win', 'nera-strikeawin' );
 		}
 		return $states;
 	}

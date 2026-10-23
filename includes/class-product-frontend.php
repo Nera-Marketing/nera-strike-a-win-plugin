@@ -1,6 +1,6 @@
 <?php
 /**
- * Single-product frontend for Strike A Win competitions.
+ * Single-product frontend for Strike And Win competitions.
  *
  * On a competition product page this:
  *  - swaps the theme's price/quantity block for tier tabs (JS/DOM), where the

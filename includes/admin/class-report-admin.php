@@ -1,6 +1,6 @@
 <?php
 /**
- * Strike A Win → Report.
+ * Strike And Win → Report.
  *
  * Pick a competition (AJAX search), see its summary (remaining / won tickets /
  * games run) and a paginated, filterable table of quiz submissions (runs). Each
@@ -96,7 +96,7 @@ class Nera_SAW_Report_Admin {
 	}
 
 	/**
-	 * Submenu under Strike A Win.
+	 * Submenu under Strike And Win.
 	 */
 	public static function menu() {
 		add_submenu_page(
@@ -126,7 +126,7 @@ class Nera_SAW_Report_Admin {
 	}
 
 	/**
-	 * AJAX: search Strike A Win competitions by title.
+	 * AJAX: search Strike And Win competitions by title.
 	 */
 	public static function ajax_comps() {
 		check_ajax_referer( self::AJAX_NONCE, 'nonce' );
@@ -216,7 +216,7 @@ class Nera_SAW_Report_Admin {
 		$run_id         = isset( $_GET['run'] ) ? absint( $_GET['run'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		echo '<div class="wrap saw-admin">';
-		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike A Win — Report', 'nera-strikeawin' ) . '</h1>';
+		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike And Win — Report', 'nera-strikeawin' ) . '</h1>';
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$notice = isset( $_GET['saw_notice'] ) ? sanitize_key( wp_unslash( $_GET['saw_notice'] ) ) : '';
@@ -234,7 +234,7 @@ class Nera_SAW_Report_Admin {
 		} elseif ( $competition_id ) {
 			self::render_competition( $competition_id );
 		} else {
-			echo '<div class="saw-card"><p class="saw-muted">' . esc_html__( 'Search for and select a Strike A Win competition to see its submissions.', 'nera-strikeawin' ) . '</p></div>';
+			echo '<div class="saw-card"><p class="saw-muted">' . esc_html__( 'Search for and select a Strike And Win competition to see its submissions.', 'nera-strikeawin' ) . '</p></div>';
 		}
 		echo '</div>';
 

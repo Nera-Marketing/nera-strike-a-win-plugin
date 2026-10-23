@@ -1,7 +1,7 @@
 <?php
 /**
- * Strike A Win config as a WooCommerce Product Data tab, shown for lottery
- * (competition) products below the Spin To Win tab. Strike A Win is its own
+ * Strike And Win config as a WooCommerce Product Data tab, shown for lottery
+ * (competition) products below the Spin To Win tab. Strike And Win is its own
  * competition type — the tab is NOT gated on Spin-to-Win.
  *
  * Ticket stock and end/draw date come from the Lottery product fields (not here).
@@ -34,7 +34,7 @@ class Nera_SAW_Competition_Admin {
 	 */
 	public static function add_tab( $tabs ) {
 		$tabs['nera_strikeawin'] = array(
-			'label'    => __( 'Strike A Win', 'nera-strikeawin' ),
+			'label'    => __( 'Strike And Win', 'nera-strikeawin' ),
 			'target'   => 'nera_strikeawin_data',
 			'class'    => array( 'show_if_lottery' ),
 			'priority' => 86,
@@ -110,7 +110,7 @@ class Nera_SAW_Competition_Admin {
 		<div id="nera_strikeawin_data" class="panel woocommerce_options_panel hidden">
 			<div class="options_group">
 				<p class="form-field">
-					<label for="saw_quiz_enabled"><?php esc_html_e( 'Earn tickets via the Strike A Win quiz', 'nera-strikeawin' ); ?></label>
+					<label for="saw_quiz_enabled"><?php esc_html_e( 'Earn tickets via the Strike And Win quiz', 'nera-strikeawin' ); ?></label>
 					<input type="checkbox" class="checkbox" name="saw_quiz_enabled" id="saw_quiz_enabled" value="1" <?php checked( $is_comp, true ); ?> />
 					<span class="description"><?php esc_html_e( 'Players earn this competition\'s LFW tickets only by answering quiz questions correctly (Section 9). Ticket stock and draw date come from the Lottery product settings.', 'nera-strikeawin' ); ?></span>
 				</p>
@@ -124,7 +124,7 @@ class Nera_SAW_Competition_Admin {
 				<p class="form-field saw-field-per-question">
 					<label for="saw_timer"><?php esc_html_e( 'Per-question timer (s)', 'nera-strikeawin' ); ?></label>
 					<input type="number" name="saw_timer" id="saw_timer" class="short" style="width:90px" min="<?php echo (int) Nera_SAW_Constants::timer_min(); ?>" max="<?php echo (int) Nera_SAW_Constants::timer_max(); ?>" value="<?php echo (int) $config['timer_seconds']; ?>" />
-					<span class="description"><?php echo esc_html( sprintf( __( 'Allowed window %1$d–%2$ds (set in Strike A Win → Settings).', 'nera-strikeawin' ), Nera_SAW_Constants::timer_min(), Nera_SAW_Constants::timer_max() ) ); ?></span>
+					<span class="description"><?php echo esc_html( sprintf( __( 'Allowed window %1$d–%2$ds (set in Strike And Win → Settings).', 'nera-strikeawin' ), Nera_SAW_Constants::timer_min(), Nera_SAW_Constants::timer_max() ) ); ?></span>
 				</p>
 				<p class="form-field saw-field-whole-period" style="display:none">
 					<label for="saw_total_time"><?php esc_html_e( 'Total time (minutes)', 'nera-strikeawin' ); ?></label>
@@ -182,6 +182,19 @@ class Nera_SAW_Competition_Admin {
 				$saw_quiz_override = isset( $config['quiz_method'] ) ? (string) $config['quiz_method'] : Nera_SAW_Mode::INHERIT;
 				?>
 				<p class="form-field">
+					<label for="saw_name_ru"><?php esc_html_e( 'Name in Russian', 'nera-strikeawin' ); ?></label>
+					<input type="text" name="saw_name_ru" id="saw_name_ru" class="short" style="width:260px"
+						value="<?php echo esc_attr( isset( $config['name_ru'] ) ? $config['name_ru'] : '' ); ?>" />
+					<span class="description"><?php esc_html_e( 'Shown instead of the title on the Russian screens. Leave empty to use the title.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<p class="form-field">
+					<label for="saw_market_value"><?php esc_html_e( 'Market value (£)', 'nera-strikeawin' ); ?></label>
+					<input type="number" min="0" step="any" name="saw_market_value" id="saw_market_value" class="short" style="width:180px"
+						value="<?php echo esc_attr( isset( $config['market_value'] ) ? $config['market_value'] : '' ); ?>"
+						placeholder="13000" />
+					<span class="description"><?php esc_html_e( 'What the prize is worth on the market today, in pounds. Shown on the competition cards as Market value (Cash prize for a cash competition). It is not the price of a run. Leave empty to show nothing.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<p class="form-field">
 					<label for="saw_cash_alternative"><?php esc_html_e( 'Cash alternative', 'nera-strikeawin' ); ?></label>
 					<input type="text" name="saw_cash_alternative" id="saw_cash_alternative" class="short" style="width:180px"
 						value="<?php echo esc_attr( isset( $config['cash_alternative'] ) ? $config['cash_alternative'] : '' ); ?>"
@@ -207,7 +220,7 @@ class Nera_SAW_Competition_Admin {
 
 			<div class="options_group">
 				<p class="form-field"><label><?php esc_html_e( 'Questions per level + tickets', 'nera-strikeawin' ); ?></label>
-					<span class="description"><?php esc_html_e( 'Questions are drawn from the bank matching this product\'s categories and the current language. Levels come from Strike A Win → Difficulty Ladder.', 'nera-strikeawin' ); ?></span></p>
+					<span class="description"><?php esc_html_e( 'Questions are drawn from the bank matching this product\'s categories and the current language. Levels come from Strike And Win → Difficulty Ladder.', 'nera-strikeawin' ); ?></span></p>
 				<table class="widefat" style="max-width:640px;margin:0 12px 12px;">
 					<thead><tr><th><?php esc_html_e( 'Level', 'nera-strikeawin' ); ?></th><th><?php esc_html_e( 'Questions', 'nera-strikeawin' ); ?></th><th><?php esc_html_e( 'Tickets (blank = default)', 'nera-strikeawin' ); ?></th></tr></thead>
 					<tbody>
@@ -229,7 +242,7 @@ class Nera_SAW_Competition_Admin {
 
 			<div class="options_group">
 				<p class="form-field"><label><?php esc_html_e( 'Tiers', 'nera-strikeawin' ); ?></label>
-					<span class="description"><?php esc_html_e( 'Tiers come from Strike A Win → Settings. Enable/disable them here and override price, multiplier or ceiling for this competition (blank = use the global value). Multiplier scales tickets won, never chance. Ceiling = max tickets won at this tier for this competition (0 = no cap).', 'nera-strikeawin' ); ?></span></p>
+					<span class="description"><?php esc_html_e( 'Tiers come from Strike And Win → Settings. Enable/disable them here and override price, multiplier or ceiling for this competition (blank = use the global value). Multiplier scales tickets won, never chance. Ceiling = max tickets won at this tier for this competition (0 = no cap).', 'nera-strikeawin' ); ?></span></p>
 				<table class="widefat" style="max-width:760px;margin:0 12px 12px;">
 					<thead><tr>
 						<th><?php esc_html_e( 'Tier', 'nera-strikeawin' ); ?></th>
@@ -496,6 +509,8 @@ class Nera_SAW_Competition_Admin {
 			'enabled'        => true,
 			'quiz_type'      => $quiz_type,
 			'cash_alternative' => isset( $_POST['saw_cash_alternative'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_cash_alternative'] ) ) : '',
+			'name_ru'        => isset( $_POST['saw_name_ru'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_name_ru'] ) ) : '',
+			'market_value'   => isset( $_POST['saw_market_value'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_market_value'] ) ) : '',
 			'quiz_method'    => Nera_SAW_Mode::sanitize_quiz_method_override(
 				isset( $_POST['saw_quiz_method'] ) ? wp_unslash( $_POST['saw_quiz_method'] ) : Nera_SAW_Mode::INHERIT
 			),

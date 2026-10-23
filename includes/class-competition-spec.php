@@ -108,10 +108,12 @@ class Nera_SAW_Competition_Spec {
 
 		$spec = array(
 			'id'               => $competition_id,
-			'name'             => $product->get_name(),
+			'name'             => self::localized_name( $product->get_name(), $config ),
 			'permalink'        => get_permalink( $competition_id ),
 			'image'            => self::image( $competition_id ),
 			'prize_value'      => (float) $product->get_price(),
+			// The prize's market value (admin field), 0 when not set. Not the price of a run.
+			'market_value'     => isset( $config['market_value'] ) && '' !== $config['market_value'] ? (float) $config['market_value'] : 0.0,
 			'cash_alternative' => isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : '',
 			'stock'            => self::stock( $competition_id ),
 			'timer'            => self::timer( $config ),
@@ -122,7 +124,7 @@ class Nera_SAW_Competition_Spec {
 		$spec = array_merge( $spec, self::dates( $competition_id ) );
 		$spec['entry_from'] = self::entry_from( $spec['tiers'] );
 		// Client follow-up on Draw results: a competition closed via the new
-		// Strike A Win offline-draw toggle (`lty_lottery_status`, no leading
+		// Strike And Win offline-draw toggle (`lty_lottery_status`, no leading
 		// underscore — see Nera_SAW_Draw_Prizes) reads "Closed"/"Draw End"
 		// on the card, not "Sold out"; these are different reasons for being
 		// unavailable, and a drawn competition can precede both selling out
@@ -162,9 +164,20 @@ class Nera_SAW_Competition_Spec {
 	 * Entries: how many exist, how many are gone, how many are left.
 	 *
 	 * The pool is Lottery for WooCommerce's ticket stock. `won` counts tickets this
-	 * plugin has actually minted — the ones players earned — which is what the
-	 * remaining figure must be measured against, since nothing else consumes the
-	 * pool.
+	 * plugin has actually issued -- the ones players earned.
+	 *
+	 * TWO "LEFT" FIGURES, because they answer different questions (ADR 0034):
+	 *
+	 *  - `public_remaining` = total - won. What the player is shown as "Entries left".
+	 *    It moves when tickets are WON, not when a run is bought: buying one run
+	 *    used to take its whole 41-ticket ceiling off this number before a single
+	 *    question was answered.
+	 *  - `remaining` = total - won - reserved. What can still be SOLD. A bought run
+	 *    holds its ceiling in `reserved` so the pool can never be oversold (ADR
+	 *    0001); that hold is real, but it is not something to announce. It gates
+	 *    sold-out, the run stepper's maximum and the cart, and is never printed.
+	 *
+	 * `held` is the difference, kept for the admin Report; nothing public shows it.
 	 *
 	 * @param int $competition_id Product ID.
 	 * @return array
@@ -173,21 +186,22 @@ class Nera_SAW_Competition_Spec {
 		$total = (int) Nera_SAW_Competition_Config::lfw_stock( $competition_id );
 		$won   = (int) Nera_SAW_Competition_Config::tickets_won_total( $competition_id );
 
-		// The pool row also tracks what is reserved against runs in progress. A
-		// reserved ticket is not won, but it is not available either, so a display
-		// that ignores it can promise entries that are already spoken for.
 		$pool     = Nera_SAW_Spin_Pool::get( $competition_id );
 		$reserved = $pool && isset( $pool->reserved ) ? (int) $pool->reserved : 0;
 
-		$remaining = max( 0, $total - $won - $reserved );
+		$public_remaining = max( 0, $total - $won );
+		$remaining        = max( 0, $total - $won - $reserved );
 
 		return array(
-			'total'     => $total,
-			'won'       => $won,
-			'reserved'  => $reserved,
-			'remaining' => $remaining,
-			'sold_out'  => $total > 0 && $remaining < 1,
-			'low_stock' => $total > 0 && $remaining > 0 && $remaining <= (int) ceil( $total * self::LOW_STOCK_FRACTION ),
+			'total'            => $total,
+			'won'              => $won,
+			'reserved'         => $reserved,
+			'held'             => $reserved,
+			'public_remaining' => $public_remaining,
+			'remaining'        => $remaining,
+			'sold_out'         => $total > 0 && $remaining < 1,
+			// The "N entries left" pill is a public message, so it follows the public figure.
+			'low_stock'        => $total > 0 && $public_remaining > 0 && $public_remaining <= (int) ceil( $total * self::LOW_STOCK_FRACTION ),
 		);
 	}
 
@@ -275,6 +289,20 @@ class Nera_SAW_Competition_Spec {
 			'stages'    => $is_ladder ? count( $levels ) : 0,
 			'levels'    => $levels,
 		);
+	}
+
+	/**
+	 * The competition's name for the visitor's language: the Russian name when one is set.
+	 *
+	 * @param string $title  Product title.
+	 * @param array  $config Competition config.
+	 * @return string
+	 */
+	private static function localized_name( $title, array $config ) {
+		if ( ! empty( $config['name_ru'] ) && class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() ) {
+			return (string) $config['name_ru'];
+		}
+		return (string) $title;
 	}
 
 	/**

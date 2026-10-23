@@ -116,12 +116,20 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 								sprintf(
 									/* translators: %s: number of entries left */
 									__( '%s entries left', 'nera-strikeawin' ),
-									number_format_i18n( $spec['stock']['remaining'] )
+									number_format_i18n( $spec['stock']['public_remaining'] )
 								)
 							);
 							?>
 						</span>
 					<?php endif; ?>
+
+					<?php
+					// A small chip, top right (the stock pill is top left): time left to the draw. Not on
+					// a drawn competition, where it has already happened.
+					if ( ! $drawn ) {
+						echo Nera_SAW_Date::countdown_html( $spec['closes_timestamp'], 'saw-card__chip' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped in countdown_html().
+					}
+					?>
 
 					<?php // "Draw End" already shows once, in the pill above — the price slot stays blank for a drawn competition rather than repeating it. ?>
 					<span class="saw-card__price"<?php echo $drawn ? ' style="display:none"' : ''; ?>>
@@ -147,7 +155,7 @@ $saw_lede    = Nera_SAW_Standalone_Fields::text( 'saw_lede' );
 								sprintf(
 									/* translators: %s: closing date and time */
 									__( 'Closes %s · Drawn automatically', 'nera-strikeawin' ),
-									Nera_SAW_Date::localized( $spec['closes_timestamp'], 'D j M, ga' )
+									Nera_SAW_Date::display( $spec['closes_timestamp'] )
 								)
 							);
 						} else {

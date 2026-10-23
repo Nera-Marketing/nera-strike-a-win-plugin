@@ -24,7 +24,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $saw_heading = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_no_win_heading', __( 'Thanks for entering!', 'nera-strikeawin' ) );
-$saw_message = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_no_win_message', __( 'Not this time — but every entry brings you closer. There are always more competitions to enter!', 'nera-strikeawin' ) );
+$saw_message = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_no_win_message', __( 'Not this time, but every entry brings you closer. There are always more competitions to enter!', 'nera-strikeawin' ) );
 $saw_button  = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_no_win_button', __( 'Browse more competitions', 'nera-strikeawin' ) );
 $saw_browse  = Nera_SAW_Standalone_Pages::url( 'competitions' );
 ?>

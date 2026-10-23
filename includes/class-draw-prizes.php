@@ -1,6 +1,6 @@
 <?php
 /**
- * Strike A Win — offline draw entry.
+ * Strike And Win — offline draw entry.
  *
  * Client follow-up on "My runs and tickets" (Draw results): some
  * competitions are drawn BY HAND, outside the system entirely (a physical
@@ -11,7 +11,7 @@
  * whichever numbers the offline draw actually produced, sight-unseen of
  * who holds them, and the system works out who won what).
  *
- * The admin's own job, on the Strike A Win product-edit tab
+ * The admin's own job, on the Strike And Win product-edit tab
  * (`Nera_SAW_Competition_Admin`), has two parts:
  *   - A prize table: one row per prize, each with the ticket number(s) that
  *     win it (a row can list more than one number — the user's own call,
@@ -225,7 +225,7 @@ class Nera_SAW_Draw_Prizes {
 		$order->add_order_note(
 			sprintf(
 				/* translators: %s: prize name */
-				__( 'Strike A Win draw prize: %s', 'nera-strikeawin' ),
+				__( 'Strike And Win draw prize: %s', 'nera-strikeawin' ),
 				$row['name']
 			)
 		);
@@ -255,7 +255,7 @@ class Nera_SAW_Draw_Prizes {
 		$coupon->set_description(
 			sprintf(
 				/* translators: %s: prize name */
-				__( 'Strike A Win draw prize: %s', 'nera-strikeawin' ),
+				__( 'Strike And Win draw prize: %s', 'nera-strikeawin' ),
 				$row['name']
 			)
 		);

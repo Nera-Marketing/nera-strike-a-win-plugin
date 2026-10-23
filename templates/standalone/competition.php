@@ -64,7 +64,6 @@ if ( ! $saw_spec ) {
 $saw_stock    = $saw_spec['stock'];
 $saw_quiz     = $saw_spec['quiz'];
 $saw_sold_out = ! empty( $saw_stock['sold_out'] );
-$saw_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_format' );
 
 /*
  * The closing date doubles as the screen's subtitle, where the design puts it. It
@@ -75,7 +74,7 @@ $saw_sub = $saw_spec['closes_timestamp']
 	? sprintf(
 		/* translators: %s: closing date and time */
 		__( 'Closes %s', 'nera-strikeawin' ),
-		Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], $saw_date_fmt )
+		Nera_SAW_Date::display( $saw_spec['closes_timestamp'] )
 	)
 	: '';
 
@@ -97,18 +96,27 @@ Nera_SAW_Router::part(
 ?>
 
 <?php
-// A run held for Resume comes before everything else on the page (ADR 0030).
-Nera_SAW_Router::part(
-	'parts/resume-popup.php',
-	array(
-		'saw_on_play'           => false,
-		'saw_focus_competition' => (int) $saw_spec['id'],
-	)
-);
+// The run in progress comes before everything else on the page, and while one is in
+// progress the tier cards offer no Play quiz.
+$saw_live_blocked = false;
+if ( is_user_logged_in() ) {
+	$saw_live_blocked = Nera_SAW_Run::blocks_new_run( Nera_SAW_Run::live_state( get_current_user_id(), (int) $saw_spec['id'] ) );
+}
 ?>
 
 <div class="saw-screen saw-screen--narrow">
 <article class="saw-path">
+
+	<?php // The run in progress sits at the top, as wide as the cards below it. ?>
+	<?php
+	Nera_SAW_Router::part(
+		'parts/live-run.php',
+		array(
+			'saw_competition_id' => (int) $saw_spec['id'],
+			'saw_on_play'        => false,
+		)
+	);
+	?>
 
 	<?php // --- the prize ------------------------------------------------------ ?>
 	<?php Nera_SAW_Router::part( 'parts/hero.php', array( 'saw_spec' => $saw_spec ) ); ?>
@@ -151,7 +159,42 @@ Nera_SAW_Router::part(
 		// form still works if that redirect is ever filtered off.
 		$saw_action = function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : home_url( '/' );
 		?>
-		<form class="saw-buy" method="get" action="<?php echo esc_url( $saw_action ); ?>">
+		<?php
+		/*
+		 * The Enter button carries the total and the run count -- "Enter for £50
+		 * (2 runs)" -- and the total follows the tier and quantity chosen, so the
+		 * label is rebuilt in the browser (competition-buy.js). What is printed here
+		 * is the same sentence for the default selection, so the page is right
+		 * before, and without, the script.
+		 *
+		 * A whole-pound total drops its ".00" ("£50", as the design has it); the
+		 * script formats the same way from the same settings.
+		 */
+		$saw_money_cfg = array(
+			'symbol'   => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+			'decimals' => (int) wc_get_price_decimals(),
+			'dsep'     => wc_get_price_decimal_separator(),
+			'tsep'     => wc_get_price_thousand_separator(),
+			'format'   => html_entity_decode( get_woocommerce_price_format(), ENT_QUOTES, 'UTF-8' ),
+		);
+		$saw_money = static function ( $amount ) use ( $saw_money_cfg ) {
+			$amount   = (float) $amount;
+			$decimals = ( floor( $amount ) === $amount ) ? 0 : $saw_money_cfg['decimals'];
+			return sprintf( $saw_money_cfg['format'], $saw_money_cfg['symbol'], number_format( $amount, $decimals, $saw_money_cfg['dsep'], $saw_money_cfg['tsep'] ) );
+		};
+		$saw_runs_text = static function ( $n ) {
+			// Two whole strings, not _n(): the Russian wording is one phrase for every count.
+			return sprintf( 1 === (int) $n ? __( '%d run', 'nera-strikeawin' ) : __( '%d runs', 'nera-strikeawin' ), (int) $n );
+		};
+		$saw_first_tier = ! empty( $saw_spec['tiers'] ) ? $saw_spec['tiers'][0] : array( 'price' => 0 );
+		?>
+		<form class="saw-buy" method="get" action="<?php echo esc_url( $saw_action ); ?>"
+			data-saw-buy
+			data-money="<?php echo esc_attr( wp_json_encode( $saw_money_cfg ) ); ?>"
+			data-enter-format="<?php echo esc_attr__( 'Enter for %1$s (%2$s)', 'nera-strikeawin' ); ?>"
+			data-run-one="<?php echo esc_attr__( '%d run', 'nera-strikeawin' ); ?>"
+			data-run-many="<?php echo esc_attr__( '%d runs', 'nera-strikeawin' ); ?>"
+			data-closed-label="<?php echo esc_attr__( 'This competition has closed.', 'nera-strikeawin' ); ?>">
 			<input type="hidden" name="add-to-cart" value="<?php echo esc_attr( $saw_spec['id'] ); ?>">
 			<?php
 			// Which basket this add belongs to. The form posts to WooCommerce's cart
@@ -181,8 +224,16 @@ Nera_SAW_Router::part(
 					<?php $saw_tier_balance = isset( $saw_tier_balances[ $saw_tier['key'] ] ) ? (int) $saw_tier_balances[ $saw_tier['key'] ] : 0; ?>
 					<li>
 						<label class="saw-tier">
+							<?php
+							// The most runs of this tier the pool can still sell: each run holds
+							// its ceiling (the perfect run) against stock, so this is the sellable
+							// remainder divided by that, not the remainder itself.
+							$saw_tier_max_runs = $saw_stock['total'] > 0 ? max( 1, min( 99, intdiv( (int) $saw_stock['remaining'], max( 1, (int) $saw_tier['perfect_run'] ) ) ) ) : 99;
+							?>
 							<input type="radio" name="<?php echo esc_attr( Nera_SAW_Cart_Entry::CART_KEY ); ?>"
 								value="<?php echo esc_attr( $saw_tier['key'] ); ?>"
+								data-price="<?php echo esc_attr( $saw_tier['price'] ); ?>"
+								data-max-runs="<?php echo esc_attr( $saw_tier_max_runs ); ?>"
 								<?php checked( 0, $saw_i ); ?>>
 							<span class="saw-tier__body">
 								<span class="saw-tier__label"><?php echo esc_html( $saw_tier['label'] ); ?></span>
@@ -213,7 +264,7 @@ Nera_SAW_Router::part(
 									?>
 								</span>
 							</span>
-								<?php if ( $saw_tier_balance > 0 ) : ?>
+								<?php if ( $saw_tier_balance > 0 && ! $saw_live_blocked ) : ?>
 									<?php
 									// Straight to the run: the play page sees saw_autostart and launches
 									// without showing its own overview again.
@@ -232,15 +283,31 @@ Nera_SAW_Router::part(
 					<small><?php echo esc_html( Nera_SAW_Standalone_Fields::shell( 'saw_cd_runs_note' ) ); ?></small>
 				</label>
 				<?php
-				// Capped at what is actually left: an input that accepts 50 when 3
-				// remain is a promise the cart then breaks.
-				$saw_max = $saw_stock['total'] > 0 ? max( 1, (int) $saw_stock['remaining'] ) : 99;
+				// Capped at what the pool can still sell for the tier selected: an
+				// input that accepts 50 when 3 can be held is a promise the cart then
+				// breaks. competition-buy.js re-caps it when the tier changes.
+				$saw_first_max = $saw_stock['total'] > 0 ? max( 1, min( 99, intdiv( (int) $saw_stock['remaining'], max( 1, (int) ( $saw_spec['tiers'][0]['perfect_run'] ?? 1 ) ) ) ) ) : 99;
 				?>
-				<input id="saw-qty-input" class="saw-qty__input" type="number" name="quantity"
-					value="1" min="1" max="<?php echo esc_attr( $saw_max ); ?>" step="1" inputmode="numeric">
+				<div class="saw-stepper" data-saw-stepper>
+					<button type="button" class="saw-stepper__btn" data-saw-step="-1" hidden aria-controls="saw-qty-input" aria-label="<?php esc_attr_e( 'Fewer runs', 'nera-strikeawin' ); ?>">&minus;</button>
+					<input id="saw-qty-input" class="saw-qty__input" type="number" name="quantity"
+						value="1" min="1" max="<?php echo esc_attr( $saw_first_max ); ?>" step="1" inputmode="numeric">
+					<button type="button" class="saw-stepper__btn" data-saw-step="1" hidden aria-controls="saw-qty-input" aria-label="<?php esc_attr_e( 'More runs', 'nera-strikeawin' ); ?>">+</button>
+				</div>
 			</div>
 
-			<button type="submit" class="saw-cta"><?php echo esc_html( Nera_SAW_Standalone_Fields::shell( 'saw_cd_cta' ) ); ?></button>
+			<button type="submit" class="saw-cta" data-saw-enter>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: total price, 2: number of runs, e.g. "2 runs" */
+						__( 'Enter for %1$s (%2$s)', 'nera-strikeawin' ),
+						$saw_money( (float) $saw_first_tier['price'] ),
+						$saw_runs_text( 1 )
+					)
+				);
+				?>
+			</button>
 
 			<p class="saw-buy__risk">
 				<?php

@@ -1,44 +1,18 @@
 <?php
 /**
- * Client findings #4/#9/#50: a couple of stock WordPress/WooCommerce URLs
- * that are still reachable and still show the un-skinned stock experience,
- * each sent to its real equivalent instead.
+ * Client findings #4/#9/#50, reshaped by ADR 0032: two old stock URLs that no longer
+ * have a page behind them, each sent to its real equivalent instead.
  *
- * - `/cart/`, when it actually holds something: redirected to "Before you
- *   pay". `Nera_SAW_Standalone_Basket::redirect_after_add()` already sends
- *   an actual add-to-cart there, but that class's own docblock explicitly
- *   decided NOT to also redirect a bare visit to the cart page itself
- *   ("THE CART PAGE IS LEFT ALONE, DELIBERATELY" — a shopper landing there
- *   from the main site's own basket icon should see the main site's own
- *   basket, not be pulled into a section they were not browsing). The
- *   client has since asked for exactly that redirect (finding #50: the
- *   stock cart page lets a player change ticket quantity with +5/+10
- *   outside the tier flow, and its checkout skips Before you pay
- *   entirely) — a direct, informed override of that earlier call, added
- *   here rather than edited into that class's own, differently-reasoned
- *   decision. An EMPTY cart is left alone either way: there is nothing to
- *   review on Before you pay, and the stock empty-cart page is harmless.
+ * - `/cart/`: WooCommerce's Cart setting points at Before you pay and the old
+ *   stock cart page is in the trash, so the bare URL, still held by old links and
+ *   bookmarks, goes there.
  *
- * - `/checkout/`, same guard, same reasoning: the client's own complaint
- *   about `/cart/` was that its checkout skips Before you pay entirely, and
- *   a direct visit to `/checkout/` bypasses the cart redirect above just as
- *   easily as the stock cart page did. Not named explicitly in the
- *   client's report, but the identical gap behind the one they did name.
+ * - The bare `/ru/` language root (no further path): redirected to the section's
+ *   home in Russian. `/ru/` alone does not resolve to any real post, and the
+ *   Russian copy of the old home page it used to forward to is gone.
  *
- * - The bare `/ru/` language root (no further path): redirected to
- *   Polylang's own Russian home page. `/ru/` alone does not resolve to any
- *   real post (confirmed: `url_to_postid()` returns 0 for it) — Polylang's
- *   directory-mode rewrites fall through to an empty "no posts found"
- *   blog-style render instead of the real, Polylang-linked Russian home
- *   page (which lives at a slugged sub-path, `pll_home_url( 'ru' )`).
- *
- * The five old, top-level legal/help pages (Terms and Conditions, Privacy
- * Policy, Complaints, Help and support, Our commitment to player
- * protection) are DELIBERATELY NOT redirected here — on the user's own
- * explicit instruction, the old theme-skinned page and the new
- * `/strikeawin/...` standalone mirror (`Nera_SAW_Standalone_Legal_Pages`)
- * are two separate, simultaneously-reachable versions, neither one
- * forwarding to the other.
+ * The old `/checkout/` and `/my-account/` need nothing: those addresses now ARE the
+ * section's Checkout and My account pages.
  *
  * @package Nera_Strikeawin
  */
@@ -65,50 +39,25 @@ class Nera_SAW_Stock_Page_Redirects {
 			return;
 		}
 
-		if ( self::is_stock_cart_or_checkout() ) {
-			self::redirect_nonempty_cart();
-			return; // Cart/checkout and the bare-/ru/ check can never both be true.
-		}
-
+		self::maybe_redirect_bare_cart();
 		self::maybe_redirect_bare_ru();
 	}
 
 	/**
-	 * Whether the CURRENT request is the stock WooCommerce cart/checkout
-	 * page specifically — the literal `woocommerce_cart_page_id`/
-	 * `woocommerce_checkout_page_id` page, by `is_page()`, never
-	 * `is_cart()`/`is_checkout()` themselves. Those two run through a
-	 * `woocommerce_is_checkout` filter `Nera_SAW_Standalone_Basket::
-	 * declare_checkout()` deliberately also returns true for — the
-	 * plugin's OWN before-you-pay-adjacent checkout flow — so using them
-	 * directly here would redirect that page to itself.
-	 *
-	 * @return bool
+	 * The old stock `/cart/` page is gone (ADR 0032): WooCommerce's Cart setting
+	 * now points at Before you pay, and `/cart/` itself, still held by old links
+	 * and bookmarks, goes there too.
 	 */
-	private static function is_stock_cart_or_checkout() {
-		if ( ! function_exists( 'wc_get_page_id' ) ) {
-			return false;
-		}
-		$cart_id     = (int) wc_get_page_id( 'cart' );
-		$checkout_id = (int) wc_get_page_id( 'checkout' );
-		return ( $cart_id && is_page( $cart_id ) ) || ( $checkout_id && is_page( $checkout_id ) );
-	}
-
-	/**
-	 * `/cart/` or `/checkout/`, only once the basket actually holds
-	 * something.
-	 */
-	private static function redirect_nonempty_cart() {
-		if ( ! class_exists( 'Nera_SAW_Standalone_Basket' ) || ! function_exists( 'WC' ) || ! WC()->cart ) {
+	private static function maybe_redirect_bare_cart() {
+		global $wp;
+		$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
+		if ( 'cart' !== $request || ! class_exists( 'Nera_SAW_Standalone_Basket' ) ) {
 			return;
-		}
-		if ( WC()->cart->is_empty() ) {
-			return; // Nothing to review on Before you pay; the stock empty-cart/checkout page is harmless.
 		}
 
 		$to = Nera_SAW_Standalone_Basket::pre_payment_url();
 		if ( $to ) {
-			wp_safe_redirect( $to );
+			wp_safe_redirect( $to, 301 );
 			exit;
 		}
 	}
@@ -117,24 +66,19 @@ class Nera_SAW_Stock_Page_Redirects {
 	 * The bare `/ru/` language root, specifically — never a real sub-page
 	 * under it (`/ru/anything/` already resolves to whatever real,
 	 * Polylang-translated post that is, and is left alone).
+	 *
+	 * `/ru/` alone resolves to no page, and the Russian copy of the old home
+	 * page it used to be sent to is gone (ADR 0032), so it goes to the
+	 * section's own home in Russian.
 	 */
 	private static function maybe_redirect_bare_ru() {
-		if ( ! function_exists( 'pll_home_url' ) ) {
-			return;
-		}
-
 		global $wp;
 		$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
-		if ( 'ru' !== $request ) {
+		if ( 'ru' !== $request || ! class_exists( 'Nera_SAW_Language' ) || ! Nera_SAW_Language::has( 'ru' ) ) {
 			return;
 		}
 
-		$to = pll_home_url( 'ru' );
-		// Guard against a redirect loop should Polylang's own home URL ever
-		// resolve back to this exact bare path on some other install.
-		if ( $to && trim( (string) wp_parse_url( $to, PHP_URL_PATH ), '/' ) !== $request ) {
-			wp_safe_redirect( $to );
-			exit;
-		}
+		wp_safe_redirect( add_query_arg( Nera_SAW_Language::SWITCH_ARG, 'ru', home_url( '/' ) ), 301 );
+		exit;
 	}
 }

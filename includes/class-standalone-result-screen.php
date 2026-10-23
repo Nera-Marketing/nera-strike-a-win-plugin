@@ -62,7 +62,7 @@ class Nera_SAW_Standalone_Result_Screen {
 	 * The screens the section draws for itself.
 	 *
 	 * `instant-win-won` is missing on purpose. It is the one screen the section
-	 * cannot reach — the section sells Strike A Win entries, which are never instant
+	 * cannot reach — the section sells Strike And Win entries, which are never instant
 	 * winners — and it carries a coupon code, a clipboard copy and a wallet payout
 	 * block. Cloning all that against a path that cannot occur would be writing
 	 * markup nobody can see and nobody can test. If the section is ever given
@@ -148,14 +148,23 @@ class Nera_SAW_Standalone_Result_Screen {
 			return '';
 		}
 
+		// The GMT copy, read as UTC -- the same instant the competition page's "Closes"
+		// uses. The plain end date is stored in the SITE's timezone, and reading that as
+		// if it were UTC put this line an hour (the site's offset) off every other date
+		// on the screens: "Sun 8 Nov, 12:52am" here against "Sat 7 Nov, 11:52pm" there.
+		$gmt = (string) get_post_meta( $product->get_id(), '_lty_end_date_gmt', true );
+		if ( '' !== $gmt ) {
+			return Nera_SAW_Date::display( (int) strtotime( $gmt . ' UTC' ) );
+		}
+
 		$end = $product->get_lty_end_date();
 		if ( ! $end ) {
 			return '';
 		}
 
-		$stamp = is_numeric( $end ) ? (int) $end : strtotime( (string) $end );
+		$stamp = is_numeric( $end ) ? (int) $end : (int) strtotime( get_gmt_from_date( (string) $end ) . ' UTC' );
 
-		return Nera_SAW_Date::localized( $stamp, get_option( 'date_format' ), false );
+		return Nera_SAW_Date::display( $stamp );
 	}
 
 	/**

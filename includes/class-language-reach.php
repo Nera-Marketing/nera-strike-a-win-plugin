@@ -4,7 +4,7 @@
  * [docs/LANGUAGE-PLAN.md](../docs/LANGUAGE-PLAN.md).
  *
  * Polylang owns which languages exist. This owns how far they reach: the whole site,
- * or the Strike A Win section only. The control lives inside Polylang's own settings
+ * or the Strike And Win section only. The control lives inside Polylang's own settings
  * screen rather than in this plugin's, because that is where an administrator goes
  * when they are thinking about languages — see
  * [ADR 0028](../docs/adr/0028-polylang-owns-the-languages-strike-a-win-owns-the-reach.md).
@@ -109,7 +109,7 @@ class Nera_SAW_Language_Reach {
 	}
 
 	/**
-	 * Does this request belong to the Strike A Win section?
+	 * Does this request belong to the Strike And Win section?
 	 *
 	 * @return bool
 	 */

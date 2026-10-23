@@ -5,7 +5,7 @@
  * into a run.
  *
  * The page is auto-created on activation (if one does not already exist) and can
- * be overridden from Strike A Win → Settings. All callers resolve the play URL
+ * be overridden from Strike And Win → Settings. All callers resolve the play URL
  * through nera_saw_get_play_url() so competition/tier deep links are consistent.
  *
  * @package Nera_Strikeawin
@@ -36,7 +36,7 @@ class Nera_SAW_Play_Page {
 	/**
 	 * Default page title / slug used when auto-creating.
 	 */
-	const DEFAULT_TITLE = 'Play Strike A Win';
+	const DEFAULT_TITLE = 'Play Strike And Win';
 	const DEFAULT_SLUG  = 'play-strike-a-win';
 
 	/**
@@ -188,7 +188,7 @@ class Nera_SAW_Play_Page {
 
 if ( ! function_exists( 'nera_saw_get_play_url' ) ) {
 	/**
-	 * Resolve the Strike A Win play URL for a competition + tier.
+	 * Resolve the Strike And Win play URL for a competition + tier.
 	 *
 	 * @param int    $competition_id Competition product ID (0 = no preselect).
 	 * @param string $tier_key       Tier key (optional).

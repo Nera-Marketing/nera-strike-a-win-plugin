@@ -125,7 +125,7 @@ if ( empty( $saw_draw_rows ) ) {
 					printf(
 						/* translators: %s: localized draw date */
 						esc_html__( 'Draw: %s', 'nera-strikeawin' ),
-						esc_html( Nera_SAW_Date::localized( strtotime( (string) $saw_row['finished_date'] ), get_option( 'date_format' ) ) )
+						esc_html( Nera_SAW_Date::display( (int) strtotime( get_gmt_from_date( (string) $saw_row['finished_date'] ) . ' UTC' ) ) )
 					);
 					?>
 				</p>
@@ -177,7 +177,7 @@ if ( empty( $saw_draw_rows ) ) {
 				</p>
 			<?php else : ?>
 				<p class="saw-draw-results__outcome saw-draw-results__outcome--none">
-					<?php esc_html_e( 'Not this time — but every entry brings you closer. There are always more competitions to enter!', 'nera-strikeawin' ); ?>
+					<?php esc_html_e( 'Not this time, but every entry brings you closer. There are always more competitions to enter!', 'nera-strikeawin' ); ?>
 				</p>
 			<?php endif; ?>
 		</section>

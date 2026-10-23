@@ -57,7 +57,7 @@ class Nera_SAW_Reservations {
 		if ( ! isset( $schedules['nera_saw_five_minutes'] ) ) {
 			$schedules['nera_saw_five_minutes'] = array(
 				'interval' => 5 * MINUTE_IN_SECONDS,
-				'display'  => __( 'Every five minutes (Strike A Win)', 'nera-strikeawin' ),
+				'display'  => __( 'Every five minutes (Strike And Win)', 'nera-strikeawin' ),
 			);
 		}
 		return $schedules;
@@ -144,7 +144,7 @@ class Nera_SAW_Reservations {
 				$order->add_order_note(
 					sprintf(
 						/* translators: %d: competition id */
-						__( 'Strike A Win: could not reserve tickets for competition #%d (stock full). Entry cannot be honoured.', 'nera-strikeawin' ),
+						__( 'Strike And Win: could not reserve tickets for competition #%d (stock full). Entry cannot be honoured.', 'nera-strikeawin' ),
 						$competition_id
 					)
 				);

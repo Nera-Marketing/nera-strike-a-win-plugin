@@ -68,12 +68,11 @@ if ( ! $saw_spec ) {
 	return;
 }
 
-$saw_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_format' );
 $saw_sub      = $saw_spec['closes_timestamp']
 	? sprintf(
 		/* translators: %s: closing date and time */
 		__( 'Closes %s', 'nera-strikeawin' ),
-		Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], $saw_date_fmt )
+		Nera_SAW_Date::display( $saw_spec['closes_timestamp'] )
 	)
 	: '';
 
@@ -124,7 +123,7 @@ Nera_SAW_Router::part(
 				echo wp_kses_post(
 					sprintf(
 						/* translators: %s: login URL */
-						__( 'Please <a href="%s">log in</a> to use your runs and earn lottery tickets.', 'nera-strikeawin' ),
+						__( 'Please <a href="%s">log in</a> to use your runs and earn tickets.', 'nera-strikeawin' ),
 						esc_url( $saw_login_url )
 					)
 				);
@@ -150,6 +149,21 @@ Nera_SAW_Router::part(
 		}
 		?>
 
+		<?php
+		// The run in progress (or the notice that the last one was closed) comes first, and
+		// while one is in progress there is no way to start another.
+		$saw_live    = Nera_SAW_Run::live_state( $saw_user_id, $saw_competition_id );
+		$saw_blocked = Nera_SAW_Run::blocks_new_run( $saw_live );
+		Nera_SAW_Router::part(
+			'parts/live-run.php',
+			array(
+				'saw_competition_id' => $saw_competition_id,
+				'saw_on_play'        => true,
+			)
+		);
+		?>
+
+		<?php if ( ! $saw_blocked ) : ?>
 		<section class="saw-buy" aria-labelledby="saw-start-title">
 			<p class="saw-buy__eyebrow" id="saw-start-title">
 				<?php echo esc_html( Nera_SAW_Standalone_Fields::shell( 'saw_cd_tier_heading' ) ); ?>
@@ -207,7 +221,12 @@ Nera_SAW_Router::part(
 									function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : get_permalink( $saw_competition_id )
 								);
 								?>
-								<a class="saw-cta saw-cta--ghost" href="<?php echo esc_url( $saw_buy_url ); ?>">
+								<?php
+								// With no run to play anywhere, buying is THE action on this card and gets the
+								// primary (orange) button. Once another tier has a run to play, that is the
+								// primary one and buying drops to the outlined, secondary style.
+								?>
+								<a class="saw-cta<?php echo $saw_has_runs ? ' saw-cta--ghost' : ''; ?>" href="<?php echo esc_url( $saw_buy_url ); ?>">
 									<?php esc_html_e( 'Buy a run', 'nera-strikeawin' ); ?>
 								</a>
 							<?php else : ?>
@@ -232,6 +251,7 @@ Nera_SAW_Router::part(
 				</p>
 			<?php endif; ?>
 		</section>
+		<?php endif; ?>
 
 	<?php endif; ?>
 
@@ -264,22 +284,12 @@ Nera_SAW_Router::part(
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$saw_auto_tier = $saw_autostart ? sanitize_key( wp_unslash( $_GET[ Nera_SAW_Play_Page::QV_TIER ] ) ) : '';
 		// Which button to press: a tier card, or one of the interrupted-run popup's
-		// two (arriving from the competition page's popup — see parts/resume-popup.php).
+		// two (arriving from the competition page's Continue card).
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$saw_auto_mode = ! empty( $_GET['saw_leave'] ) ? 'leave' : ( ! empty( $_GET['saw_resume'] ) ? 'resume' : 'tier' );
 		?>
-		<?php
-		// A run held for Resume: offered before anything else on the screen.
-		Nera_SAW_Router::part(
-			'parts/resume-popup.php',
-			array(
-				'saw_on_play'           => true,
-				'saw_focus_competition' => $saw_competition_id,
-			)
-		);
-		?>
 		<?php if ( '' !== $saw_auto_tier ) : ?>
-			<style>.saw-hub--competition{visibility:hidden}.saw-resume-pop{display:none}</style>
+			<style>.saw-hub--competition{visibility:hidden}.saw-live-run,.saw-live-modal{display:none}</style>
 			<script>
 			( function () {
 				var tier = <?php echo wp_json_encode( $saw_auto_tier ); ?>;

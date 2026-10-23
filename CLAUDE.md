@@ -1,4 +1,4 @@
-# Nera — Strike A Win
+# Nera — Strike And Win
 
 Skill-based prize-competition quiz for WooCommerce. A player buys an entry, plays a
 timed quiz, and earns Lottery for WooCommerce ticket numbers for each correct

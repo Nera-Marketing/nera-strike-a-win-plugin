@@ -4,7 +4,7 @@
  *
  * The same content WooCommerce's stock template renders, laid out as the section's
  * summary card rather than a `shop_table`. Every hook is kept and fired in the same
- * order: the ticket lines a Strike A Win entry earns are attached by callbacks on
+ * order: the ticket lines a Strike And Win entry earns are attached by callbacks on
  * `woocommerce_order_details_before_order_table`, and the wallet's part-payment
  * rows arrive through `get_order_item_totals()`.
  *

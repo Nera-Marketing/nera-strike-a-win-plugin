@@ -50,9 +50,9 @@ Nera_SAW_Router::part(
 		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() && class_exists( 'Nera_SAW_Standalone_Legal_RU_Content' ) ) {
 			// The intro copy and every measure's title/body are plain data,
 			// not gettext — see class-standalone-legal-ru-content.php.
-			echo Nera_SAW_Standalone_Legal_RU_Content::render_player_protection(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already-escaped HTML.
+			echo Nera_SAW_Copy::undash( Nera_SAW_Standalone_Legal_RU_Content::render_player_protection() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already-escaped HTML.
 		} elseif ( class_exists( 'Nera_VC_Page' ) && method_exists( 'Nera_VC_Page', 'render_block' ) ) {
-			echo Nera_VC_Page::render_block(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- that plugin's own, already-escaped HTML.
+			echo Nera_SAW_Copy::undash( Nera_VC_Page::render_block() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- that plugin's own, already-escaped HTML.
 		}
 		?>
 	</div>

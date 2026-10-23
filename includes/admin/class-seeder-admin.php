@@ -59,7 +59,7 @@ class Nera_SAW_Seeder_Admin {
 					'wiping'      => __( 'Removing demo data…', 'nera-strikeawin' ),
 					'done'        => __( 'Done.', 'nera-strikeawin' ),
 					'failed'      => __( 'Operation failed.', 'nera-strikeawin' ),
-					'confirmWipe' => __( 'Remove all Strike A Win demo data? This cannot be undone.', 'nera-strikeawin' ),
+					'confirmWipe' => __( 'Remove all Strike And Win demo data? This cannot be undone.', 'nera-strikeawin' ),
 				),
 			)
 		);
@@ -71,7 +71,7 @@ class Nera_SAW_Seeder_Admin {
 	 * (add under tools.php then remove_submenu_page — `null` parent 404s on modern WP).
 	 */
 	public static function menu() {
-		$title    = __( 'Strike A Win Demo', 'nera-strikeawin' );
+		$title    = __( 'Strike And Win Demo', 'nera-strikeawin' );
 		$callback = array( __CLASS__, 'render' );
 		$cap      = 'manage_options';
 		$slug     = self::SLUG;
@@ -135,7 +135,7 @@ class Nera_SAW_Seeder_Admin {
 	 * it actually has content for and silently leaves the other in English, the
 	 * same "seed nothing rather than something wrong" rule either pool follows on
 	 * its own). With no multilingual plugin it renders nothing at all and says
-	 * nothing about it — Strike A Win is monolingual by default and most sites
+	 * nothing about it — Strike And Win is monolingual by default and most sites
 	 * running it always will be.
 	 *
 	 * Each language checked adds a translation of every curated question, linked
@@ -410,7 +410,7 @@ class Nera_SAW_Seeder_Admin {
 		} else {
 			$id = (int) get_option( 'nera_saw_play_page_id' );
 			self::page_row(
-				__( 'Play Strike A Win', 'nera-strikeawin' ),
+				__( 'Play Strike And Win', 'nera-strikeawin' ),
 				$id ? get_permalink( $id ) : '',
 				$id
 			);
@@ -505,8 +505,8 @@ class Nera_SAW_Seeder_Admin {
 					}
 				} else {
 					$message = $made
-						? __( 'Created the Play Strike A Win page.', 'nera-strikeawin' )
-						: __( 'The Play Strike A Win page is already present.', 'nera-strikeawin' );
+						? __( 'Created the Play Strike And Win page.', 'nera-strikeawin' )
+						: __( 'The Play Strike And Win page is already present.', 'nera-strikeawin' );
 				}
 
 				return array(
@@ -731,7 +731,7 @@ class Nera_SAW_Seeder_Admin {
 		echo '<div class="saw-demo__hero">';
 		echo '<div class="saw-demo__mark" aria-hidden="true">&#127919;</div>';
 		echo '<div>';
-		echo '<h2>' . esc_html__( 'Strike A Win — Demo data', 'nera-strikeawin' ) . '</h2>';
+		echo '<h2>' . esc_html__( 'Strike And Win — Demo data', 'nera-strikeawin' ) . '</h2>';
 		echo '<p>' . esc_html__( 'Spin up a realistic, playable competition with a graded trivia bank — then wipe it clean in one click. Only marker-stamped demo data is ever touched.', 'nera-strikeawin' ) . '</p>';
 		if ( ! $demo_on ) {
 			echo '<p class="saw-muted">' . esc_html__( 'This page is hidden from the Tools menu. Set NERA_SAW_DEMO_SEEDER to true in wp-config.php to show it there.', 'nera-strikeawin' ) . '</p>';
@@ -758,7 +758,7 @@ class Nera_SAW_Seeder_Admin {
 		$flags = Nera_SAW_Constants::feature_flags();
 		echo '<div class="saw-card" style="margin-bottom:1.5rem">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Feature flags', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'Toggle Strike A Win frontend behaviour. Changes apply on the next page load.', 'nera-strikeawin' ) . '</p>';
+		echo '<p class="saw-muted">' . esc_html__( 'Toggle Strike And Win frontend behaviour. Changes apply on the next page load.', 'nera-strikeawin' ) . '</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( self::FLAGS_NONCE );
 		echo '<input type="hidden" name="action" value="' . esc_attr( self::FLAGS_ACTION ) . '">';
@@ -768,7 +768,7 @@ class Nera_SAW_Seeder_Admin {
 		echo '<p class="description">' . esc_html__( 'Product tier widget, cart/checkout tier labels, and my-account order tier line.', 'nera-strikeawin' ) . '</p></li>';
 		echo '<li><label><input type="checkbox" name="quiz_feedback" value="1"' . checked( ! empty( $flags['quiz_feedback'] ), true, false ) . '> ';
 		echo esc_html__( 'Quiz answer feedback', 'nera-strikeawin' ) . '</label>';
-		echo '<p class="description">' . esc_html__( 'The Answer reveal: after a player submits, the question is held on screen with the correct option green and a wrong pick red, and the ticket total updates. Unticked, the quiz moves straight to the next question. Set how long it holds on Strike A Win → Settings → Answer reveal.', 'nera-strikeawin' ) . '</p></li>';
+		echo '<p class="description">' . esc_html__( 'The Answer reveal: after a player submits, the question is held on screen with the correct option green and a wrong pick red, and the ticket total updates. Unticked, the quiz moves straight to the next question. Set how long it holds on Strike And Win → Settings → Answer reveal.', 'nera-strikeawin' ) . '</p></li>';
 		echo '</ul>';
 		submit_button( __( 'Save feature flags', 'nera-strikeawin' ), 'secondary', 'submit', false );
 		echo '</form></div>';
@@ -798,7 +798,7 @@ class Nera_SAW_Seeder_Admin {
 		// Seed card.
 		echo '<div class="saw-card saw-action-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Seed demo data', 'nera-strikeawin' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Creates a graded trivia question bank (easy → expert), demo Strike A Win lottery competitions, and — optionally — demo quiz submissions: real paid WooCommerce orders from demo customers, with finalized runs and minted LFW tickets.', 'nera-strikeawin' ) . '</p>';
+		echo '<p>' . esc_html__( 'Creates a graded trivia question bank (easy → expert), demo Strike And Win lottery competitions, and — optionally — demo quiz submissions: real paid WooCommerce orders from demo customers, with finalized runs and minted LFW tickets.', 'nera-strikeawin' ) . '</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="saw-seeder-form" data-op="seed">';
 		wp_nonce_field( self::NONCE );
 		echo '<input type="hidden" name="action" value="' . esc_attr( self::ACTION ) . '">';
@@ -860,7 +860,7 @@ class Nera_SAW_Seeder_Admin {
 		echo '<div class="saw-card saw-action-card saw-action-card--danger">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Clean up demo data', 'nera-strikeawin' ) . '</h2>';
 		echo '<p>' . esc_html__( 'Deletes only marker-stamped demo data: demo questions, competitions (pool / reservations / runs / grants), simulated orders, customers and their wallet transactions, minted LFW tickets, and the demo quiz-log rows. Real data is untouched.', 'nera-strikeawin' ) . '</p>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="saw-seeder-form" data-op="wipe" data-confirm="' . esc_attr__( 'Remove all Strike A Win demo data? This cannot be undone.', 'nera-strikeawin' ) . '">';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="saw-seeder-form" data-op="wipe" data-confirm="' . esc_attr__( 'Remove all Strike And Win demo data? This cannot be undone.', 'nera-strikeawin' ) . '">';
 		wp_nonce_field( self::NONCE );
 		echo '<input type="hidden" name="action" value="' . esc_attr( self::ACTION ) . '">';
 		echo '<input type="hidden" name="op" value="wipe">';

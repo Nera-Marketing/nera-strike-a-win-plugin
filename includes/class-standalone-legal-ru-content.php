@@ -222,7 +222,7 @@ class Nera_SAW_Standalone_Legal_RU_Content {
 			$business_name = (string) get_field( 'legal_business_name', 'option' );
 		}
 		if ( '' === $business_name ) {
-			$business_name = (string) get_bloginfo( 'name' );
+			$business_name = Nera_SAW_Brand::name();
 		}
 		$business_name = sanitize_text_field( $business_name );
 
@@ -357,9 +357,9 @@ class Nera_SAW_Standalone_Legal_RU_Content {
 			),
 			array(
 				'title'   => 'Prize details',
-				'body'    => 'Full prize details are shown. The advertised prize (or a fair cash alternative) is always awarded — never reduced or cancelled because of low ticket sales.',
+				'body'    => 'Full prize details are shown. The advertised prize (or a fair cash alternative) is always awarded, never reduced or cancelled because of low ticket sales.',
 				'title_ru' => 'Детали приза',
-				'body_ru'  => 'Полные детали приза всегда указаны. Заявленный приз (или справедливый денежный эквивалент) всегда вручается — никогда не уменьшается и не отменяется из-за низких продаж билетов.',
+				'body_ru'  => 'Полные детали приза всегда указаны. Заявленный приз (или справедливый денежный эквивалент) всегда вручается, никогда не уменьшается и не отменяется из-за низких продаж билетов.',
 			),
 			array(
 				'title'   => 'Free entry route',

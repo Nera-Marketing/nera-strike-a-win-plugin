@@ -1,11 +1,11 @@
 <?php
 /**
- * Strike A Win → Settings: global plugin configuration.
+ * Strike And Win → Settings: global plugin configuration.
  *
  *  - Per-question timer WORKING bounds (min/max) the product field validates
  *    against, themselves fenced by the code-level hard clamp (ADR 0005).
  *  - The global Tier set (key, label, default price/multiplier/ceiling) shown on
- *    every competition's Strike A Win tab and overridable there (ADR 0004).
+ *    every competition's Strike And Win tab and overridable there (ADR 0004).
  *
  * @package Nera_Strikeawin
  */
@@ -31,7 +31,7 @@ class Nera_SAW_Settings_Admin {
 	}
 
 	/**
-	 * Submenu under the Strike A Win menu.
+	 * Submenu under the Strike And Win menu.
 	 */
 	public static function menu() {
 		add_submenu_page(
@@ -73,8 +73,15 @@ class Nera_SAW_Settings_Admin {
 
 		// Minutes, no upper limit. Blank is stored as '' and means the built-in
 		// short window (Nera_SAW_Mode::resume_window_seconds()); it is not "no window".
-		$resume_window_raw = isset( $_POST['resume_window_minutes'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['resume_window_minutes'] ) ) ) : '';
-		$resume_window     = ( '' !== $resume_window_raw && (int) $resume_window_raw >= 1 ) ? (int) $resume_window_raw : '';
+		// The field is disabled (so not posted) unless "Let the player continue" is chosen:
+		// then the stored value is kept, so switching policy back and forth loses nothing.
+		if ( isset( $_POST['resume_window_minutes'] ) ) {
+			$resume_window_raw = trim( sanitize_text_field( wp_unslash( $_POST['resume_window_minutes'] ) ) );
+			$resume_window     = ( '' !== $resume_window_raw && (int) $resume_window_raw >= 1 ) ? (int) $resume_window_raw : '';
+		} else {
+			$stored_settings = Nera_SAW_Constants::settings();
+			$resume_window   = isset( $stored_settings['resume_window_minutes'] ) ? $stored_settings['resume_window_minutes'] : Nera_SAW_Constants::RESUME_WINDOW_DEFAULT_MINUTES;
+		}
 
 		$timer_min = isset( $_POST['timer_min'] ) ? (int) $_POST['timer_min'] : Nera_SAW_Constants::TIMER_MIN_SECONDS;
 		$timer_max = isset( $_POST['timer_max'] ) ? (int) $_POST['timer_max'] : Nera_SAW_Constants::TIMER_MAX_SECONDS;
@@ -88,6 +95,22 @@ class Nera_SAW_Settings_Admin {
 
 		$feedback_seconds = isset( $_POST['feedback_seconds'] ) ? (int) $_POST['feedback_seconds'] : Nera_SAW_Constants::FEEDBACK_SECONDS_DEFAULT;
 		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
+
+		$brand_name = isset( $_POST['brand_name'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['brand_name'] ) ) ) : '';
+		if ( '' === $brand_name ) {
+			$brand_name = Nera_SAW_Brand::DEFAULT;
+		}
+
+		// Wallet top-up limits: money, never negative, 0 = no limit.
+		$wallet_per_txn = isset( $_POST['wallet_topup_max_per_transaction'] ) ? max( 0, round( (float) wp_unslash( $_POST['wallet_topup_max_per_transaction'] ), 2 ) ) : 100;
+		$wallet_per_day = isset( $_POST['wallet_topup_max_per_day'] ) ? max( 0, round( (float) wp_unslash( $_POST['wallet_topup_max_per_day'] ), 2 ) ) : 250;
+
+		// Checkout: the ticked payment methods (Wallet if none is), and the coupon prompt.
+		$checkout_gateways = array_values( array_filter( array_map( 'sanitize_key', (array) wp_unslash( $_POST['checkout_gateways'] ?? array() ) ) ) );
+		if ( empty( $checkout_gateways ) ) {
+			$checkout_gateways = array( 'wallet' );
+		}
+		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
 
 		$tiers = array();
 		foreach ( (array) ( $_POST['tier'] ?? array() ) as $row ) {
@@ -121,6 +144,11 @@ class Nera_SAW_Settings_Admin {
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
 				'feedback_seconds'   => $feedback_seconds,
+				'brand_name'                       => $brand_name,
+				'wallet_topup_max_per_transaction' => $wallet_per_txn,
+				'wallet_topup_max_per_day'         => $wallet_per_day,
+				'checkout_gateways'                => $checkout_gateways,
+				'checkout_show_coupon'             => $checkout_coupon,
 				'tiers'              => $tiers,
 			)
 		);
@@ -160,7 +188,7 @@ class Nera_SAW_Settings_Admin {
 		// No spare row: use the "Add tier" button to append rows.
 
 		echo '<div class="wrap saw-admin">';
-		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike A Win — Settings', 'nera-strikeawin' ) . '</h1>';
+		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike And Win — Settings', 'nera-strikeawin' ) . '</h1>';
 
 		if ( isset( $_GET['saw_saved'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'nera-strikeawin' ) . '</p></div>';
@@ -194,7 +222,7 @@ class Nera_SAW_Settings_Admin {
 					esc_html(
 						sprintf(
 							/* translators: %d: number of runs */
-							__( '%d older run(s) still need settling — too many to finish in one save. Go to Strike A Win → Run Clock and back-fill the rest.', 'nera-strikeawin' ),
+							__( '%d older run(s) still need settling — too many to finish in one save. Go to Strike And Win → Run Clock and back-fill the rest.', 'nera-strikeawin' ),
 							$unsettled
 						)
 					)
@@ -225,38 +253,60 @@ class Nera_SAW_Settings_Admin {
 		self::radio_field(
 			'quiz_method',
 			__( 'Quiz Method', 'nera-strikeawin' ),
-			__( 'How a run is ordered. Random mixes the difficulty levels across the run; Ladder walks them in stages, easy to hard. Individual competitions can override this on their Strike A Win tab. The front-end prototype was designed around Ladder — Random is the default so that upgrading changes nothing.', 'nera-strikeawin' ),
+			__( 'How a run is ordered. Random mixes the difficulty levels across the run; Ladder walks them in stages, easy to hard. Individual competitions can override this on their Strike And Win tab. The front-end prototype was designed around Ladder — Random is the default so that upgrading changes nothing.', 'nera-strikeawin' ),
 			Nera_SAW_Mode::quiz_methods(),
 			Nera_SAW_Mode::quiz_method()
 		);
+
+		// The hold time belongs to "Let the player continue" alone, so it sits under that
+		// choice and is only editable while that choice is selected.
+		$window_saved = isset( $s['resume_window_minutes'] ) ? $s['resume_window_minutes'] : Nera_SAW_Constants::RESUME_WINDOW_DEFAULT_MINUTES;
+		$allow_on     = Nera_SAW_Mode::RESUME_ALLOW === Nera_SAW_Mode::resume_policy();
+		$window_html  = '<span class="saw-radio__extra" data-saw-resume-window' . ( $allow_on ? '' : ' hidden' ) . '>';
+		$window_html .= '<label class="saw-field"><span><strong>' . esc_html__( 'Minutes to hold an interrupted run', 'nera-strikeawin' ) . '</strong></span> ';
+		$window_html .= sprintf(
+			'<input type="number" name="resume_window_minutes" min="1" step="1" value="%1$s" placeholder="%2$d" class="small-text"%3$s>',
+			esc_attr( (string) $window_saved ),
+			(int) Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES,
+			$allow_on ? '' : ' disabled'
+		);
+		$window_html .= '</label>';
+		$window_html .= '<span class="saw-muted">' . esc_html(
+			sprintf(
+				/* translators: %d: minutes used when the field is blank */
+				__( 'How long a player has to press Continue your run, counted from when they were last seen. After that the run is closed for an administrator to restore. No upper limit. Leave blank for %d minutes.', 'nera-strikeawin' ),
+				Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES
+			)
+		) . '</span>';
+		$window_html .= '</span>';
 
 		self::radio_field(
 			'resume_policy',
 			__( 'If a run is interrupted', 'nera-strikeawin' ),
 			__( 'What happens when a player loses their connection or closes the browser mid-quiz and comes back. This does not cover the Leave button — using that and confirming it is a choice, and it ends the run either way.', 'nera-strikeawin' ),
 			Nera_SAW_Mode::resume_policies(),
-			Nera_SAW_Mode::resume_policy()
+			Nera_SAW_Mode::resume_policy(),
+			array( Nera_SAW_Mode::RESUME_ALLOW => $window_html )
 		);
-
-		// Only meaningful under "let the player continue", but always rendered and
-		// always saved: switching policy back and forth must not lose the number.
-		$window_saved = isset( $s['resume_window_minutes'] ) ? $s['resume_window_minutes'] : Nera_SAW_Constants::RESUME_WINDOW_DEFAULT_MINUTES;
-		echo '<div class="saw-field-block">';
-		echo '<label class="saw-field"><span><strong>' . esc_html__( 'Minutes to hold an interrupted run', 'nera-strikeawin' ) . '</strong></span>';
-		printf(
-			'<input type="number" name="resume_window_minutes" min="1" step="1" value="%1$s" placeholder="%2$d" class="small-text">',
-			esc_attr( (string) $window_saved ),
-			(int) Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES
-		);
-		echo '</label>';
-		echo '<p class="saw-muted">' . esc_html(
-			sprintf(
-				/* translators: %d: minutes used when the field is blank */
-				__( 'Applies to "Let the player continue". How long a player has to press Resume before the run is closed for an administrator to restore. No upper limit. Leave blank for %d minutes.', 'nera-strikeawin' ),
-				Nera_SAW_Constants::RESUME_WINDOW_BLANK_MINUTES
-			)
-		) . '</p>';
-		echo '</div>';
+		?>
+		<style>.saw-radio__extra{display:block;margin:4px 0 12px 26px}.saw-radio__extra[hidden]{display:none}.saw-radio__extra .saw-muted{display:block;margin-top:4px}</style>
+		<script>
+		( function () {
+			var radios = document.querySelectorAll( 'input[name="resume_policy"]' );
+			var box = document.querySelector( '[data-saw-resume-window]' );
+			if ( ! radios.length || ! box ) { return; }
+			var input = box.querySelector( 'input' );
+			function sync() {
+				var on = document.querySelector( 'input[name="resume_policy"]:checked' );
+				var allow = !! on && on.value === <?php echo wp_json_encode( Nera_SAW_Mode::RESUME_ALLOW ); ?>;
+				box.hidden = ! allow;
+				input.disabled = ! allow;
+			}
+			Array.prototype.forEach.call( radios, function ( r ) { r.addEventListener( 'change', sync ); } );
+			sync();
+		}() );
+		</script>
+		<?php
 
 		self::radio_field(
 			'language_scope',
@@ -323,6 +373,67 @@ class Nera_SAW_Settings_Admin {
 		echo '<p class="saw-muted">' . esc_html__( 'When a question has this many seconds or fewer left, the countdown bar and number turn red.', 'nera-strikeawin' ) . '</p>';
 		echo '</div>';
 
+		// --- Brand name card -----------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Brand name', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'The site name players see in the footer, the page titles and the emails. Change it here once the client confirms the new name; nothing else needs editing.', 'nera-strikeawin' ) . '</p>';
+		printf(
+			'<label class="saw-field"><span>%1$s</span><input type="text" name="brand_name" value="%2$s" maxlength="80"></label>',
+			esc_html__( 'Name', 'nera-strikeawin' ),
+			esc_attr( Nera_SAW_Brand::name() )
+		);
+		echo '</div>';
+
+		// --- Wallet top-up limits card -------------------------------------
+		$wallet_symbol = function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ) : '';
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Wallet top-up limits', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'The most a player may add to their wallet. Checked on every way of topping up (the form, the cart and checkout, and the REST route); credits an administrator adds by hand are not top-ups and are not limited. A day is the calendar day in the site\'s timezone, and counts top-ups that have been paid. 0 means no limit. These two figures are provisional until the client confirms them.', 'nera-strikeawin' ) . '</p>';
+		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%1$s (%2$s)</span><input type="number" name="wallet_topup_max_per_transaction" min="0" step="0.01" value="%3$s"></label>',
+			esc_html__( 'Per top-up', 'nera-strikeawin' ),
+			esc_html( $wallet_symbol ),
+			esc_attr( (string) ( isset( $s['wallet_topup_max_per_transaction'] ) ? $s['wallet_topup_max_per_transaction'] : 100 ) )
+		);
+		printf(
+			'<label class="saw-field"><span>%1$s (%2$s)</span><input type="number" name="wallet_topup_max_per_day" min="0" step="0.01" value="%3$s"></label>',
+			esc_html__( 'Per day', 'nera-strikeawin' ),
+			esc_html( $wallet_symbol ),
+			esc_attr( (string) ( isset( $s['wallet_topup_max_per_day'] ) ? $s['wallet_topup_max_per_day'] : 250 ) )
+		);
+		echo '</div>';
+		echo '</div>';
+
+		// --- Checkout card -------------------------------------------------
+		$checkout_on = Nera_SAW_Checkout::enabled_gateways();
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Checkout', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'The checkout asks for first name, last name, email and country (United Kingdom or Ireland) and nothing else; consent is the two ticks on Before you pay. Which payment methods it offers is set here: Wallet only until a payment provider is agreed. Tick a provider to bring it back. A wallet top-up is unaffected.', 'nera-strikeawin' ) . '</p>';
+		echo '<div class="saw-field-block"><strong>' . esc_html__( 'Payment methods shown', 'nera-strikeawin' ) . '</strong>';
+		$choices = array();
+		if ( function_exists( 'WC' ) && WC()->payment_gateways() ) {
+			foreach ( WC()->payment_gateways()->payment_gateways() as $gateway ) {
+				$choices[ $gateway->id ] = wp_strip_all_tags( (string) $gateway->get_method_title() ) . ' (' . $gateway->id . ')';
+			}
+		}
+		$choices[ Nera_SAW_Checkout::SPLIT ] = __( 'Part wallet, part card (also needs the card gateway ticked)', 'nera-strikeawin' ) . ' (' . Nera_SAW_Checkout::SPLIT . ')';
+		foreach ( $choices as $gateway_id => $gateway_label ) {
+			printf(
+				'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_gateways[]" value="%1$s"%2$s> <span>%3$s</span></label>',
+				esc_attr( $gateway_id ),
+				checked( in_array( $gateway_id, $checkout_on, true ), true, false ),
+				esc_html( $gateway_label )
+			);
+		}
+		echo '</div>';
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_coupon" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::coupon_prompt_enabled(), true, false ),
+			esc_html__( 'Show the "Have a coupon?" prompt at checkout. Off by default; it is how a coupon prize from an offline draw is redeemed, so switch it on if you award them.', 'nera-strikeawin' )
+		);
+		echo '</div>';
+
 		// --- Answer reveal card --------------------------------------------
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Answer reveal', 'nera-strikeawin' ) . '</h2>';
@@ -353,7 +464,7 @@ class Nera_SAW_Settings_Admin {
 		// --- Global tiers card ---------------------------------------------
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Global tiers', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'The entry tiers offered on every competition. Each competition can override price / multiplier / ceiling and enable or disable individual tiers on its Strike A Win tab. Multiplier scales tickets won, never chance. Ceiling = max tickets won per tier per competition (0 = no cap).', 'nera-strikeawin' ) . '</p>';
+		echo '<p class="saw-muted">' . esc_html__( 'The entry tiers offered on every competition. Each competition can override price / multiplier / ceiling and enable or disable individual tiers on its Strike And Win tab. Multiplier scales tickets won, never chance. Ceiling = max tickets won per tier per competition (0 = no cap).', 'nera-strikeawin' ) . '</p>';
 		echo '<table class="saw-table" id="saw-tiers-table"><thead><tr>';
 		echo '<th>' . esc_html__( 'Key', 'nera-strikeawin' ) . '</th>';
 		echo '<th>' . esc_html__( 'Label', 'nera-strikeawin' ) . '</th>';
@@ -440,7 +551,7 @@ class Nera_SAW_Settings_Admin {
 	 * @param array  $choices  key => label.
 	 * @param string $selected Currently resolved value.
 	 */
-	private static function radio_field( $name, $label, $help, array $choices, $selected ) {
+	private static function radio_field( $name, $label, $help, array $choices, $selected, array $extras = array() ) {
 		echo '<div class="saw-field-block">';
 		echo '<p class="saw-field-block__label"><strong>' . esc_html( $label ) . '</strong></p>';
 		echo '<p class="saw-muted">' . esc_html( $help ) . '</p>';
@@ -452,6 +563,11 @@ class Nera_SAW_Settings_Admin {
 				checked( (string) $selected, (string) $value, false ),
 				esc_html( $choice_label )
 			);
+			// Markup that belongs to one choice (already escaped by the caller), printed
+			// directly under it.
+			if ( isset( $extras[ $value ] ) ) {
+				echo $extras[ $value ]; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			}
 		}
 		echo '</div>';
 	}

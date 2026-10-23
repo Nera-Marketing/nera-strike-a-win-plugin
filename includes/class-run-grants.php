@@ -43,7 +43,7 @@ class Nera_SAW_Run_Grants {
 	}
 
 	/**
-	 * Grant runs for each Strike A Win competition line on a paid order + reserve
+	 * Grant runs for each Strike And Win competition line on a paid order + reserve
 	 * that line's max-possible tickets. Idempotent per order line.
 	 *
 	 * @param int $order_id Order ID.
@@ -117,7 +117,7 @@ class Nera_SAW_Run_Grants {
 					$order->add_order_note(
 						sprintf(
 							/* translators: %d competition id */
-							__( 'Strike A Win: could not reserve tickets for competition #%d (stock full). Runs granted but may not all be honoured.', 'nera-strikeawin' ),
+							__( 'Strike And Win: could not reserve tickets for competition #%d (stock full). Runs granted but may not all be honoured.', 'nera-strikeawin' ),
 							$competition_id
 						)
 					);
@@ -410,6 +410,7 @@ class Nera_SAW_Run_Grants {
 			'tier_key'    => (string) $row->tier_key,
 			'total'       => $total,
 			'in_progress' => min( $total, $run_counts['in_progress'] ),
+			'interrupted' => min( $total, $run_counts['interrupted'] ),
 			'completed'   => min( $total, $run_counts['completed'] ),
 			'remaining'   => $remaining,
 			'status'      => (string) $row->status,

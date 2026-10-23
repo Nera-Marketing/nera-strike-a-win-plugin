@@ -1,5 +1,5 @@
 /*
- * Strike A Win — standalone section.
+ * Strike And Win — standalone section.
  *
  * The design's artboards carry inline styles because they were exported one
  * screen at a time. Here the same values are tokens: the ramp and the surfaces
@@ -357,6 +357,26 @@ body.saw-app {
   background: var(--saw-bad);
   color: var(--saw-card);
 }
+
+/* Time left to the draw: the same chip shape as the stock pill, smaller and quiet, on
+   the opposite corner. Tabular figures so the digits do not jitter as they tick. */
+.saw-card__chip {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  background: var(--saw-card);
+  color: var(--saw-ink);
+  box-shadow: 0 1px 4px rgba(33, 26, 20, 0.18);
+}
+.saw-card__chip.is-ended { color: var(--saw-muted); }
+.saw-countdown { font-variant-numeric: tabular-nums; }
+.saw-countdown--fact.is-ended { color: var(--saw-muted); }
 
 .saw-card__body {
   padding: 16px 18px 12px;
@@ -817,6 +837,52 @@ a.saw-card__title:hover { color: var(--saw-link); }
   border: 1.5px solid var(--saw-control);
   border-radius: var(--saw-r-control);
 }
+/* The runs stepper: minus, the number, plus. The number stays a real input so the
+   form posts it with or without the script. */
+.saw-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+  background: var(--saw-card);
+  overflow: hidden;
+}
+.saw-stepper .saw-qty__input {
+  width: 64px;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.saw-stepper .saw-qty__input::-webkit-outer-spin-button,
+.saw-stepper .saw-qty__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.saw-stepper__btn {
+  width: 44px;
+  min-height: 44px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--saw-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.saw-stepper__btn:hover:not(:disabled) { background: var(--saw-tint); }
+.saw-stepper__btn:disabled {
+  color: var(--saw-muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.saw-stepper:focus-within { border-color: var(--saw-primary); }
+.saw-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 
 .saw-cta {
   display: block;
@@ -1160,6 +1226,22 @@ a.saw-card__title:hover { color: var(--saw-link); }
 
 .saw-consent .saw-cta { margin-top: 0; padding: 18px; }
 
+/* A box left unticked when the player tries to continue: outlined, with the message
+   under the button. */
+.saw-check:has(input[aria-invalid='true']) {
+  outline: 2px solid var(--saw-danger, #c0392b);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.saw-consent__msg {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-danger, #c0392b);
+}
+.saw-consent__msg[hidden] { display: none; }
+
 .saw-methods {
   display: flex;
   justify-content: center;
@@ -1208,6 +1290,11 @@ a.saw-card__title:hover { color: var(--saw-link); }
   border: 1px solid var(--saw-rule);
   border-radius: var(--saw-r-card);
   padding: 18px 20px;
+}
+/* With the order notes gone (ADR 0036) the additional-fields wrapper holds nothing but
+   whitespace, and a padded, bordered card with nothing in it is a stray pill under the form. */
+.saw-woo .woocommerce-additional-fields:not(:has(*)) {
+  display: none;
 }
 
 /*
@@ -1548,6 +1635,8 @@ a.saw-card__title:hover { color: var(--saw-link); }
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
+/* Author `display:flex` above beats the UA `[hidden]` rule, so say it again. */
+.saw-gate[hidden] { display: none; }
 .saw-gate__card {
   position: relative;
   width: 100%;
@@ -1612,7 +1701,8 @@ a.saw-card__title:hover { color: var(--saw-link); }
   border-radius: var(--saw-r-control);
 }
 .saw-gate__language:hover { border-color: var(--saw-primary); }
-.saw-gate__language.is-current {
+.saw-gate__language.is-current,
+.saw-gate__language.is-suggested {
   border-color: var(--saw-primary);
   background: var(--saw-card);
 }
@@ -1693,7 +1783,7 @@ a.saw-card__title:hover { color: var(--saw-link); }
 .saw-gate__enter:hover { background: var(--saw-link); color: var(--saw-on-dark); }
 
 /* While the pop-up is up, the page behind it does not scroll. */
-body.saw-app:has(.saw-gate) { overflow: hidden; }
+body.saw-app:has(.saw-gate:not([hidden])) { overflow: hidden; }
 
 /* ---- the result overlay -------------------------------------------------- */
 
@@ -2499,6 +2589,56 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   gap: 6px;
   margin-top: 8px;
 }
+/*
+ * Paging the completed runs, per competition. The script swaps the list in place,
+ * so the pager shows a busy state while a page loads rather than jumping.
+ */
+.saw-runs-tickets__count {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.saw-runs-tickets__list:focus {
+  outline: none;
+}
+.saw-runs-tickets__group.is-loading .saw-runs-tickets__list {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.saw-runs-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--saw-rule);
+}
+.saw-runs-pager__btn {
+  flex: none;
+  min-width: 84px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  color: var(--saw-primary);
+  background: transparent;
+  border: 1.5px solid var(--saw-control);
+  border-radius: var(--saw-r-control);
+}
+a.saw-runs-pager__btn:hover {
+  border-color: var(--saw-primary);
+}
+.saw-runs-pager__btn.is-disabled {
+  color: var(--saw-muted);
+  opacity: 0.55;
+}
+.saw-runs-pager__status {
+  font-size: 13px;
+  color: var(--saw-muted);
+}
 .saw-runs-empty,
 .saw-draw-results-empty {
   padding: 24px 16px;
@@ -3015,7 +3155,73 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   overflow-x: auto;
 }
 .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table {
-  min-width: 480px;
+  width: 100%;
+}
+/* From 561px up it is the table it always was; below that it would not fit, and a
+   table the player has to swipe sideways to find the Amount column in is not a
+   statement they can read. So each transaction becomes a small card: what it was and
+   what it cost on the first line, the date underneath. */
+@media (min-width: 561px) {
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table {
+    min-width: 480px;
+  }
+}
+@media (max-width: 560px) {
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-list {
+    overflow-x: visible;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table,
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table tbody {
+    display: block;
+    width: 100%;
+    /* woo-wallet's own stylesheet gives the table a 600px minimum. */
+    min-width: 0 !important;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table thead {
+    /* Kept for screen readers; the cells carry their own labels visually hidden. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'details amount'
+      'date    date';
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--saw-rule);
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table tr:first-child {
+    border-top: 0;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td[data-label='Description'],
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td:nth-child(2) {
+    grid-area: details;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td.amount {
+    grid-area: amount;
+    text-align: right;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table td:first-child {
+    grid-area: date;
+    font-size: 12px;
+    color: var(--saw-muted);
+  }
 }
 .saw-woo .woo-wallet-my-wallet-container .woo-wallet-transactions-table th {
   background: var(--saw-tint);
@@ -3414,12 +3620,37 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
   background: transparent;
 }
 
+/*
+ * The card is a shell, not a padded box: the app's own stage bar is its header and
+ * runs edge to edge under the card's rounded top corners (the app sets
+ * `overflow: hidden`), and each screen inside -- stage break, question, language --
+ * carries its own padding. Padding the shell as well pushed the header inward, square
+ * on all four corners, which is what the design does not do. No border either: the
+ * design's card is lifted by the app's shadow alone.
+ */
 .saw-app .saw-play {
   background: var(--saw-card);
-  border: 1px solid var(--saw-rule);
+  border: 0;
   border-radius: var(--saw-r-card);
-  padding: 20px 18px;
+  padding: 0;
   color: var(--saw-body);
+}
+
+/*
+ * The app roots itself in a system-font stack so it looks the same inside any theme.
+ * Here it sits inside the section, whose font is Figtree, and a quiz in a different
+ * typeface from the header and every other screen is the first thing anyone sees. The
+ * leave dialog is moved to <body>, so it gets the same.
+ */
+.saw-app .saw-app,
+body.saw-app .saw-leave {
+  font-family: inherit;
+}
+/* A <button> does not inherit the font on its own: the answers, Continue and Next
+   were still in the browser's default face under a Figtree question. */
+.saw-app .saw-app button,
+body.saw-app .saw-leave button {
+  font-family: inherit;
 }
 
 /* ---- the head: question count, level, progress -------------------------- */
@@ -3822,7 +4053,6 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
 
 @media (min-width: 900px) {
   .saw-run-frame { padding: 24px 20px 48px; }
-  .saw-app .saw-play { padding: 26px 24px; }
   .saw-app .saw-endactions { flex-direction: row; justify-content: center; }
   .saw-app .saw-endactions .saw-btn { width: auto; min-width: 200px; }
   .saw-app .saw-leave__actions { flex-direction: row-reverse; }
@@ -4143,8 +4373,43 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
 }
 .saw-tier__play { margin-top: 12px; }
 
-/* ---- interrupted-run popup (ADR 0030) ------------------------------------ */
-.saw-resume-pop {
+/* ---- the run in progress (ADR 0039) -------------------------------------- */
+/* The slim banner: what stays on the page once the modal has been closed. It is as wide as
+   the card it sits above, with the same gap the page leaves between cards. */
+.saw-live-run {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  background: var(--saw-card);
+  border: 1px solid var(--saw-rule);
+  border-left: 4px solid var(--saw-primary);
+  border-radius: 14px;
+}
+.saw-live-run__text { min-width: 0; }
+.saw-live-run__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--saw-ink); }
+.saw-live-run__body { margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--saw-body); }
+.saw-live-run__actions { flex: none; }
+.saw-live-run .saw-cta,
+.saw-live-run .saw-cta--compact {
+  width: auto;
+  margin: 0;
+  padding: 10px 16px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.saw-live-run--closed { border-left-color: var(--saw-incorrect, #c0432a); }
+@media (max-width: 560px) {
+  .saw-live-run { flex-direction: column; align-items: stretch; gap: 10px; }
+  .saw-live-run .saw-cta { width: 100%; }
+}
+
+/* The modal over the page. */
+.saw-live-modal {
   position: fixed;
   inset: 0;
   z-index: 100000;
@@ -4152,18 +4417,144 @@ a.saw-wt__option:hover { border-color: var(--saw-primary); }
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(33, 26, 22, 0.6);
 }
-.saw-resume-pop[hidden] { display: none; }
-.saw-resume-pop__card {
+.saw-live-modal[hidden] { display: none; }
+.saw-live-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(33, 26, 20, 0.62);
+  backdrop-filter: blur(3px);
+  animation: saw-live-fade 160ms ease-out;
+}
+.saw-live-modal__card {
+  position: relative;
   width: 100%;
-  max-width: 440px;
-  padding: 24px;
+  max-width: 420px;
+  padding: 32px 28px 24px;
+  text-align: center;
   background: var(--saw-card);
-  border-radius: var(--saw-r-button);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(33, 26, 20, 0.4);
+  animation: saw-live-rise 200ms ease-out;
 }
-.saw-resume-pop__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-ink); }
-.saw-resume-pop__body { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--saw-body); }
-.saw-resume-pop__actions { margin-top: 6px; }
-.saw-resume-pop__note { margin: 12px 0 0; font-size: 12.5px; color: var(--saw-muted); text-align: center; }
+.saw-live-modal__x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--saw-muted);
+  cursor: pointer;
+}
+.saw-live-modal__x:hover { background: var(--saw-bg); color: var(--saw-ink); }
+.saw-live-modal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--saw-primary) 14%, #fff);
+  color: var(--saw-primary);
+}
+.saw-live-modal--closed .saw-live-modal__icon {
+  background: color-mix(in srgb, var(--saw-incorrect, #c0432a) 12%, #fff);
+  color: var(--saw-incorrect, #c0432a);
+}
+.saw-live-modal__title { margin: 0 0 8px; font-size: 22px; font-weight: 800; line-height: 1.2; color: var(--saw-ink); }
+.saw-live-modal__body { margin: 0; font-size: 15px; line-height: 1.5; color: var(--saw-body); }
+.saw-live-modal__actions { display: flex; flex-direction: column; gap: 6px; margin-top: 22px; }
+.saw-live-modal__actions .saw-cta { margin: 0; }
+.saw-live-modal__end {
+  padding: 10px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saw-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+html.saw-live-modal-open { overflow: hidden; }
+@keyframes saw-live-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes saw-live-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .saw-live-modal__backdrop,
+  .saw-live-modal__card { animation: none; }
+}
+.saw-live-modal .saw-cta:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--saw-primary) 45%, #fff);
+  outline-offset: 2px;
+}
+.saw-live-modal__note { margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--saw-muted); }
+.saw-live-modal.is-ending .saw-live-modal__card { opacity: 0.6; pointer-events: none; }
+
+/* The "End this run?" confirmation: the same kind of card as the quiz's "Leave the quiz?". */
+.saw-live-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.saw-live-confirm[hidden] { display: none; }
+.saw-live-confirm__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(33, 26, 20, 0.5);
+  backdrop-filter: blur(8px);
+}
+.saw-live-confirm__panel {
+  position: relative;
+  width: min(100%, 400px);
+  padding: 24px 24px 20px;
+  background: #fff;
+  border: 1px solid var(--saw-rule);
+  border-radius: 20px;
+  box-shadow: 0 28px 72px -28px rgba(235, 88, 12, 0.4);
+  color: var(--saw-ink);
+}
+.saw-live-confirm__title { margin: 0 0 10px; font-size: 1.25rem; line-height: 1.3; text-align: center; font-weight: 800; }
+.saw-live-confirm__body { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--saw-muted); text-align: center; }
+.saw-live-confirm__actions { display: flex; flex-direction: column; gap: 10px; }
+.saw-live-confirm__stay {
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--saw-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+.saw-live-confirm__go {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--saw-muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.saw-live-confirm__stay:focus-visible,
+.saw-live-confirm__go:focus-visible {
+  outline: 2px solid var(--saw-primary);
+  outline-offset: 2px;
+}

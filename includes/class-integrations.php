@@ -1,6 +1,6 @@
 <?php
 /**
- * Platform integrations for Strike A Win competitions.
+ * Platform integrations for Strike And Win competitions.
  *
  * Section 9: a quiz entry must not mint lottery tickets on purchase — tickets are
  * earned only by the quiz (generated at run finalize by Nera_SAW_Ticket_Award).
@@ -57,7 +57,7 @@ class Nera_SAW_Integrations {
 	}
 
 	/**
-	 * For Strike A Win competitions, "tickets sold" = quiz-earned total (not raw LFW posts).
+	 * For Strike And Win competitions, "tickets sold" = quiz-earned total (not raw LFW posts).
 	 *
 	 * @param array      $data    Lottery product payload from the theme.
 	 * @param WC_Product $product Product.
@@ -83,7 +83,7 @@ class Nera_SAW_Integrations {
 	}
 
 	/**
-	 * Authoritative sold count for a Strike A Win competition.
+	 * Authoritative sold count for a Strike And Win competition.
 	 *
 	 * @param int $competition_id Product ID.
 	 * @return int
@@ -146,7 +146,7 @@ class Nera_SAW_Integrations {
 
 	/**
 	 * Prepend quiz-earned copy to the async ticket confirmation email body when
-	 * the order's tickets were earned via the Strike A Win quiz.
+	 * the order's tickets were earned via the Strike And Win quiz.
 	 *
 	 * @param string   $body    Email body HTML (before the WooCommerce wrapper).
 	 * @param WC_Order $order   Order.
@@ -163,7 +163,7 @@ class Nera_SAW_Integrations {
 		}
 
 		$note = '<p style="background:#eef6ff;border:1px solid #b8daff;border-radius:8px;padding:12px 16px;margin:0 0 16px;">'
-			. esc_html__( 'You earned these tickets by playing the Strike A Win quiz — they were not purchased. They are now entered into the draw. Good luck!', 'nera-strikeawin' )
+			. esc_html__( 'You earned these tickets by playing the [BRAND] quiz. They were not purchased. They are now entered into the draw. Good luck!', 'nera-strikeawin' )
 			. '</p>';
 
 		return $note . $body;

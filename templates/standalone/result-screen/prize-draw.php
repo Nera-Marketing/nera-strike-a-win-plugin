@@ -24,7 +24,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $saw_heading   = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_heading', __( "You're in the draw!", 'nera-strikeawin' ) );
-$saw_subtext   = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_subtext', __( 'Your entry is confirmed — fingers crossed!', 'nera-strikeawin' ) );
+$saw_subtext   = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_subtext', __( 'Your entry is confirmed, fingers crossed!', 'nera-strikeawin' ) );
 $saw_good_luck = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_good_luck', __( 'Good luck!', 'nera-strikeawin' ) );
 $saw_button    = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_button', __( 'Got it!', 'nera-strikeawin' ) );
 $saw_draw_date = Nera_SAW_Standalone_Result_Screen::draw_date( $saw_product );

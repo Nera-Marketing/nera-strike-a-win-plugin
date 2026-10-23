@@ -83,14 +83,14 @@ class Nera_SAW_Frontend {
 		if ( ! is_user_logged_in() ) {
 			$inner = '<div class="saw-login-card"><p class="saw-login-text">' . sprintf(
 				/* translators: %s login url */
-				wp_kses_post( __( 'Please <a href="%s">log in</a> to use your runs and earn lottery tickets.', 'nera-strikeawin' ) ),
+				wp_kses_post( __( 'Please <a href="%s">log in</a> to use your runs and earn tickets.', 'nera-strikeawin' ) ),
 				esc_url( wp_login_url( get_permalink() ) )
 			) . '</p></div>';
 
 			return self::wrap_page_shell(
 				$inner,
 				array(
-					'title' => __( 'Play Strike A Win', 'nera-strikeawin' ),
+					'title' => __( 'Play [BRAND]', 'nera-strikeawin' ),
 					'intro' => __( 'Log in to play the quiz and earn tickets for the draw.', 'nera-strikeawin' ),
 				)
 			);
@@ -128,8 +128,8 @@ class Nera_SAW_Frontend {
 		return self::wrap_page_shell(
 			self::render_hub(),
 			array(
-				'title' => __( 'Your Strike A Win entries', 'nera-strikeawin' ),
-				'intro' => __( 'Use your runs from ticket purchases — answer the quiz to earn lottery tickets.', 'nera-strikeawin' ),
+				'title' => __( 'Your [BRAND] entries', 'nera-strikeawin' ),
+				'intro' => __( 'Each run is one quiz. Correct answers earn tickets in the draw.', 'nera-strikeawin' ),
 			)
 		);
 	}
@@ -207,6 +207,8 @@ class Nera_SAW_Frontend {
 			// backgrounded-then-foregrounded tab means: under 'resume' it may offer
 			// Resume; under 'close' a real gap always abandons.
 			'resumePolicy'       => Nera_SAW_Mode::allows_resume() ? 'resume' : 'close',
+			// Seconds between the small "still here" pings while a run is on screen; 0 = none.
+			'heartbeatSeconds'   => Nera_SAW_Constants::heartbeat_seconds(),
 			'playableLanguages'  => $languages,
 			'languageNames'      => $language_names,
 			// Pre-run stage header data — see the comment above where these are
@@ -227,7 +229,6 @@ class Nera_SAW_Frontend {
 				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
 				'playAgain'          => __( 'Play again', 'nera-strikeawin' ),
 				'selectAnswer'       => __( 'Choose an answer, then confirm to lock it in.', 'nera-strikeawin' ),
-				'submitAnswer'       => __( 'Submit answer', 'nera-strikeawin' ),
 				'checkingAnswer'     => __( 'Checking…', 'nera-strikeawin' ),
 				// "Next question ({s})" — the client's supplied Russian packs the
 				// countdown into the same sentence as the label, so the seconds
@@ -241,8 +242,8 @@ class Nera_SAW_Frontend {
 				'revealCorrect'      => __( 'Correct. %d tickets earned.', 'nera-strikeawin' ),
 				'revealWrong'        => __( 'Wrong. The correct answer was: %s', 'nera-strikeawin' ),
 				'revealTimeout'      => __( 'Time up, no answer counted. The correct answer was: %s', 'nera-strikeawin' ),
-				'revealWrongBare'    => __( 'Wrong — no tickets.', 'nera-strikeawin' ),
-				'revealTimeoutBare'  => __( 'Time up — no answer counted.', 'nera-strikeawin' ),
+				'revealWrongBare'    => __( 'Wrong. No tickets.', 'nera-strikeawin' ),
+				'revealTimeoutBare'  => __( 'Time up. No answer counted.', 'nera-strikeawin' ),
 				'leaveWarning'       => __( 'Leave this page? The timer keeps running and unanswered questions score zero.', 'nera-strikeawin' ),
 				'leaveDialogTitle'   => __( 'Leave the quiz?', 'nera-strikeawin' ),
 				'leaveDialogBody'    => __( 'The countdown keeps running on the server while you are away. Any question you have not submitted scores zero.', 'nera-strikeawin' ),
@@ -328,6 +329,7 @@ class Nera_SAW_Frontend {
 				'ticketsEarnedLabel' => Nera_SAW_I18n::t( 'Tickets earned' ),
 				'yourEntryNumbers'   => Nera_SAW_I18n::t( 'Your entry numbers' ),
 				'moreNumbers'        => Nera_SAW_I18n::t( '+{n} more' ),
+				'showLess'           => Nera_SAW_I18n::t( 'Show less' ),
 				// Client finding #46: the numbers shown are sequential (this
 				// competition's own ticket-number-type setting — see
 				// Nera_SAW_Ticket_Award::pick_numbers()), never random; the
@@ -448,6 +450,14 @@ class Nera_SAW_Frontend {
 	private static function render_hub() {
 		$user_id    = get_current_user_id();
 		$by_comp    = Nera_SAW_Run_Grants::balance_by_competition( $user_id );
+		// A run in progress (or one closed after an interruption) is listed even when no
+		// runs are left to play: it is exactly the player who needs to find it.
+		$live_runs  = Nera_SAW_Run::live_states_for_user( $user_id );
+		foreach ( array_keys( $live_runs ) as $live_cid ) {
+			if ( ! isset( $by_comp[ $live_cid ] ) ) {
+				$by_comp[ $live_cid ] = array( 'total' => 0 );
+			}
+		}
 		$play_base  = Nera_SAW_Play_Page::get_page_id() ? get_permalink( Nera_SAW_Play_Page::get_page_id() ) : get_permalink();
 		$cards_html = '';
 
@@ -460,13 +470,25 @@ class Nera_SAW_Frontend {
 			$url   = add_query_arg( Nera_SAW_Play_Page::QV_COMPETITION, (int) $competition_id, $play_base );
 			$image = self::competition_image_html( $product, 'saw-hub-card__img' );
 			$runs  = (int) $row['total'];
+			$live  = isset( $live_runs[ (int) $competition_id ] ) ? $live_runs[ (int) $competition_id ]['state'] : 'none';
+
+			if ( 'live' === $live || 'held' === $live ) {
+				$runs_text = __( 'Run in progress', 'nera-strikeawin' );
+				$cta_text  = Nera_SAW_Mode::allows_resume() ? __( 'Continue your run', 'nera-strikeawin' ) : __( 'Open', 'nera-strikeawin' );
+			} elseif ( 'closed' === $live ) {
+				$runs_text = __( 'Last run interrupted and closed', 'nera-strikeawin' );
+				$cta_text  = __( 'Open', 'nera-strikeawin' );
+			} else {
+				$runs_text = self::runs_label( $runs );
+				$cta_text  = __( 'Open', 'nera-strikeawin' );
+			}
 
 			$cards_html .= '<a class="saw-hub-card" href="' . esc_url( $url ) . '">';
 			$cards_html .= '<div class="saw-hub-card__media">' . $image . '</div>';
 			$cards_html .= '<div class="saw-hub-card__body">';
 			$cards_html .= '<h3 class="saw-hub-card__title">' . esc_html( $product->get_name() ) . '</h3>';
-			$cards_html .= '<p class="saw-hub-card__runs">' . esc_html( self::runs_label( $runs ) ) . '</p>';
-			$cards_html .= '<span class="saw-hub-card__cta">' . esc_html__( 'Open', 'nera-strikeawin' ) . '</span>';
+			$cards_html .= '<p class="saw-hub-card__runs">' . esc_html( $runs_text ) . '</p>';
+			$cards_html .= '<span class="saw-hub-card__cta">' . esc_html( $cta_text ) . '</span>';
 			$cards_html .= '</div></a>';
 		}
 
@@ -548,9 +570,9 @@ class Nera_SAW_Frontend {
 		$html .= '<h3 id="saw-guide-title" class="saw-guide__title">' . esc_html__( 'How to earn tickets', 'nera-strikeawin' ) . '</h3>';
 		$html .= '<ol class="saw-guide__steps">';
 		$html .= '<li class="saw-guide__step"><span class="saw-guide__marker" aria-hidden="true">1</span><div><strong>' . esc_html__( 'Use a run', 'nera-strikeawin' ) . '</strong><p>' . esc_html__( 'Each run is one full quiz. Pick the tier you entered with.', 'nera-strikeawin' ) . '</p></div></li>';
-		$html .= '<li class="saw-guide__step"><span class="saw-guide__marker" aria-hidden="true">2</span><div><strong>' . esc_html__( 'Answer every question in the quiz', 'nera-strikeawin' ) . '</strong><p>' . esc_html( $timer_note ) . ' ' . esc_html__( 'Pick an answer and tap Submit — your choice is not sent until you confirm.', 'nera-strikeawin' ) . '</p></div></li>';
-		$html .= '<li class="saw-guide__step saw-guide__step--stay"><span class="saw-guide__marker" aria-hidden="true">3</span><div><span class="saw-guide__tag">' . esc_html__( 'Player tip', 'nera-strikeawin' ) . '</span><strong>' . esc_html__( 'Stay on this page while you play', 'nera-strikeawin' ) . '</strong><p>' . esc_html__( 'Refreshing, using the back button, or leaving mid-run will ask you to confirm. The countdown keeps running on the server — time you spend away still counts.', 'nera-strikeawin' ) . '</p></div></li>';
-		$html .= '<li class="saw-guide__step"><span class="saw-guide__marker" aria-hidden="true">4</span><div><strong>' . esc_html__( 'Tickets enter the draw', 'nera-strikeawin' ) . '</strong><p>' . esc_html__( 'Correct answers mint real lottery tickets for this competition when your run finishes. One order can include several runs — each run adds its tickets to the same entry.', 'nera-strikeawin' ) . '</p></div></li>';
+		$html .= '<li class="saw-guide__step"><span class="saw-guide__marker" aria-hidden="true">2</span><div><strong>' . esc_html__( 'Answer every question in the quiz', 'nera-strikeawin' ) . '</strong><p>' . esc_html( $timer_note ) . ' ' . esc_html__( 'Tap an answer to lock it in. There is no second tap, so choose with care.', 'nera-strikeawin' ) . '</p></div></li>';
+		$html .= '<li class="saw-guide__step saw-guide__step--stay"><span class="saw-guide__marker" aria-hidden="true">3</span><div><span class="saw-guide__tag">' . esc_html__( 'Player tip', 'nera-strikeawin' ) . '</span><strong>' . esc_html__( 'Stay on this page while you play', 'nera-strikeawin' ) . '</strong><p>' . esc_html__( 'Refreshing, using the back button, or leaving mid-run will ask you to confirm. The countdown keeps running on the server, so time you spend away still counts.', 'nera-strikeawin' ) . '</p></div></li>';
+		$html .= '<li class="saw-guide__step"><span class="saw-guide__marker" aria-hidden="true">4</span><div><strong>' . esc_html__( 'Tickets enter the draw', 'nera-strikeawin' ) . '</strong><p>' . esc_html__( 'Every correct answer earns tickets in this draw. One order can include several runs, and each run adds its tickets to the same entry.', 'nera-strikeawin' ) . '</p></div></li>';
 		$html .= '</ol></aside>';
 		$html .= '</div>';
 
@@ -687,7 +709,7 @@ class Nera_SAW_Frontend {
 	 */
 	private static function competition_hero( $product, $competition_id ) {
 		$title = $product ? $product->get_name() : get_the_title( (int) $competition_id );
-		$intro = __( 'Use your runs from ticket purchases — answer the quiz before time runs out to earn lottery tickets.', 'nera-strikeawin' );
+		$intro = __( 'Each run is one quiz against the clock. Every correct answer earns tickets in this draw.', 'nera-strikeawin' );
 
 		if ( $product ) {
 			$short = $product->get_short_description();
@@ -710,9 +732,9 @@ class Nera_SAW_Frontend {
 	 * @return string
 	 */
 	private static function wrap_page_shell( $inner, array $hero = array() ) {
-		$badge = isset( $hero['badge'] ) ? (string) $hero['badge'] : __( 'Strike A Win', 'nera-strikeawin' );
-		$title = isset( $hero['title'] ) ? (string) $hero['title'] : __( 'Play Strike A Win', 'nera-strikeawin' );
-		$intro = isset( $hero['intro'] ) ? (string) $hero['intro'] : __( 'Use your runs from ticket purchases — answer the quiz to earn lottery tickets.', 'nera-strikeawin' );
+		$badge = isset( $hero['badge'] ) ? (string) $hero['badge'] : __( '[BRAND]', 'nera-strikeawin' );
+		$title = isset( $hero['title'] ) ? (string) $hero['title'] : __( 'Play [BRAND]', 'nera-strikeawin' );
+		$intro = isset( $hero['intro'] ) ? (string) $hero['intro'] : __( 'Each run is one quiz. Correct answers earn tickets in the draw.', 'nera-strikeawin' );
 
 		$html  = '<div class="saw-page">';
 		$html .= '<div class="saw-page-bg" aria-hidden="true"></div>';

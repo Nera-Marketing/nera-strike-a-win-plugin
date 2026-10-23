@@ -12,7 +12,7 @@
  * every front-end request already, so no extra wiring is needed here.
  *
  * Client findings #4/#48: that plugin's own page (`/help-and-support/`)
- * was rendering in the stock theme's own skin, and every Strike A Win
+ * was rendering in the stock theme's own skin, and every Strike And Win
  * footer's own "Help & support" link lands there. `/help-and-support/`
  * itself now 301s here (see Nera_SAW_Stock_Page_Redirects); the sibling
  * plugin's own page and its self-heal behaviour are both left completely
@@ -51,9 +51,9 @@ Nera_SAW_Router::part(
 		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() && class_exists( 'Nera_SAW_Standalone_Legal_RU_Content' ) ) {
 			// The directory's rows (names/blurbs) and intro copy are plain
 			// data, not gettext — see class-standalone-legal-ru-content.php.
-			echo Nera_SAW_Standalone_Legal_RU_Content::render_help_directory(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already-escaped HTML.
+			echo Nera_SAW_Copy::undash( Nera_SAW_Standalone_Legal_RU_Content::render_help_directory() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already-escaped HTML.
 		} elseif ( class_exists( 'Nera_RP_Page' ) && method_exists( 'Nera_RP_Page', 'render_block' ) ) {
-			echo Nera_RP_Page::render_block(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- that plugin's own, already-escaped HTML.
+			echo Nera_SAW_Copy::undash( Nera_RP_Page::render_block() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- that plugin's own, already-escaped HTML.
 		}
 		?>
 	</div>

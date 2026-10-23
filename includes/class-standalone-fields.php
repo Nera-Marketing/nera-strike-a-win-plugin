@@ -135,7 +135,7 @@ class Nera_SAW_Standalone_Fields {
 			'saw_logo_text'     => array(
 				'key'     => 'field_nera_saw_logo_text',
 				'scope'   => 'option',
-				'default' => __( 'Strike <em>A</em> Win', 'nera-strikeawin' ),
+				'default' => __( '[BRAND]', 'nera-strikeawin' ),
 				'seed'    => true,
 				'fill'    => 'empty',
 			),
@@ -149,8 +149,7 @@ class Nera_SAW_Standalone_Fields {
 			'saw_footer_line'   => array(
 				'key'     => 'field_nera_saw_footer_line',
 				'scope'   => 'option',
-				/* translators: %s: site name */
-				'default' => sprintf( __( '%s — skill-based prize competitions.', 'nera-strikeawin' ), get_bloginfo( 'name' ) ),
+				'default' => __( '[BRAND].', 'nera-strikeawin' ),
 				'seed'    => true,
 				'fill'    => 'empty',
 			),
@@ -358,7 +357,7 @@ class Nera_SAW_Standalone_Fields {
 			'saw_cd_footnote'      => array(
 				'key'     => 'field_nera_saw_cd_footnote',
 				'scope'   => 'option',
-				'default' => __( 'A run can earn zero tickets. Only correct answers earn entries, and that is what makes this a game of skill, not a lottery.', 'nera-strikeawin' ),
+				'default' => __( 'A run can earn zero tickets. Only correct answers earn entries, and that is what makes this a game of skill, not a game of chance.', 'nera-strikeawin' ),
 				'seed'    => true,
 				'fill'    => 'empty',
 			),
@@ -462,7 +461,7 @@ class Nera_SAW_Standalone_Fields {
 			'saw_pp_consent_age'   => array(
 				'key'     => 'field_nera_saw_pp_consent_age',
 				'scope'   => 'before-you-pay',
-				'default' => __( 'I am 18 or over and a UK resident.', 'nera-strikeawin' ),
+				'default' => __( 'I am over 18 and agree to the terms and conditions.', 'nera-strikeawin' ),
 				'seed'    => true,
 				'fill'    => 'empty',
 			),
@@ -713,7 +712,7 @@ class Nera_SAW_Standalone_Fields {
 			$default = self::default_for( $name );
 		}
 		if ( ! function_exists( 'get_field' ) ) {
-			return $default;
+			return Nera_SAW_Brand::apply( $default );
 		}
 		$post_id = $post_id ? (int) $post_id : get_the_ID();
 		$value   = get_field( $name, $post_id );
@@ -723,7 +722,7 @@ class Nera_SAW_Standalone_Fields {
 		// clears a box to see what it does.
 		$value = ( '' === $value || null === $value || false === $value ) ? $default : $value;
 
-		return self::localize( $name, $value );
+		return Nera_SAW_Brand::apply( self::localize( $name, $value ) );
 	}
 
 	/**
@@ -738,12 +737,12 @@ class Nera_SAW_Standalone_Fields {
 			$default = self::default_for( $name );
 		}
 		if ( ! function_exists( 'get_field' ) ) {
-			return $default;
+			return Nera_SAW_Brand::apply( $default );
 		}
 		$value = get_field( $name, 'option' );
 		$value = ( '' === $value || null === $value || false === $value ) ? $default : $value;
 
-		return self::localize( $name, $value );
+		return Nera_SAW_Brand::apply( self::localize( $name, $value ) );
 	}
 
 	/**
@@ -819,7 +818,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_shell',
-				'title'                 => __( 'Strike A Win — header and footer', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — header and footer', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -879,7 +878,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_checkout_account',
-				'title'                 => __( 'Strike A Win — checkout & account', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — checkout & account', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -921,7 +920,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_competitions',
-				'title'                 => __( 'Strike A Win — competitions list', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — competitions list', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -1033,7 +1032,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_detail',
-				'title'                 => __( 'Strike A Win — competition page', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — competition page', 'nera-strikeawin' ),
 				'menu_order'            => 1,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -1166,7 +1165,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_hiw',
-				'title'                 => __( 'Strike A Win — how it works', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — how it works', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -1269,7 +1268,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_prepay',
-				'title'                 => __( 'Strike A Win — before you pay', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — before you pay', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',
@@ -1381,7 +1380,7 @@ class Nera_SAW_Standalone_Fields {
 		acf_add_local_field_group(
 			array(
 				'key'                   => 'group_nera_saw_walkthrough',
-				'title'                 => __( 'Strike A Win — walkthrough', 'nera-strikeawin' ),
+				'title'                 => __( 'Strike And Win — walkthrough', 'nera-strikeawin' ),
 				'menu_order'            => 0,
 				'position'              => 'normal',
 				'label_placement'       => 'top',

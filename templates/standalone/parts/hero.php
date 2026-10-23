@@ -19,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
 $saw_hero_stock    = $saw_spec['stock'];
 $saw_hero_sold_out = ! empty( $saw_hero_stock['sold_out'] );
 $saw_hero_drawn    = ! empty( $saw_spec['drawn'] );
-$saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_format' );
 ?>
 <section class="saw-hero">
 
@@ -41,7 +40,7 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 					sprintf(
 						/* translators: %s: entries remaining */
 						__( 'Only %s left', 'nera-strikeawin' ),
-						number_format_i18n( $saw_hero_stock['remaining'] )
+						number_format_i18n( $saw_hero_stock['public_remaining'] )
 					)
 				);
 				?>
@@ -74,7 +73,14 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 	if ( $saw_spec['closes_timestamp'] ) {
 		$saw_hero_facts[] = array(
 			'label' => __( 'Closes', 'nera-strikeawin' ),
-			'value' => Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], $saw_hero_date_fmt ),
+			'value' => Nera_SAW_Date::display( $saw_spec['closes_timestamp'] ),
+		);
+	}
+
+	if ( $saw_spec['closes_timestamp'] && ! $saw_hero_drawn ) {
+		$saw_hero_facts[] = array(
+			'label' => __( 'Time left', 'nera-strikeawin' ),
+			'html'  => Nera_SAW_Date::countdown_html( $saw_spec['closes_timestamp'], 'saw-countdown--fact', false ),
 		);
 	}
 
@@ -98,7 +104,7 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 			'value' => sprintf(
 				/* translators: 1: entries remaining, 2: entries in total */
 				__( '%1$s of %2$s', 'nera-strikeawin' ),
-				number_format_i18n( $saw_hero_stock['remaining'] ),
+				number_format_i18n( $saw_hero_stock['public_remaining'] ),
 				number_format_i18n( $saw_hero_stock['total'] )
 			),
 		);
@@ -109,7 +115,15 @@ $saw_hero_date_fmt = get_option( 'date_format' ) . ', ' . get_option( 'time_form
 			<?php foreach ( $saw_hero_facts as $saw_hero_fact ) : ?>
 				<div class="saw-fact">
 					<dt><?php echo esc_html( $saw_hero_fact['label'] ); ?></dt>
-					<dd><?php echo esc_html( $saw_hero_fact['value'] ); ?></dd>
+					<dd>
+						<?php
+						if ( isset( $saw_hero_fact['html'] ) ) {
+							echo $saw_hero_fact['html']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped in Nera_SAW_Date::countdown_html().
+						} else {
+							echo esc_html( $saw_hero_fact['value'] );
+						}
+						?>
+					</dd>
 				</div>
 			<?php endforeach; ?>
 		</dl>

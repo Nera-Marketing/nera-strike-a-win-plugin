@@ -39,7 +39,7 @@ class Nera_SAW_Polylang_Reach_Module extends PLL_Settings_Module {
 			$polylang,
 			array(
 				'module'      => 'nera_saw_reach',
-				'title'       => __( 'Strike A Win — language reach', 'nera-strikeawin' ),
+				'title'       => __( 'Strike And Win — language reach', 'nera-strikeawin' ),
 				'description' => __( 'How far the languages above are served on the front end. The admin is unaffected either way: language columns, filters and per-post language pickers keep working, so pages can be translated before they are served.', 'nera-strikeawin' ),
 			)
 		);
@@ -66,7 +66,7 @@ class Nera_SAW_Polylang_Reach_Module extends PLL_Settings_Module {
 				'help'  => __( 'Polylang behaves normally. Every language is served everywhere.', 'nera-strikeawin' ),
 			),
 			Nera_SAW_Language_Reach::SECTION_ONLY => array(
-				'label' => __( 'Strike A Win section only', 'nera-strikeawin' ),
+				'label' => __( 'Strike And Win section only', 'nera-strikeawin' ),
 				'help'  => __( 'The competition section is multilingual. The rest of the front end is held to the default language: no switcher, and a non-default URL is redirected to the canonical page instead of serving the same content twice.', 'nera-strikeawin' ),
 			),
 		);
@@ -89,7 +89,7 @@ class Nera_SAW_Polylang_Reach_Module extends PLL_Settings_Module {
 		if ( class_exists( 'Nera_SAW_Mode' ) && ! Nera_SAW_Mode::is_standalone() ) {
 			printf(
 				'<p class="description" style="margin-top:12px">%s</p>',
-				esc_html__( 'Strike A Win is currently in mixed mode, so it has no section of its own. "Strike A Win section only" will hold the whole front end to one language until standalone mode is switched on.', 'nera-strikeawin' )
+				esc_html__( 'Strike And Win is currently in mixed mode, so it has no section of its own. "Strike And Win section only" will hold the whole front end to one language until standalone mode is switched on.', 'nera-strikeawin' )
 			);
 		}
 	}

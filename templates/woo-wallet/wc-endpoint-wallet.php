@@ -186,9 +186,9 @@ if ( ! function_exists( 'is_wallet_tab_active' ) ) {
 						<tbody>
 							<?php foreach ( $transactions as $transaction ) : ?>
 								<tr>
-									<td><?php echo esc_html( wc_string_to_datetime( $transaction->date )->date_i18n( wc_date_format() ) ); ?></td>
-									<td><?php echo wp_kses_post( Nera_SAW_Language::translate_wallet_transaction_details( $transaction->details ) ); /* RUSSIAN OVERRIDE: was `wp_kses_post( $transaction->details )` — see this file's own docblock. */ ?></td>
-									<td class="amount <?php echo esc_attr( $transaction->type ); ?>">
+									<td data-label="<?php esc_attr_e( 'Date', 'woo-wallet' ); ?>"><?php echo esc_html( wc_string_to_datetime( $transaction->date )->date_i18n( wc_date_format() ) ); ?></td>
+									<td data-label="<?php esc_attr_e( 'Description', 'woo-wallet' ); ?>"><?php echo wp_kses_post( Nera_SAW_Language::translate_wallet_transaction_details( $transaction->details ) ); /* RUSSIAN OVERRIDE: was `wp_kses_post( $transaction->details )` — see this file's own docblock. */ ?></td>
+									<td class="amount <?php echo esc_attr( $transaction->type ); ?>" data-label="<?php esc_attr_e( 'Amount', 'woo-wallet' ); ?>">
 										<?php
 										echo 'credit' === $transaction->type ? '+' : '-';
 										echo wp_kses_post( wc_price( apply_filters( 'woo_wallet_amount', $transaction->amount, $transaction->currency, $transaction->user_id ), woo_wallet_wc_price_args( $transaction->user_id, array( 'currency' => $active_currency ) ) ) );

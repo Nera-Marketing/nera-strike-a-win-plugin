@@ -1,6 +1,6 @@
 <?php
 /**
- * Strike A Win → Difficulty Ladder: manage the global levels.
+ * Strike And Win → Difficulty Ladder: manage the global levels.
  *
  * Each level has a display colour (picker, player-facing — see level_text_color),
  * a label, and default tickets per
@@ -38,12 +38,12 @@ class Nera_SAW_Ladder_Admin {
 	}
 
 	/**
-	 * Top-level Strike A Win menu + Difficulty Ladder page.
+	 * Top-level Strike And Win menu + Difficulty Ladder page.
 	 */
 	public static function menu() {
 		add_menu_page(
-			__( 'Strike A Win', 'nera-strikeawin' ),
-			__( 'Strike A Win', 'nera-strikeawin' ),
+			__( 'Strike And Win', 'nera-strikeawin' ),
+			__( 'Strike And Win', 'nera-strikeawin' ),
 			'manage_options',
 			self::SLUG,
 			array( __CLASS__, 'render' ),
@@ -198,7 +198,7 @@ class Nera_SAW_Ladder_Admin {
 		$ladder = Nera_SAW_Constants::ladder(); // active only.
 
 		echo '<div class="wrap saw-admin">';
-		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike A Win — Difficulty Ladder', 'nera-strikeawin' ) . '</h1>';
+		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike And Win — Difficulty Ladder', 'nera-strikeawin' ) . '</h1>';
 
 		if ( isset( $_GET['saw_saved'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ladder saved.', 'nera-strikeawin' ) . '</p></div>';

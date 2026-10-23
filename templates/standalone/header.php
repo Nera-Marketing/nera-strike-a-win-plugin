@@ -23,7 +23,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-$saw_title = isset( $saw_title ) ? $saw_title : get_bloginfo( 'name' );
+$saw_title = isset( $saw_title ) ? $saw_title : Nera_SAW_Brand::name();
 $saw_inner = isset( $saw_inner ) ? (bool) $saw_inner : false;
 ?><!DOCTYPE html>
 <?php
@@ -67,7 +67,7 @@ $saw_inner = isset( $saw_inner ) ? (bool) $saw_inner : false;
 				printf(
 					'<img src="%1$s" alt="%2$s">',
 					esc_url( $saw_logo['url'] ),
-					esc_attr( ! empty( $saw_logo['alt'] ) ? $saw_logo['alt'] : get_bloginfo( 'name' ) )
+					esc_attr( ! empty( $saw_logo['alt'] ) ? $saw_logo['alt'] : Nera_SAW_Brand::name() )
 				);
 			} else {
 				// wp_kses_post, not esc_html: the field deliberately allows <em> so a

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Nera – Strike A Win
+ * Plugin Name: Nera – Strike And Win
  * Plugin URI: https://github.com/Nera-Marketing/nera-strike-a-win-plugin
  * Description: Skill-based prize-competition quiz mechanic. Paid entry -> timed increasing-difficulty quiz -> earned LFW lottery tickets entered into the competition draw. Server-scored, no-oversell reservation pool, compliance-locked (Gambling Act 2005 skill exemption).
  * Version: 1.2.4
@@ -21,13 +21,13 @@ use YahnisElsts\PluginUpdateChecker\v5p5\Vcs\GitHubApi;
 /**
  * Optional wp-config.php override:
  *
- *   define( 'NERA_SAW_DEMO_SEEDER', true ); — show Tools → Strike A Win Demo in the menu
+ *   define( 'NERA_SAW_DEMO_SEEDER', true ); — show Tools → Strike And Win Demo in the menu
  *
  * Frontend UI and quiz feedback are toggled on the demo admin page
  * (tools.php?page=nera-saw-demo → Feature flags). Note that page is dropped from
  * the Tools menu unless NERA_SAW_DEMO_SEEDER is defined, so on a production site
  * both switches are reachable only by typing that URL. The Answer reveal's hold
- * duration is separate, on Strike A Win → Settings → Answer reveal.
+ * duration is separate, on Strike And Win → Settings → Answer reveal.
  */
 
 define( 'NERA_SAW_VERSION', '1.2.4' );
@@ -108,7 +108,7 @@ require_once NERA_SAW_PLUGIN_DIR . 'includes/class-play-page.php';
 require_once NERA_SAW_PLUGIN_DIR . 'includes/class-plugin.php';
 
 /**
- * Whether Strike A Win frontend UI overrides are active.
+ * Whether Strike And Win frontend UI overrides are active.
  *
  * @return bool
  */
@@ -117,7 +117,7 @@ function nera_saw_frontend_ui_enabled() {
 }
 
 /**
- * Whether the Tools → Strike A Win Demo admin page is registered.
+ * Whether the Tools → Strike And Win Demo admin page is registered.
  *
  * @return bool
  */

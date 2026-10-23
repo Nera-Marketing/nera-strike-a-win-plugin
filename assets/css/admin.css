@@ -1,5 +1,5 @@
 /**
- * Strike A Win — shared admin styles.
+ * Strike And Win — shared admin styles.
  *
  * A light design layer over WP admin: cards, tables, status pills, the answer /
  * tier repeaters, and the polished Demo (seeder) page.
@@ -67,6 +67,10 @@
 .saw-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .saw-field > span { font-weight: 600; color: var(--saw-muted); }
 .saw-field input { max-width: 140px; }
+/* Checkbox + text on one line; the column layout above is for stacked label/input. */
+.saw-field--check { flex-direction: row; align-items: flex-start; gap: 8px; padding: 4px 0; max-width: 70ch; cursor: pointer; }
+.saw-field--check > span { font-weight: 400; color: inherit; }
+.saw-field--check input[type="checkbox"] { flex: 0 0 auto; margin: 2px 0 0; }
 
 /* --- Tables ----------------------------------------------------------- */
 .saw-table {
@@ -486,7 +490,7 @@ body.saw-import-open { overflow: hidden; }
   margin: 2px 0 0;
 }
 
-/* --- Shortcode box (Strike A Win product tab) -------------------------- */
+/* --- Shortcode box (Strike And Win product tab) -------------------------- */
 .saw-shortcode-box {
 	display: inline-flex;
 	align-items: center;
@@ -510,7 +514,7 @@ body.saw-import-open { overflow: hidden; }
 	color: var(--saw-accent-ink, #b8440a);
 }
 
-/* --- Offline draw prize table (Strike A Win product tab) --------------- */
+/* --- Offline draw prize table (Strike And Win product tab) --------------- */
 .saw-draw-panel {
 	padding-top: 10px;
 }

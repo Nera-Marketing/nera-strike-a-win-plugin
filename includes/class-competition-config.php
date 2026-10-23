@@ -38,6 +38,11 @@ class Nera_SAW_Competition_Config {
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
 			'cash_alternative' => '',
+			// The competition's name in Russian, shown instead of the title on the Russian screens; empty = the title.
+			'name_ru'        => '',
+			// What the prize itself is worth on the market today, in pounds (a number, or empty to
+			// show nothing). Not the price of a run: that comes from the tiers.
+			'market_value'   => '',
 			'timer_seconds'  => Nera_SAW_Constants::TIMER_MAX_SECONDS, // per-question (Type 1).
 			'total_time'     => 0, // whole-quiz minutes (Type 2, future).
 			'distribution'   => array(), // level_key => count.
@@ -238,13 +243,18 @@ class Nera_SAW_Competition_Config {
 			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''
 		);
 
+		$config['name_ru'] = sanitize_text_field( isset( $config['name_ru'] ) ? (string) $config['name_ru'] : '' );
+
+		$mv                      = isset( $config['market_value'] ) ? preg_replace( '/[^0-9.]/', '', (string) $config['market_value'] ) : '';
+		$config['market_value'] = ( '' !== $mv && (float) $mv > 0 ) ? (string) (float) $mv : '';
+
 		// Drop distribution entries below the difficulty floor.
 		$config['distribution'] = self::filter_distribution_by_floor( $config['distribution'] );
 
 		update_post_meta( $product_id, self::META_KEY, $config );
 
 		// The reservation pool cap is the competition's LFW ticket stock (not a
-		// Strike A Win field). No-oversell holds against this at checkout-init.
+		// Strike And Win field). No-oversell holds against this at checkout-init.
 		Nera_SAW_Spin_Pool::ensure( $product_id, self::lfw_stock( $product_id ) );
 	}
 

@@ -81,12 +81,12 @@ if ( ! wp_doing_ajax() ) {
 
 			// "Part wallet, part card". Inside the list so it survives the AJAX
 			// fragment replacement that rebuilds this block on every change.
-			Nera_SAW_Standalone_Chrome::theme_part( 'template-parts/checkout/wallet-partial-payment', array( 'slot' => 'option' ) );
+			Nera_SAW_Checkout::split_part( 'option' );
 			?>
 		</ul>
 	<?php endif; ?>
 
-	<?php Nera_SAW_Standalone_Chrome::theme_part( 'template-parts/checkout/wallet-partial-payment', array( 'slot' => 'notice' ) ); ?>
+	<?php Nera_SAW_Checkout::split_part( 'notice' ); ?>
 
 	<div class="form-row place-order">
 		<noscript>
@@ -97,7 +97,23 @@ if ( ! wp_doing_ajax() ) {
 			<br/><button type="submit" class="button alt" name="woocommerce_checkout_update_totals" value="<?php esc_attr_e( 'Update totals', 'woocommerce' ); ?>"><?php esc_html_e( 'Update totals', 'woocommerce' ); ?></button>
 		</noscript>
 
-		<?php wc_get_template( 'checkout/terms.php' ); ?>
+		<?php
+		// No third consent tick: the two on Before you pay are the consent (ADR 0036).
+		// WooCommerce's terms block is hidden for the section's checkout by
+		// Nera_SAW_Checkout; its privacy sentence is kept.
+		wc_get_template( 'checkout/terms.php' );
+
+		// Hiding the tick hides the whole terms block, and WooCommerce fires the two
+		// "terms and conditions" hooks from inside it. Other plugins hang real checkout
+		// pieces there (the spending-limit card and its confirmation field), so when the
+		// block is hidden the hooks are fired here instead, once.
+		if ( ! apply_filters( 'woocommerce_checkout_show_terms', true ) ) {
+			do_action( 'woocommerce_checkout_before_terms_and_conditions' );
+			do_action( 'woocommerce_checkout_after_terms_and_conditions' );
+		}
+
+		Nera_SAW_Checkout::privacy_notice();
+		?>
 
 		<?php do_action( 'woocommerce_review_order_before_submit' ); ?>
 

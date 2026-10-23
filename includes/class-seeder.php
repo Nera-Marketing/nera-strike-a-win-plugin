@@ -47,7 +47,7 @@ class Nera_SAW_Seeder {
 	const PURCHASE_BATCH_MAX      = 4;
 	// Player-facing (client finding #31 — the old copy here was an internal
 	// tooling instruction, never meant for a player to see).
-	const DEMO_DESCRIPTION        = 'A demo competition used for testing Strike A Win.';
+	const DEMO_DESCRIPTION        = '';
 
 	/**
 	 * Is this environment safe to seed without forcing?
@@ -725,7 +725,7 @@ class Nera_SAW_Seeder {
 			return array(
 				'langs' => array(),
 				/* translators: %s: comma-separated language codes */
-				'error' => sprintf( __( 'No question bank has been written for "%s". The seeder only offers languages it has questions for — it does not machine-translate, because a mistranslated option can leave a question with no right answer.', 'nera-strikeawin' ), implode( ', ', $unwritten ) ),
+				'error' => sprintf( __( 'No question bank has been written for "%s". The seeder only offers languages it has questions for, it does not machine-translate, because a mistranslated option can leave a question with no right answer.', 'nera-strikeawin' ), implode( ', ', $unwritten ) ),
 			);
 		}
 
@@ -1505,10 +1505,10 @@ class Nera_SAW_Seeder {
 
 		return array(
 			// --- shell ----------------------------------------------------------
-			'saw_logo_text'        => __( 'Strike <em>A</em> Win', 'nera-strikeawin' ),
+			'saw_logo_text'        => __( '[BRAND]', 'nera-strikeawin' ),
 			'saw_header_link'      => __( 'Как это работает', 'nera-strikeawin' ),
 			/* translators: %s: site name */
-			'saw_footer_line'      => sprintf( __( '%s — конкурсы на основе навыков с призами.', 'nera-strikeawin' ), get_bloginfo( 'name' ) ),
+			'saw_footer_line'      => '[BRAND].',
 			'saw_footer_legal'     => __( 'Призовые конкурсы на основе навыков в рамках Gambling Act 2005.', 'nera-strikeawin' ),
 			'saw_footer_risk'      => __( 'Забег может не принести ни одного билета, и возврат средств не производится.', 'nera-strikeawin' ),
 			'saw_footer_terms_label'  => __( 'Полные правила', 'nera-strikeawin' ),
@@ -1521,24 +1521,24 @@ class Nera_SAW_Seeder {
 			// --- competitions list ------------------------------------------------
 			'saw_eyebrow'          => __( 'Открытые розыгрыши', 'nera-strikeawin' ),
 			'saw_heading'          => __( 'Выберите <em>конкурс</em>', 'nera-strikeawin' ),
-			'saw_lede'             => __( 'Сначала конкурсы с ближайшим окончанием. Каждая попытка — тест на навык на время, и он по-настоящему сложный.', 'nera-strikeawin' ),
+			'saw_lede'             => __( 'Сначала конкурсы с ближайшим окончанием. Каждая попытка, тест на навык на время, и он по-настоящему сложный.', 'nera-strikeawin' ),
 			'saw_empty'            => __( 'Сейчас нет открытых конкурсов. Загляните позже.', 'nera-strikeawin' ),
 			'saw_panel_heading'    => __( 'Знайте, за что платите', 'nera-strikeawin' ),
-			'saw_panel_body'       => __( 'Забег — это набор вопросов на время, и каждый конкурс задаёт свои условия. Неверные ответы и истёкшее время не приносят ничего, и заметная часть игроков заканчивают забег без билетов и без участия в розыгрыше.', 'nera-strikeawin' ),
+			'saw_panel_body'       => __( 'Забег, это набор вопросов на время, и каждый конкурс задаёт свои условия. Неверные ответы и истёкшее время не приносят ничего, и заметная часть игроков заканчивают забег без билетов и без участия в розыгрыше.', 'nera-strikeawin' ),
 
 			// --- competition detail ----------------------------------------------
 			'saw_cd_spec_heading'  => __( 'Параметры викторины этого розыгрыша', 'nera-strikeawin' ),
 			'saw_cd_spec_note'     => __( 'Заданы для этого розыгрыша. Количество вопросов, уровень сложности, стоимость в билетах и время на ответ отличаются от конкурса к конкурсу.', 'nera-strikeawin' ),
 			'saw_cd_tier_heading'  => __( 'Выберите уровень', 'nera-strikeawin' ),
 			'saw_cd_runs_heading'  => __( 'Сколько забегов?', 'nera-strikeawin' ),
-			'saw_cd_runs_note'     => __( 'Каждый забег — это новый набор вопросов.', 'nera-strikeawin' ),
+			'saw_cd_runs_note'     => __( 'Каждый забег, это новый набор вопросов.', 'nera-strikeawin' ),
 			'saw_cd_cta'           => __( 'Участвовать', 'nera-strikeawin' ),
 			'saw_cd_risk'          => __( 'Неверные ответы не приносят ничего, и некоторые забеги заканчиваются без единого билета.', 'nera-strikeawin' ),
 			'saw_cd_run_heading'   => __( 'Забег', 'nera-strikeawin' ),
-			'saw_cd_random_note'   => __( 'Порядок вопросов перемешивается для каждого забега, поэтому какой вопрос будет первым — заранее не известно.', 'nera-strikeawin' ),
+			'saw_cd_random_note'   => __( 'Порядок вопросов перемешивается для каждого забега, поэтому какой вопрос будет первым, заранее не известно.', 'nera-strikeawin' ),
 			'saw_cd_result_title'  => __( 'Результат', 'nera-strikeawin' ),
 			'saw_cd_result_note'   => __( 'Ваши билеты и номера участия сразу поступают в розыгрыш.', 'nera-strikeawin' ),
-			'saw_cd_footnote'      => __( 'Забег может не принести ни одного билета. Билеты дают только правильные ответы — именно поэтому это игра на навык, а не лотерея.', 'nera-strikeawin' ),
+			'saw_cd_footnote'      => __( 'Забег может не принести ни одного билета. Билеты дают только правильные ответы, именно поэтому это игра на навык, а не азартная игра.', 'nera-strikeawin' ),
 
 			// --- checkout / my account --------------------------------------------
 			'saw_checkout_heading' => __( 'Оформление заказа', 'nera-strikeawin' ),
@@ -1562,7 +1562,7 @@ class Nera_SAW_Seeder {
 			// --- before you pay ---------------------------------------------------
 			'saw_pp_heading'       => __( 'Перед оплатой', 'nera-strikeawin' ),
 			'saw_pp_risk'          => __( 'Каждый правильный ответ приносит билеты. Неверные ответы и истёкшее время не приносят ничего и ничего не отнимают. Вы всегда проходите забег до конца. Забег может закончиться без единого билета, и возврат средств в этом случае не производится.', 'nera-strikeawin' ),
-			'saw_pp_consent_age'   => __( 'Мне есть 18 лет, и я резидент Великобритании.', 'nera-strikeawin' ),
+			'saw_pp_consent_age'   => __( 'Мне есть 18 лет, и я принимаю правила и условия.', 'nera-strikeawin' ),
 			'saw_pp_consent_rules' => __( 'Я прочитал(а) правила и понимаю, что забег может не принести ни одного билета и возврат средств не производится.', 'nera-strikeawin' ),
 			// %s is the total, filled in by the template — see saw_pp_cta's own
 			// default for why this is not resolved here.
@@ -1570,9 +1570,9 @@ class Nera_SAW_Seeder {
 			'saw_pp_empty'         => __( 'В вашей корзине пока ничего нет.', 'nera-strikeawin' ),
 
 			// --- walkthrough -------------------------------------------------------
-			'saw_wt_s1_title'      => __( 'Одна оплата — один забег', 'nera-strikeawin' ),
-			'saw_wt_s1_body'       => __( 'Забег — это набор вопросов по этапам, которые становятся сложнее по мере прохождения. Вы отвечаете на каждый вопрос, что бы ни случилось по пути. Каждый конкурс задаёт свою длину, а пример ниже показывает один из вариантов.', 'nera-strikeawin' ),
-			'saw_wt_s1_note'       => __( 'Такая же структура пути отображается на странице каждого конкурса — от приза до вашего результата.', 'nera-strikeawin' ),
+			'saw_wt_s1_title'      => __( 'Одна оплата, один забег', 'nera-strikeawin' ),
+			'saw_wt_s1_body'       => __( 'Забег, это набор вопросов по этапам, которые становятся сложнее по мере прохождения. Вы отвечаете на каждый вопрос, что бы ни случилось по пути. Каждый конкурс задаёт свою длину, а пример ниже показывает один из вариантов.', 'nera-strikeawin' ),
+			'saw_wt_s1_note'       => __( 'Такая же структура пути отображается на странице каждого конкурса, от приза до вашего результата.', 'nera-strikeawin' ),
 			'saw_wt_s2_title'      => __( 'Что вы получаете', 'nera-strikeawin' ),
 			'saw_wt_s2_body'       => __( 'Билеты приносят только правильные ответы, а сложные вопросы стоят дороже.', 'nera-strikeawin' ),
 			'saw_wt_s2_note'       => __( 'Ниже показан один пример набора. Каждый конкурс задаёт своё количество вопросов, уровни сложности и стоимость в билетах и показывает их на своей странице ещё до оплаты.', 'nera-strikeawin' ),
@@ -1888,6 +1888,8 @@ class Nera_SAW_Seeder {
 			// without retyping the sentence. Fields already saved (and translations
 			// already written) are left alone.
 			$result = Nera_SAW_Standalone_Fields::seed_defaults( $langs, $pool );
+			// The active theme seeds its own content (the Strike And Win theme: entry pop-up and tour).
+			$result = apply_filters( 'nera_saw_seed_theme_content', $result );
 
 			return array(
 				'mode'       => Nera_SAW_Mode::METHOD_STANDALONE,
@@ -2414,7 +2416,7 @@ class Nera_SAW_Seeder {
 				woo_wallet()->wallet->credit(
 					(int) $user_id,
 					( $total - $wallet_balance ) + 5,
-					__( 'Strike A Win demo — top-up for entry', 'nera-strikeawin' ),
+					__( '[BRAND] demo: top-up for entry', 'nera-strikeawin' ),
 					array( 'for' => 'saw_demo_topup' )
 				);
 			}
@@ -2528,7 +2530,7 @@ class Nera_SAW_Seeder {
 					woo_wallet()->wallet->credit(
 						$user_id,
 						$balance,
-						__( 'Strike A Win demo — seeded wallet balance', 'nera-strikeawin' ),
+						__( '[BRAND] demo: seeded wallet balance', 'nera-strikeawin' ),
 						array( 'for' => 'saw_demo_seed' )
 					);
 				}

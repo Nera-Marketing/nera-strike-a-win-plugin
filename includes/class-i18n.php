@@ -234,6 +234,6 @@ class Nera_SAW_I18n {
 			return $string;
 		}
 
-		return str_replace( '[BRAND]', get_bloginfo( 'name' ), $string );
+		return Nera_SAW_Brand::apply( $string );
 	}
 }

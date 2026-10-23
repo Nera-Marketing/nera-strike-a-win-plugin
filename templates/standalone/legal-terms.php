@@ -2,18 +2,12 @@
 /**
  * Standalone section — Terms and Conditions.
  *
- * Mirrors the main site's own "Terms and Conditions" page — its
- * `post_content`, live, every request — rather than holding a second copy
- * of the text. An administrator keeps editing that one real page in
- * wp-admin exactly as before; this screen only wraps the same content in
- * the section's own skin.
+ * Prints this page's own `post_content`, live, every request, in the
+ * section's skin. An administrator edits the text in wp-admin like any page;
+ * the Russian text is the Polylang translation of it, when there is one.
  *
- * Client findings #4/#48: that bare page (`/terms-and-conditions/`) was
- * rendering in the stock theme's own skin. `/terms-and-conditions/` itself
- * now 301s here (see Nera_SAW_Stock_Page_Redirects).
- *
- * Registered only when the mirrored page exists — see
- * Nera_SAW_Standalone_Legal_Pages::add_pages().
+ * Since ADR 0032 this is the one Terms page there is: WooCommerce's Terms
+ * setting points here, and the old theme-skinned page is in the trash.
  *
  * Override by copying to `nera-strikeawin/legal-terms.php` in a theme.
  *
@@ -22,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-$saw_source = get_page_by_path( 'terms-and-conditions' );
+$saw_source = get_queried_object();
 
 // A machine-translated Russian version of this exact page, linked via
 // Polylang (see Nera_SAW_Standalone_Legal_Pages::ensure_ru_translations()) —
@@ -58,7 +52,7 @@ Nera_SAW_Router::part(
 <div class="saw-screen saw-screen--narrow">
 	<div class="saw-stack saw-legal-mirror">
 		<?php if ( $saw_source ) : ?>
-			<?php echo apply_filters( 'the_content', $saw_source->post_content ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the_content runs its own kses/sanitising pass. ?>
+			<?php echo Nera_SAW_Copy::undash( apply_filters( 'the_content', $saw_source->post_content ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the_content runs its own kses/sanitising pass. ?>
 		<?php else : ?>
 			<p><?php esc_html_e( 'This page has not been set up yet.', 'nera-strikeawin' ); ?></p>
 		<?php endif; ?>

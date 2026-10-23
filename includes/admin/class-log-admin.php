@@ -1,6 +1,6 @@
 <?php
 /**
- * Strike A Win → Quiz Log.
+ * Strike And Win → Quiz Log.
  *
  * Admin view over the diagnostic log (wp_nera_saw_log): run lifecycle + every
  * server/client error and stall. Search + filter by type, tier and competition,
@@ -28,7 +28,7 @@ class Nera_SAW_Log_Admin {
 	}
 
 	/**
-	 * Submenu under Strike A Win.
+	 * Submenu under Strike And Win.
 	 */
 	public static function menu() {
 		add_submenu_page(
@@ -61,7 +61,7 @@ class Nera_SAW_Log_Admin {
 		require_once NERA_SAW_PLUGIN_DIR . 'includes/admin/class-log-list-table.php';
 
 		echo '<div class="wrap saw-admin">';
-		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike A Win — Quiz Log', 'nera-strikeawin' ) . '</h1>';
+		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike And Win — Quiz Log', 'nera-strikeawin' ) . '</h1>';
 		echo '<p class="saw-muted">' . esc_html__( 'Diagnostic trail of quiz runs: starts, answers, completions, abandonments, and every error or stalled request (server and browser). Use it to trace a run that locked or failed.', 'nera-strikeawin' ) . '</p>';
 
 		$table = new Nera_SAW_Log_List_Table();

@@ -37,7 +37,7 @@ class Nera_SAW_Run {
 		$tier_key       = (string) $tier_key;
 
 		if ( ! Nera_SAW_Competition_Config::is_competition( $competition_id ) ) {
-			return new WP_Error( 'saw_not_competition', __( 'Not a Strike A Win competition.', 'nera-strikeawin' ) );
+			return new WP_Error( 'saw_not_competition', __( 'Not a Strike And Win competition.', 'nera-strikeawin' ) );
 		}
 
 		// Resume an in-progress run for this competition (do not consume another).
@@ -669,6 +669,16 @@ class Nera_SAW_Run {
 		}
 		if ( 'active' !== $run->status ) {
 			return self::state( $run );
+		}
+		// A run closed after an interruption is parked for an administrator: a stale tab
+		// may not finish it behind their back. (A merely held run may: the player is
+		// plainly here, and finishing it is what they came to do.)
+		if ( 'errored' === (string) $run->end_reason ) {
+			return new WP_Error(
+				'saw_interrupted',
+				__( 'This run was closed after it was interrupted. Please contact support and we will restore it.', 'nera-strikeawin' ),
+				array( 'status' => 409 )
+			);
 		}
 
 		global $wpdb;
@@ -1463,6 +1473,47 @@ class Nera_SAW_Run {
 	}
 
 	/**
+	 * Ticket numbers for several runs in one query, in slot order.
+	 *
+	 * The page that lists a player's runs used to ask `collect_run_ticket_numbers()`
+	 * once per run: 31 runs, 31 queries. This is the same answer for any number of
+	 * runs at the cost of one.
+	 *
+	 * @param int[] $run_ids Run IDs.
+	 * @return array<int, string[]> run_id => ticket numbers (every id present, possibly empty).
+	 */
+	public static function ticket_numbers_for_runs( array $run_ids ) {
+		global $wpdb;
+		$run_ids = array_values( array_unique( array_filter( array_map( 'intval', $run_ids ) ) ) );
+		$out     = array_fill_keys( $run_ids, array() );
+		if ( ! $run_ids ) {
+			return $out;
+		}
+
+		$t     = Nera_SAW_Database::table( 'run_slots' );
+		$place = implode( ',', array_fill( 0, count( $run_ids ), '%d' ) );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( "SELECT run_id, awarded_numbers FROM {$t} WHERE run_id IN ({$place}) AND awarded_numbers IS NOT NULL AND awarded_numbers != '' ORDER BY run_id ASC, slot_no ASC", $run_ids ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $place is only %d placeholders.
+		);
+		foreach ( (array) $rows as $row ) {
+			$chunk = json_decode( (string) $row->awarded_numbers, true );
+			if ( ! is_array( $chunk ) ) {
+				continue;
+			}
+			foreach ( $chunk as $num ) {
+				$num = (string) $num;
+				if ( '' !== $num ) {
+					$out[ (int) $row->run_id ][] = $num;
+				}
+			}
+		}
+		foreach ( $out as $run_id => $numbers ) {
+			$out[ $run_id ] = array_values( array_unique( $numbers ) );
+		}
+		return $out;
+	}
+
+	/**
 	 * Every run this player has ever started or finished, on competitions
 	 * they have touched at all — the "My runs & tickets" account page
 	 * (client finding #45/#2): nothing before this existed to answer "what
@@ -1471,17 +1522,26 @@ class Nera_SAW_Run {
 	 * `run_counts_for_order_tier()`'s own docblock) are excluded: nothing
 	 * left for a player to act on or be told about.
 	 *
-	 * @param int $user_id        Player.
-	 * @param int $competition_id Limit to one competition, or 0 for every
-	 *                            competition this player has a run on.
+	 * Completed runs can be paged per competition. Only the page asked for has its
+	 * ticket numbers loaded, which is the expensive part: a player with a hundred
+	 * runs and a few thousand tickets used to get all of them in the page.
+	 *
+	 * @param int   $user_id        Player.
+	 * @param int   $competition_id Limit to one competition, or 0 for every
+	 *                              competition this player has a run on.
+	 * @param int   $per_page       Completed runs per page; 0 returns every one (the old behaviour).
+	 * @param array $pages          competition_id => page number wanted (default 1).
 	 * @return array<int, array{
 	 *     competition_id: int,
 	 *     title: string,
 	 *     in_progress: array<int, array{run_id:int, tier_key:string, started_at:string}>,
-	 *     completed: array<int, array{run_id:int, tier_key:string, finalized_at:string, correct_count:int, ticket_numbers:string[]}>
+	 *     completed: array<int, array{run_id:int, tier_key:string, finalized_at:string, correct_count:int, ticket_numbers:string[]}>,
+	 *     completed_total: int,
+	 *     completed_page: int,
+	 *     completed_pages: int
 	 * }> Keyed by competition_id, in no particular order.
 	 */
-	public static function runs_for_user( $user_id, $competition_id = 0 ) {
+	public static function runs_for_user( $user_id, $competition_id = 0, $per_page = 0, array $pages = array() ) {
 		global $wpdb;
 		$t    = Nera_SAW_Database::table( 'runs' );
 		$where = array( "user_id = %d", "status IN ( 'active', 'finalized' )" );
@@ -1499,10 +1559,13 @@ class Nera_SAW_Run {
 			$cid = (int) $row->competition_id;
 			if ( ! isset( $by_competition[ $cid ] ) ) {
 				$by_competition[ $cid ] = array(
-					'competition_id' => $cid,
-					'title'          => get_the_title( $cid ),
-					'in_progress'    => array(),
-					'completed'      => array(),
+					'competition_id'  => $cid,
+					'title'           => get_the_title( $cid ),
+					'in_progress'     => array(),
+					'completed'       => array(),
+					'completed_total' => 0,
+					'completed_page'  => 1,
+					'completed_pages' => 1,
 				);
 			}
 
@@ -1518,10 +1581,36 @@ class Nera_SAW_Run {
 					'tier_key'       => (string) $row->tier_key,
 					'finalized_at'   => (string) $row->finalized_at,
 					'correct_count'  => (int) $row->correct_count,
-					'ticket_numbers' => self::collect_run_ticket_numbers( (int) $row->id ),
+					'ticket_numbers' => array(),
 				);
 			}
 		}
+
+		// Page each competition's completed runs, then load numbers for those only.
+		$per_page = max( 0, (int) $per_page );
+		$wanted   = array();
+		foreach ( $by_competition as $cid => &$entry ) {
+			$total                    = count( $entry['completed'] );
+			$entry['completed_total'] = $total;
+			if ( $per_page > 0 ) {
+				$entry['completed_pages'] = max( 1, (int) ceil( $total / $per_page ) );
+				$entry['completed_page']  = min( $entry['completed_pages'], max( 1, isset( $pages[ $cid ] ) ? (int) $pages[ $cid ] : 1 ) );
+				$entry['completed']       = array_slice( $entry['completed'], ( $entry['completed_page'] - 1 ) * $per_page, $per_page );
+			}
+			foreach ( $entry['completed'] as $run ) {
+				$wanted[] = $run['run_id'];
+			}
+		}
+		unset( $entry );
+
+		$numbers = self::ticket_numbers_for_runs( $wanted );
+		foreach ( $by_competition as $cid => &$entry ) {
+			foreach ( $entry['completed'] as &$run ) {
+				$run['ticket_numbers'] = $numbers[ $run['run_id'] ];
+			}
+			unset( $run );
+		}
+		unset( $entry );
 
 		return array_values( $by_competition );
 	}
@@ -1578,7 +1667,7 @@ class Nera_SAW_Run {
 
 	/**
 	 * Reverse index of every minted ticket number on a competition, to its
-	 * owning run — the Strike A Win draw-entry feature's own need (client
+	 * owning run — the Strike And Win draw-entry feature's own need (client
 	 * follow-up on Draw results): an admin keys in the ticket numbers an
 	 * offline draw actually picked, and the system has to say whether each
 	 * one is real and, if so, whose run it belongs to.
@@ -1652,7 +1741,7 @@ class Nera_SAW_Run {
 	 * @param int    $order_id       Order ID.
 	 * @param int    $competition_id Competition product ID.
 	 * @param string $tier_key       Tier key.
-	 * @return array{in_progress: int, completed: int}
+	 * @return array{in_progress: int, interrupted: int, completed: int}
 	 */
 	public static function run_counts_for_order_tier( $order_id, $competition_id, $tier_key ) {
 		global $wpdb;
@@ -1660,7 +1749,8 @@ class Nera_SAW_Run {
 		$counts = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT
-					SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS in_progress,
+					SUM(CASE WHEN status = 'active' AND end_reason <> 'errored' THEN 1 ELSE 0 END) AS in_progress,
+					SUM(CASE WHEN status = 'active' AND end_reason = 'errored' THEN 1 ELSE 0 END) AS interrupted,
 					SUM(CASE WHEN status = 'finalized' THEN 1 ELSE 0 END) AS completed
 				FROM {$t} WHERE order_id = %d AND competition_id = %d AND tier_key = %s",
 				(int) $order_id,
@@ -1671,6 +1761,7 @@ class Nera_SAW_Run {
 
 		return array(
 			'in_progress' => $counts ? (int) $counts->in_progress : 0,
+			'interrupted' => $counts ? (int) $counts->interrupted : 0,
 			'completed'   => $counts ? (int) $counts->completed : 0,
 		);
 	}
@@ -1712,6 +1803,12 @@ class Nera_SAW_Run {
 		 * marker before any administrator saw it.
 		 */
 		$closes = ! $force_resume && ! Nera_SAW_Mode::allows_resume();
+
+		// Resume off: a player who has stopped checking in is interrupted NOW, not when the
+		// run's own clock eventually runs out.
+		if ( $closes ) {
+			self::close_stale_interrupted();
+		}
 
 		/*
 		 * Runs that report a heartbeat are judged by it, not by `expires_at`
@@ -2227,7 +2324,7 @@ class Nera_SAW_Run {
 		$seen = self::ts( $run->last_seen_at );
 		$now  = self::ts( current_time( 'mysql' ) );
 
-		if ( ( $now - $seen ) <= Nera_SAW_Constants::HEARTBEAT_STALE_SECONDS ) {
+		if ( ( $now - $seen ) <= Nera_SAW_Constants::heartbeat_stale_seconds() ) {
 			return null;
 		}
 
@@ -2330,6 +2427,144 @@ class Nera_SAW_Run {
 		}
 
 		return $closed;
+	}
+
+	/**
+	 * Close every run that has stopped checking in, when the setting does not allow Resume.
+	 *
+	 * The same end state as before ("errored": nothing minted, an administrator can
+	 * Restore it) but reached as soon as the heartbeat goes stale, not when the run's own
+	 * clock runs out minutes later.
+	 *
+	 * @param int $user_id Limit to one player (0 = everyone), for the lazy check on a page load.
+	 * @return int Runs closed.
+	 */
+	public static function close_stale_interrupted( $user_id = 0 ) {
+		if ( Nera_SAW_Mode::allows_resume() ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$t   = Nera_SAW_Database::table( 'runs' );
+		$cut = gmdate( 'Y-m-d H:i:s', self::ts( current_time( 'mysql' ) ) - Nera_SAW_Constants::heartbeat_stale_seconds() );
+
+		$sql = "SELECT id FROM {$t}
+			WHERE status = 'active' AND end_reason <> 'errored'
+			AND last_seen_at IS NOT NULL AND last_seen_at < %s";
+		$arg = array( $cut );
+		if ( (int) $user_id > 0 ) {
+			$sql  .= ' AND user_id = %d';
+			$arg[] = (int) $user_id;
+		}
+		$sql .= ' LIMIT 200';
+
+		$closed = 0;
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( $sql, $arg ) ) as $id ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$run = self::get_run( (int) $id );
+			if ( $run ) {
+				self::close_interrupted( $run );
+				$closed++;
+			}
+		}
+
+		return $closed;
+	}
+
+	/**
+	 * Where a player stands with a competition's run: the one answer every screen asks.
+	 *
+	 *   none   no run in progress.
+	 *   live   a run is in progress and its player is checking in (possibly in another tab).
+	 *   held   interrupted and held for Resume (only when the setting allows Resume);
+	 *          `until` is the unix time the hold ends.
+	 *   closed the newest run was closed after an interruption and waits for an
+	 *          administrator (it is not a run in progress: others may be played).
+	 *
+	 * Settles first: a stale run is closed or its hold expired right here, so the answer
+	 * never depends on the cron having fired.
+	 *
+	 * @param int $user_id        User ID.
+	 * @param int $competition_id Competition ID.
+	 * @return array{state: string, run: object|null, until: int}
+	 */
+	public static function live_state( $user_id, $competition_id ) {
+		$none = array( 'state' => 'none', 'run' => null, 'until' => 0 );
+		if ( (int) $user_id < 1 || (int) $competition_id < 1 ) {
+			return $none;
+		}
+
+		self::close_stale_interrupted( (int) $user_id );
+		self::expire_interrupted( (int) $user_id );
+
+		$active = self::active_run( (int) $competition_id, (int) $user_id );
+		if ( $active ) {
+			$info = self::pending_info( $active );
+			if ( $info ) {
+				return array( 'state' => 'held', 'run' => $active, 'until' => (int) $info['until'] );
+			}
+			return array( 'state' => 'live', 'run' => $active, 'until' => 0 );
+		}
+
+		global $wpdb;
+		$t      = Nera_SAW_Database::table( 'runs' );
+		$closed = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$t} WHERE user_id = %d AND competition_id = %d AND status = 'active' AND end_reason = 'errored' ORDER BY id DESC LIMIT 1",
+				(int) $user_id,
+				(int) $competition_id
+			)
+		);
+
+		// Only news while it is the player's latest run here: once they have played or ended
+		// another, the old closed run is not what they need to be told about.
+		if ( $closed ) {
+			$later = (int) $wpdb->get_var(
+				$wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE user_id = %d AND competition_id = %d AND id > %d", (int) $user_id, (int) $competition_id, (int) $closed->id )
+			);
+			if ( $later > 0 ) {
+				return $none;
+			}
+		}
+
+		return $closed ? array( 'state' => 'closed', 'run' => $closed, 'until' => 0 ) : $none;
+	}
+
+	/**
+	 * Does this state forbid starting another run?
+	 *
+	 * @param array $live Result of live_state().
+	 * @return bool
+	 */
+	public static function blocks_new_run( array $live ) {
+		return in_array( $live['state'], array( 'live', 'held' ), true );
+	}
+
+	/**
+	 * live_state() for every competition the player has a run in, keyed by competition ID.
+	 *
+	 * @param int $user_id User ID.
+	 * @return array<int, array>
+	 */
+	public static function live_states_for_user( $user_id ) {
+		if ( (int) $user_id < 1 ) {
+			return array();
+		}
+
+		global $wpdb;
+		$t   = Nera_SAW_Database::table( 'runs' );
+		$ids = $wpdb->get_col(
+			$wpdb->prepare( "SELECT DISTINCT competition_id FROM {$t} WHERE user_id = %d AND status = 'active'", (int) $user_id )
+		);
+
+		$out = array();
+		foreach ( (array) $ids as $cid ) {
+			$live = self::live_state( (int) $user_id, (int) $cid );
+			if ( 'none' !== $live['state'] ) {
+				$out[ (int) $cid ] = $live;
+			}
+		}
+
+		return $out;
 	}
 
 	/**

@@ -1,4 +1,4 @@
-=== Nera – Strike A Win ===
+=== Nera – Strike And Win ===
 Contributors: nera
 Requires at least: 6.0
 Tested up to: 6.8
@@ -10,7 +10,7 @@ Skill-based prize-competition quiz mechanic: paid entry → timed increasing-dif
 
 == Description ==
 
-Strike A Win adds a skill-based competition mechanic on top of WooCommerce and Lottery for WooCommerce:
+Strike And Win adds a skill-based competition mechanic on top of WooCommerce and Lottery for WooCommerce:
 
 * Players buy runs on a competition (tiered, fixed-price entry).
 * Each run is a timed, increasing-difficulty quiz, scored on the server.

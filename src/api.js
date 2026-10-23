@@ -122,17 +122,24 @@ export const api = {
 	},
 };
 
-// localStorage breadcrumb: ONLY { run_id } per competition. No questions,
-// answers, scores, or timings ever live here (server-authoritative).
+// localStorage progress for the run in hand, one entry per competition:
+// { run_id, answers: [{ slot_no, chosen_index }], spins, next_slot }.
+//
+// The quiz runs and scores in the browser and sends its answers once, at the end, so
+// nothing here is a network sync: it is what lets "Continue your run" put the player
+// back on the question they were on, with the answers they had already given. It never
+// holds questions, the answer key or timings. The server still scores the final
+// answers itself, so editing this can only change which answers are sent, which a
+// player can already do with the final request.
 export const breadcrumb = {
 	key( competitionId ) {
 		return `saw_run_${ competitionId }`;
 	},
-	save( competitionId, runId ) {
+	save( competitionId, runId, progress ) {
 		try {
 			localStorage.setItem(
 				this.key( competitionId ),
-				JSON.stringify( { run_id: runId } )
+				JSON.stringify( Object.assign( { run_id: runId }, progress || {} ) )
 			);
 		} catch ( e ) {}
 	},

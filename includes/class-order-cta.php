@@ -2,7 +2,7 @@
 /**
  * Post-purchase play CTAs (thank-you + My Account order view).
  *
- * Renders one merged "runs to play" card per Strike A Win competition on the
+ * Renders one merged "runs to play" card per Strike And Win competition on the
  * order (tiers collapsed), styled like the single-product CTA
  * (assets/css/order-cta.css): a count badge (the competition's total remaining
  * runs) + "N runs to play" + "Play quiz", linking to the competition play page
@@ -49,7 +49,7 @@ class Nera_SAW_Order_Cta {
 	}
 
 	/**
-	 * Play links for the Strike A Win competitions on an order — one merged card
+	 * Play links for the Strike And Win competitions on an order — one merged card
 	 * per competition (tiers collapsed).
 	 *
 	 * The badge number is the competition's total remaining runs across all the
@@ -157,7 +157,7 @@ class Nera_SAW_Order_Cta {
 			$runs_text  = '' !== $name
 				? sprintf(
 					/* translators: 1: competition name, 2: "N runs to play". */
-					__( '%1$s — %2$s', 'nera-strikeawin' ),
+					__( '%1$s: %2$s', 'nera-strikeawin' ),
 					$name,
 					$runs_label
 				)

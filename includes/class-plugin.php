@@ -62,6 +62,10 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-router.php';
 		require_once $dir . 'class-language.php';
 		require_once $dir . 'class-date.php';
+		require_once $dir . 'class-brand.php';
+		require_once $dir . 'class-copy.php';
+		require_once $dir . 'class-wallet.php';
+		require_once $dir . 'class-checkout.php';
 		require_once $dir . 'class-i18n.php';
 		require_once $dir . 'class-language-reach.php';
 		require_once $dir . 'class-language-switcher.php';
@@ -152,6 +156,10 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Language::init();
 		Nera_SAW_Language_Reach::init();
 		Nera_SAW_Language_Switcher::init();
+		Nera_SAW_Brand::init();
+		add_action( 'init', array( 'Nera_SAW_Copy', 'migrate' ), 20 );
+		Nera_SAW_Wallet::init();
+		Nera_SAW_Checkout::init();
 		Nera_SAW_Standalone_Chrome::init();
 		Nera_SAW_Standalone_Basket::init();
 		Nera_SAW_Stock_Page_Redirects::init();
@@ -169,7 +177,7 @@ class Nera_SAW_Plugin {
 	 */
 	public function notice_missing_woocommerce() {
 		echo '<div class="notice notice-error"><p>';
-		echo esc_html__( 'Nera Strike A Win requires WooCommerce to be active.', 'nera-strikeawin' );
+		echo esc_html__( 'Nera Strike And Win requires WooCommerce to be active.', 'nera-strikeawin' );
 		echo '</p></div>';
 	}
 }

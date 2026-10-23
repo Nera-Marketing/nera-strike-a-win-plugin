@@ -47,10 +47,18 @@ class Nera_SAW_Router {
 	const OPTION_FLUSH = 'nera_saw_flush_rules';
 
 	/**
-	 * Default prefix. Changeable in Settings, because a site may already own
-	 * /competitions/ or want the section under its own word.
+	 * Default prefix: none. The section owns the site root, so its pages live at
+	 * /how-it-works/, /checkout/ and so on, not under a sub-path. A site that does
+	 * want a prefix can still set one in the option below, but the pages then need
+	 * the matching parent page — see ADR 0032.
 	 */
-	const DEFAULT_PREFIX = 'strikeawin';
+	const DEFAULT_PREFIX = '';
+
+	/**
+	 * The prefix the section used before it took the site root. Requests under it
+	 * are redirected to the same address without it.
+	 */
+	const LEGACY_PREFIX = 'strikeawin';
 
 	/**
 	 * Hooks.
@@ -62,6 +70,7 @@ class Nera_SAW_Router {
 			return;
 		}
 
+		add_action( 'init', array( __CLASS__, 'redirect_legacy_prefix' ), 1 );
 		add_action( 'init', array( __CLASS__, 'add_rules' ) );
 		add_action( 'wp', array( __CLASS__, 'maybe_flush' ) );
 		add_filter( 'template_include', array( __CLASS__, 'template' ), 99 );
@@ -75,28 +84,75 @@ class Nera_SAW_Router {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * The configured prefix, without slashes.
+	 * The configured prefix, without slashes. Empty when the section owns the site
+	 * root, which is the default.
 	 *
 	 * @return string
 	 */
 	public static function prefix() {
-		// The root page's slug is the section's address: an administrator who wants
-		// the section at /competitions/ renames that page, which is where they
-		// would look. The stored option is only the fallback for a site whose root
-		// page has not been created yet.
-		if ( class_exists( 'Nera_SAW_Standalone_Pages' ) ) {
-			$root = Nera_SAW_Standalone_Pages::page_id( 'competitions' );
-			if ( $root && 'publish' === get_post_status( $root ) ) {
-				$slug = get_post_field( 'post_name', $root );
-				if ( $slug ) {
-					return $slug;
-				}
-			}
+		$prefix = (string) get_option( self::OPTION_PREFIX, self::DEFAULT_PREFIX );
+		return trim( sanitize_title( $prefix ), '/' );
+	}
+
+	/**
+	 * Does a URL path belong to the section?
+	 *
+	 * With a prefix, the paths under it. Without one the section is the whole
+	 * site, so everything is in it except WordPress's own machinery (admin, REST,
+	 * login, cron, static files), which has no business being stamped with the
+	 * section's language or basket.
+	 *
+	 * @param string $path URL path.
+	 * @return bool
+	 */
+	public static function path_in_section( $path ) {
+		$path   = trim( (string) $path, '/' );
+		$prefix = self::prefix();
+
+		if ( '' !== $prefix ) {
+			return $path === $prefix || 0 === strpos( $path, $prefix . '/' );
 		}
 
-		$prefix = (string) get_option( self::OPTION_PREFIX, self::DEFAULT_PREFIX );
-		$prefix = trim( sanitize_title( $prefix ) );
-		return $prefix ? $prefix : self::DEFAULT_PREFIX;
+		if ( preg_match( '#^(wp-admin|wp-json|wp-login\.php|wp-cron\.php|xmlrpc\.php|wp-content|wp-includes)(/|$)#', $path ) ) {
+			return false;
+		}
+
+		return ! preg_match( '#\.[a-z0-9]{2,5}$#i', $path );
+	}
+
+	/**
+	 * Send an address under the old prefix to the same address without it.
+	 *
+	 * Permanent, and with the query string kept, so a bookmark, an email link or a
+	 * search result for /strikeawin/how-it-works/?saw_lang=ru still lands where it
+	 * meant to. Only while the section has no prefix of its own.
+	 */
+	public static function redirect_legacy_prefix() {
+		if ( is_admin() || '' !== self::prefix() || ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+
+		$uri  = esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		$base = trailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) );
+		$legacy = $base . self::LEGACY_PREFIX;
+
+		if ( $path !== $legacy && 0 !== strpos( $path, $legacy . '/' ) ) {
+			return;
+		}
+
+		$rest = ltrim( substr( $path, strlen( $legacy ) ), '/' );
+		$to   = home_url( user_trailingslashit( $rest ) );
+
+		// Merged, not appended: building the address may already have stamped the
+		// current language on it, and the request's own copy must not repeat it.
+		parse_str( (string) wp_parse_url( $uri, PHP_URL_QUERY ), $args );
+		if ( $args ) {
+			$to = add_query_arg( $args, $to );
+		}
+
+		wp_safe_redirect( $to, 301 );
+		exit;
 	}
 
 	/**
@@ -117,14 +173,12 @@ class Nera_SAW_Router {
 			}
 		}
 
-		$path = self::prefix();
-		if ( $route ) {
-			$path .= '/' . ltrim( $route, '/' );
-		}
-		if ( $arg ) {
-			$path .= '/' . ltrim( $arg, '/' );
-		}
-		return home_url( user_trailingslashit( $path ) );
+		$segments = array_filter(
+			array( self::prefix(), trim( (string) $route, '/' ), trim( (string) $arg, '/' ) ),
+			'strlen'
+		);
+		$path     = implode( '/', $segments );
+		return '' === $path ? home_url( '/' ) : home_url( user_trailingslashit( $path ) );
 	}
 
 	/**
@@ -245,12 +299,12 @@ class Nera_SAW_Router {
 	 * Register the section's rewrite rules.
 	 */
 	public static function add_rules() {
-		$prefix = preg_quote( self::prefix(), '#' );
+		$prefix = '' === self::prefix() ? '' : preg_quote( self::prefix(), '#' ) . '/';
 
 		// Most specific first: a two-segment route must not be eaten by the
 		// one-segment catch-all below it.
 		add_rewrite_rule(
-			'^' . $prefix . '/competition/([^/]+)/?$',
+			'^' . $prefix . 'competition/([^/]+)/?$',
 			'index.php?' . self::QV_ROUTE . '=competition&' . self::QV_ARG . '=$matches[1]',
 			'top'
 		);
@@ -296,16 +350,10 @@ class Nera_SAW_Router {
 	}
 
 	/**
-	 * Section stylesheet.
-	 *
-	 * Only on a standalone route: the theme's own pages must not inherit these
-	 * tokens, and a site running mix mode never loads this at all.
+	 * The section's stylesheet and scripts, from this plugin's own folder: the fallback for a
+	 * site whose theme does not supply them.
 	 */
-	public static function assets() {
-		if ( ! self::is_standalone_screen() ) {
-			return;
-		}
-
+	private static function enqueue_section_assets() {
 		$saw_css = NERA_SAW_PLUGIN_DIR . 'assets/css/standalone.css';
 		wp_enqueue_style(
 			'nera-saw-standalone',
@@ -337,9 +385,53 @@ class Nera_SAW_Router {
 		}
 
 		/*
+		 * The entry pop-up's visibility and cookie, client-side: pages come out of a
+		 * full-page cache that never saw the visitor's cookie. See entry-gate.js.
+		 */
+		if ( class_exists( 'Nera_SAW_Language_Switcher' ) ) {
+			wp_enqueue_script(
+				'nera-saw-entry-gate',
+				NERA_SAW_PLUGIN_URL . 'assets/js/entry-gate.js',
+				array(),
+				NERA_SAW_VERSION,
+				true
+			);
+		}
+
+		/*
+		 * Countdown to the draw, on every section screen that prints one (the cards, the
+		 * competition page). Small, and a no-op where there is no countdown.
+		 */
+		wp_enqueue_script(
+			'nera-saw-countdown',
+			NERA_SAW_PLUGIN_URL . 'assets/js/countdown.js',
+			array(),
+			(string) filemtime( NERA_SAW_PLUGIN_DIR . 'assets/js/countdown.js' ),
+			true
+		);
+		wp_localize_script(
+			'nera-saw-countdown',
+			'nsawCountdown',
+			array(
+				'units'  => Nera_SAW_Date::countdown_units(),
+				/* translators: %s: time remaining, e.g. "2d 4h" */
+				'left'   => __( '%s left', 'nera-strikeawin' ),
+				'closed' => __( 'Closed', 'nera-strikeawin' ),
+			)
+		);
+
+		/*
 		 * "Enter now" confirms before it leaves, on the competition screen only.
 		 */
 		if ( 'competition' === self::current_route() ) {
+			// The runs stepper and the Enter button's "Enter for £50 (2 runs)" label.
+			wp_enqueue_script(
+				'nera-saw-competition-buy',
+				NERA_SAW_PLUGIN_URL . 'assets/js/competition-buy.js',
+				array(),
+				(string) filemtime( NERA_SAW_PLUGIN_DIR . 'assets/js/competition-buy.js' ),
+				true
+			);
 			wp_enqueue_script(
 				'nera-saw-add-to-basket',
 				NERA_SAW_PLUGIN_URL . 'assets/js/add-to-basket.js',
@@ -398,6 +490,24 @@ class Nera_SAW_Router {
 					true
 				);
 			}
+		}
+	}
+
+	/**
+	 * Section stylesheet.
+	 *
+	 * Only on a standalone route: the theme's own pages must not inherit these
+	 * tokens, and a site running mix mode never loads this at all.
+	 */
+	public static function assets() {
+		if ( ! self::is_standalone_screen() ) {
+			return;
+		}
+
+		// The section's stylesheet and scripts come from the active theme when it supplies them
+		// (the Strike And Win theme does); otherwise from this plugin, so any theme still renders.
+		if ( ! apply_filters( 'nera_saw_standalone_assets_from_theme', false ) ) {
+			self::enqueue_section_assets();
 		}
 
 		/*

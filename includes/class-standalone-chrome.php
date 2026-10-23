@@ -64,6 +64,11 @@ class Nera_SAW_Standalone_Chrome {
 		add_action( 'woocommerce_thankyou', array( __CLASS__, 'back_to_competitions' ), 6 );
 		add_action( 'template_redirect', array( __CLASS__, 'drop_order_again' ), 20 );
 
+		// And once more just before the stylesheets print (wp_head 8, after wp_enqueue_scripts at 1): a child theme's own enqueue runs at
+		// the same priority as the pass above, and its stylesheet hangs off the parent's
+		// bundle, which would otherwise be printed as that stylesheet's dependency.
+		add_action( 'wp_head', array( __CLASS__, 'drop_theme_assets' ), 7 );
+
 		add_action( 'wp_head', array( __CLASS__, 'drop_site_furniture' ), 0 );
 
 		// WooCommerce template overrides live in the theme too, and one of them on

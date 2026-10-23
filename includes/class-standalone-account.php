@@ -172,13 +172,7 @@ class Nera_SAW_Standalone_Account {
 			return false;
 		}
 
-		$prefix = trim( (string) Nera_SAW_Router::prefix(), '/' );
-		if ( '' === $prefix ) {
-			return false;
-		}
-
-		$path = trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' );
-		return $path === $prefix || 0 === strpos( $path, $prefix . '/' );
+		return Nera_SAW_Router::path_in_section( (string) wp_parse_url( $url, PHP_URL_PATH ) );
 	}
 
 	/* ---------------------------------------------------------------------

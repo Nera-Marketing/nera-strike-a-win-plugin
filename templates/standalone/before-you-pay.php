@@ -35,7 +35,17 @@ Nera_SAW_Router::part(
 	)
 );
 
-Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_heading ) );
+// Back goes to the competition being bought, which the basket always knows; a visitor
+// with an empty basket gets the list.
+$saw_back = ( $saw_entry && ! empty( $saw_entry['spec']['id'] ) ) ? Nera_SAW_Router::competition_url( '', $saw_entry['spec']['id'] ) : '';
+
+Nera_SAW_Router::part(
+	'screen-head.php',
+	array(
+		'saw_screen_title' => $saw_heading,
+		'saw_back_url'     => $saw_back,
+	)
+);
 ?>
 
 <div class="saw-screen saw-screen--narrow">
@@ -119,7 +129,7 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 
 			if ( $saw_tier ) {
 				$saw_facts[] = array(
-					'label' => __( 'Ticket ceiling', 'nera-strikeawin' ),
+					'label' => __( 'Most this run', 'nera-strikeawin' ),
 					'value' => sprintf(
 						/* translators: %s: tickets */
 						_n( '%s ticket', '%s tickets', $saw_tier['perfect_run'] * $saw_qty, 'nera-strikeawin' ),
@@ -131,7 +141,7 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 			if ( $saw_spec['closes_timestamp'] ) {
 				$saw_facts[] = array(
 					'label' => __( 'Closes', 'nera-strikeawin' ),
-					'value' => Nera_SAW_Date::localized( $saw_spec['closes_timestamp'], get_option( 'date_format' ) . ', ' . get_option( 'time_format' ) ),
+					'value' => Nera_SAW_Date::display( $saw_spec['closes_timestamp'] ),
 				);
 			}
 			?>
@@ -156,31 +166,23 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 		 * an unticked box from getting past this screen.
 		 */
 		$saw_checkout = Nera_SAW_Standalone_Basket::checkout_url();
+
+		// Sent back from checkout because a box was not ticked (no script, or script failed).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saw_missing = isset( $_GET[ Nera_SAW_Checkout::ARG_MISSING ] );
 		?>
-		<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>">
+		<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent>
 
 			<?php if ( class_exists( 'Nera_SAW_Language' ) ) { Nera_SAW_Language::hidden_field(); } ?>
+			<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_CHECKED ); ?>" value="1">
 
-			<?php
-			/*
-			 * Pre-ticked, not pre-answered: an account already carrying a real
-			 * age-shield verification (the same source the entry gate itself
-			 * trusts — see Nera_SAW_Language_Switcher::age_state()) has already
-			 * given this answer once and should not have to tick the identical
-			 * box again on every single purchase. Still a real, un-disabled
-			 * checkbox the player can untick, and still `required`, so an
-			 * unverified account gets exactly the same native browser gate as
-			 * before.
-			 */
-			$saw_age_verified = class_exists( 'Nera_SAW_Language_Switcher' ) && Nera_SAW_Language_Switcher::age_state()['verified'];
-			?>
 			<label class="saw-check">
-				<input type="checkbox" name="saw_confirm_age" value="1" required<?php checked( $saw_age_verified ); ?>>
+				<input type="checkbox" name="saw_confirm_age" value="1" autocomplete="off" aria-describedby="saw-consent-msg"<?php echo $saw_missing ? ' aria-invalid="true"' : ''; ?>>
 				<span><?php echo esc_html( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_age' ) ); ?></span>
 			</label>
 
 			<label class="saw-check">
-				<input type="checkbox" name="saw_confirm_rules" value="1" required>
+				<input type="checkbox" name="saw_confirm_rules" value="1" autocomplete="off" aria-describedby="saw-consent-msg"<?php echo $saw_missing ? ' aria-invalid="true"' : ''; ?>>
 				<span><?php echo wp_kses_post( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_rules' ) ); ?></span>
 			</label>
 
@@ -195,6 +197,7 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 				: trim( $saw_cta . ' ' . $saw_sum );
 			?>
 			<button type="submit" class="saw-cta"><?php echo esc_html( $saw_label ); ?></button>
+			<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick both boxes to continue', 'nera-strikeawin' ); ?></p>
 
 			<?php
 			/*
@@ -220,6 +223,64 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => $saw_head
 
 	</div>
 </div>
+
+<script>
+( function () {
+	var form = document.querySelector( '[data-saw-consent]' );
+	if ( ! form ) {
+		return;
+	}
+	var boxes = form.querySelectorAll( 'input[type="checkbox"]' );
+	var msg = document.getElementById( 'saw-consent-msg' );
+
+	function show( on ) {
+		if ( msg ) {
+			msg.hidden = ! on;
+		}
+		Array.prototype.forEach.call( boxes, function ( box ) {
+			if ( on && ! box.checked ) {
+				box.setAttribute( 'aria-invalid', 'true' );
+			} else {
+				box.removeAttribute( 'aria-invalid' );
+			}
+		} );
+	}
+
+	// Consent is given afresh each visit: a page restored by Back or Forward would
+	// otherwise bring last time's ticks with it.
+	function clear() {
+		Array.prototype.forEach.call( boxes, function ( box ) {
+			box.checked = false;
+		} );
+		show( false );
+	}
+	clear();
+	window.addEventListener( 'pageshow', function ( event ) {
+		if ( event.persisted ) {
+			clear();
+		}
+	} );
+
+	form.addEventListener( 'change', function () {
+		var all = Array.prototype.every.call( boxes, function ( box ) {
+			return box.checked;
+		} );
+		if ( all || ! msg.hidden ) {
+			show( ! all );
+		}
+	} );
+	form.addEventListener( 'submit', function ( event ) {
+		var all = Array.prototype.every.call( boxes, function ( box ) {
+			return box.checked;
+		} );
+		if ( ! all ) {
+			// Without this script the server sends the player back here with the same message.
+			event.preventDefault();
+			show( true );
+		}
+	} );
+}() );
+</script>
 
 <?php
 Nera_SAW_Router::part( 'footer.php' );

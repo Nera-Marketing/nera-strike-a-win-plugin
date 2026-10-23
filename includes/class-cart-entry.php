@@ -241,7 +241,7 @@ class Nera_SAW_Cart_Entry {
 		}
 		$html = self::tier_price_badge_html( $tier );
 		/**
-		 * Filter the cart unit badge for a Strike A Win tier line.
+		 * Filter the cart unit badge for a Strike And Win tier line.
 		 *
 		 * @param string $html      Badge HTML.
 		 * @param array  $tier      Resolved tier.
@@ -353,7 +353,7 @@ class Nera_SAW_Cart_Entry {
 
 		return sprintf(
 			/* translators: 1: tier label, 2: formatted price. Result e.g. "Gold - £5.00 / run". */
-			__( '%1$s - %2$s / run', 'nera-strikeawin' ),
+			__( '%1$s to %2$s / run', 'nera-strikeawin' ),
 			(string) $tier['label'],
 			$price_text
 		);
@@ -561,6 +561,9 @@ class Nera_SAW_Cart_Entry {
 		$html  = '<dl class="saw-order-runs">';
 		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs purchased', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $total ) . '</dd></div>';
 		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs in progress', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $in_progress ) . '</dd></div>';
+		if ( ! empty( $stats['interrupted'] ) ) {
+			$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs interrupted', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) (int) $stats['interrupted'] ) . '</dd></div>';
+		}
 		$html .= '<div class="saw-order-runs__stat"><dt>' . esc_html__( 'Runs completed', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $completed ) . '</dd></div>';
 		$html .= '<div class="saw-order-runs__stat saw-order-runs__stat--remaining"><dt>' . esc_html__( 'Runs remaining', 'nera-strikeawin' ) . '</dt><dd>' . esc_html( (string) $remaining ) . '</dd></div>';
 		$html .= '</dl>';
@@ -659,7 +662,7 @@ class Nera_SAW_Cart_Entry {
 	}
 
 	/**
-	 * Drop the lottery "Ticket Number( s )" meta from Strike A Win competition
+	 * Drop the lottery "Ticket Number( s )" meta from Strike And Win competition
 	 * lines on the thank-you (order-received) page only.
 	 *
 	 * Buyers earn tickets by playing runs, not at purchase, so the raw ticket

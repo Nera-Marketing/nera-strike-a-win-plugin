@@ -1,17 +1,17 @@
 <?php
 /**
- * Five legal/help screens as children of the standalone section (client
+ * Five legal/help screens, top-level pages of the standalone section (client
  * findings #4/#9/#48): Terms and Conditions, Privacy Policy, Complaints,
  * Help and support, and Our commitment to player protection — each
- * reachable at `/strikeawin/<slug>/`, in the section's own skin, instead
- * of the stock theme's.
+ * reachable at `/<slug>/`, in the section's own skin (ADR 0032: the section
+ * owns the site root, so there is no `/strikeawin/` prefix any more).
  *
  * Content stays wherever it already lives and is already edited — this
  * class never forks a copy of anything:
- *   - Terms and Privacy Policy mirror the main site's own real page (its
- *     `post_content`, live, every request) — an administrator keeps
- *     editing that same page in wp-admin exactly as before. See
- *     `templates/standalone/legal-terms.php` / `legal-privacy.php`.
+ *   - Terms and Privacy Policy print their own page's `post_content`, edited
+ *     in wp-admin like any page; WooCommerce's Terms setting and WordPress's
+ *     Privacy setting point at them. See `templates/standalone/legal-terms.php`
+ *     / `legal-privacy.php`.
  *   - Complaints, Help and support, and Our commitment to player
  *     protection call straight into the sibling plugin that already owns
  *     that content — the same pattern
@@ -19,19 +19,13 @@
  *     for two OTHER sibling plugins (self-exclusion, spending limit).
  *     Admin keeps editing each one's own settings screen. See
  *     `templates/standalone/legal-complaints.php` / `legal-help.php` /
- *     `legal-player-protection.php`.
+ *     `legal-player-protection.php`. Each sibling plugin's own "page" setting
+ *     points at the section's page, so its footer link stays in the section.
  *
- * Every row is OPTIONAL, not assumed: the three plugin-backed screens
- * register only when that exact plugin is active (`class_exists()`
- * below), and Terms/Privacy register only when the page they mirror
- * actually exists. Deactivating a sibling plugin makes its standalone row
- * quietly disappear on the next `Nera_SAW_Standalone_Pages::ensure()`
+ * The three plugin-backed screens register only when that exact plugin is
+ * active (`class_exists()` below). Deactivating a sibling plugin makes its
+ * row quietly disappear on the next `Nera_SAW_Standalone_Pages::ensure()`
  * run, rather than leaving a broken page behind.
- *
- * Nothing here edits a sibling plugin's own files — only this plugin's
- * own filter (`nera_saw_standalone_pages`) and, for Complaints' own CSS
- * timing quirk, an early hook on a stock WordPress action this plugin is
- * equally entitled to use.
  *
  * @package Nera_Strikeawin
  */
@@ -69,34 +63,30 @@ class Nera_SAW_Standalone_Legal_Pages {
 	 * @return array
 	 */
 	public static function add_pages( array $pages ) {
-		if ( get_page_by_path( 'terms-and-conditions' ) ) {
-			$pages['terms-and-conditions'] = array(
-				'title'    => __( 'Terms and Conditions', 'nera-strikeawin' ),
-				'slug'     => 'terms-and-conditions',
-				'template' => 'legal-terms.php',
-				'parent'   => 'competitions',
-			);
-		}
+		// Terms and Privacy hold their own text: the page's content is what the
+		// screen prints, edited in wp-admin like any page. They are also the pages
+		// WooCommerce's Terms setting and WordPress's Privacy setting point at
+		// (see tools/flatten-standalone.php), so nothing sits behind them.
+		$pages['terms-and-conditions'] = array(
+			'title'    => __( 'Terms and Conditions', 'nera-strikeawin' ),
+			'slug'     => 'terms-and-conditions',
+			'template' => 'legal-terms.php',
+			'parent'   => '',
+		);
 
-		// WordPress's own "Privacy Policy" setting, not a hardcoded slug —
-		// whichever real page an admin has assigned there is the one
-		// mirrored, the same source `wp_privacy_policy_link()` and every
-		// core privacy-policy admin notice already read.
-		if ( get_option( 'wp_page_for_privacy_policy' ) ) {
-			$pages['privacy-policy'] = array(
-				'title'    => __( 'Privacy Policy', 'nera-strikeawin' ),
-				'slug'     => 'privacy-policy',
-				'template' => 'legal-privacy.php',
-				'parent'   => 'competitions',
-			);
-		}
+		$pages['privacy-policy'] = array(
+			'title'    => __( 'Privacy Policy', 'nera-strikeawin' ),
+			'slug'     => 'privacy-policy',
+			'template' => 'legal-privacy.php',
+			'parent'   => '',
+		);
 
 		if ( class_exists( 'Nera_CMP_Shortcodes' ) ) {
 			$pages['complaints'] = array(
 				'title'    => __( 'Complaints', 'nera-strikeawin' ),
 				'slug'     => 'complaints',
 				'template' => 'legal-complaints.php',
-				'parent'   => 'competitions',
+				'parent'   => '',
 			);
 		}
 
@@ -105,7 +95,7 @@ class Nera_SAW_Standalone_Legal_Pages {
 				'title'    => __( 'Help and support', 'nera-strikeawin' ),
 				'slug'     => 'help-and-support',
 				'template' => 'legal-help.php',
-				'parent'   => 'competitions',
+				'parent'   => '',
 			);
 		}
 
@@ -114,7 +104,7 @@ class Nera_SAW_Standalone_Legal_Pages {
 				'title'    => __( 'Our commitment to player protection', 'nera-strikeawin' ),
 				'slug'     => 'our-commitment-to-player-protection',
 				'template' => 'legal-player-protection.php',
-				'parent'   => 'competitions',
+				'parent'   => '',
 			);
 		}
 
@@ -177,14 +167,15 @@ class Nera_SAW_Standalone_Legal_Pages {
 			return;
 		}
 
+		$terms_id = Nera_SAW_Standalone_Pages::page_id( 'terms-and-conditions' );
 		self::ensure_ru_translation(
-			get_page_by_path( 'terms-and-conditions' ),
+			$terms_id ? get_post( $terms_id ) : null,
 			'Условия использования (RU)',
 			'terms-and-conditions-ru',
 			NERA_SAW_PLUGIN_DIR . 'languages/ru/legal-terms-content.html'
 		);
 
-		$privacy_id = (int) get_option( 'wp_page_for_privacy_policy' );
+		$privacy_id = Nera_SAW_Standalone_Pages::page_id( 'privacy-policy' );
 		self::ensure_ru_translation(
 			$privacy_id ? get_post( $privacy_id ) : null,
 			'Политика конфиденциальности (RU)',

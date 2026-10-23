@@ -1,5 +1,5 @@
 /**
- * Strike A Win — single-product tier widget + runs pill.
+ * Strike And Win — single-product tier widget + runs pill.
  *
  * Swaps the theme purchase card's native price/quantity block for tier tabs
  * (selecting a tab drives the price + checkout tier), keeps a quantity selector

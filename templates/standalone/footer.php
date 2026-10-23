@@ -54,12 +54,19 @@ $saw_bare = isset( $saw_bare ) ? (bool) $saw_bare : false;
 
 <?php
 /*
+ * Rendered on every standalone screen, hidden when the cookie is already here,
+ * and revealed or kept hidden by entry-gate.js from the cookie itself — the page
+ * may come from a full-page cache that never saw this visitor's cookie.
+ *
  * Last in the document on purpose. It is positioned over the page by CSS rather
  * than by sitting in front of it in the markup, so a reader whose stylesheet did
  * not load still reaches the content, and a crawler is not met by a dialog.
  */
 if ( class_exists( 'Nera_SAW_Language_Switcher' ) && Nera_SAW_Language_Switcher::gate_due() ) {
 	Nera_SAW_Router::part( 'entry-gate.php' );
+	// Scripting off: a cached page may carry the gate hidden, so show it anyway —
+	// unless PHP itself saw the cookie (data-entered), which no-JS visitors rely on.
+	echo '<noscript><style>.saw-gate[hidden]:not([data-entered]){display:flex}</style></noscript>';
 }
 ?>
 

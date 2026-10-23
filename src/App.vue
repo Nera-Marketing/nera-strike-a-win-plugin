@@ -173,16 +173,15 @@ const stageCount = ref( 1 );
 // `next.stage_label` wherever `next.reward_label` was read before.
 const stageBreakLabel = ref( '' );
 
-// The in-question stage bar pill reads the same combined sentence off the
-// current slot once one has loaded. Before that — the language screen, which
-// has no slot yet — falls back to the old client-built fragment (stage
-// number/count and band label only, no reward clause: the pre-run seed this
-// composes from, window.NeraSAW.stageCount/firstStageLabel, carries no
-// reward count to build the full sentence from). English-only in that one,
-// brief, pre-run moment; everything after a slot has actually loaded is the
-// server's fully translated sentence.
+// The stage chip in the header is the SHORT label -- "Stage 2 of 4 · Medium" -- on
+// every screen, as in the design. It used to read the server's combined sentence
+// off the slot once one had loaded ("... · 2 tickets per correct answer"), so the
+// chip changed length between the stage-break screen (no slot yet: short) and the
+// question screens (long), and repeated what "Worth N tickets" already says. The
+// reward clause stays where it belongs, on the stage-break sub-line
+// (stageBreakLabel) and the Worth chip.
 const stagePillLabel = computed( () =>
-	slot.stage_label || fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
+	fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
 );
 
 // "Run X of N" (client finding #36 / requirements.md's own "Run 1 of 3"):
@@ -351,6 +350,49 @@ function onPageHide() {
  * ------------------------------------------------------------------------- */
 const resumePolicy = ( window.NeraSAW && window.NeraSAW.resumePolicy ) || 'resume';
 
+// A small "still here" ping while a run is on screen. The quiz still runs and scores
+// in the browser and sends its answers once, at the end; this carries nothing but the
+// run id and only lets the server tell a player who is here from one who has gone.
+// One request in flight at a time, and never queued behind a slow one.
+const heartbeatSeconds = Number( ( window.NeraSAW && window.NeraSAW.heartbeatSeconds ) || 0 );
+let pingTimer = null;
+let pingInFlight = false;
+
+async function pingOnce() {
+	if ( pingInFlight || ! runId.value || ! quizSessionActive ) {
+		return;
+	}
+	pingInFlight = true;
+	try {
+		const r = await api.heartbeat( runId.value );
+		// The server saw a gap (a long network stall, a sleeping laptop): handle it the
+		// way a tab regaining focus is handled.
+		if ( r && ( r.held || r.errored ) ) {
+			pingInFlight = false;
+			stopPing();
+			await checkAfterReturn();
+		}
+	} catch ( e ) {
+		// A missed ping is not an error: the next one tries again.
+	} finally {
+		pingInFlight = false;
+	}
+}
+
+function startPing() {
+	if ( pingTimer || heartbeatSeconds < 1 || typeof window === 'undefined' ) {
+		return;
+	}
+	pingTimer = window.setInterval( pingOnce, heartbeatSeconds * 1000 );
+}
+
+function stopPing() {
+	if ( pingTimer ) {
+		window.clearInterval( pingTimer );
+		pingTimer = null;
+	}
+}
+
 // Resume the run, then re-read the live question so its clock is the server's.
 async function resumeThen( slotNo ) {
 	try {
@@ -512,8 +554,11 @@ const visibleTicketNumbers = computed( () =>
 	showAllTicketNumbers.value ? ticketNumbers.value : ticketNumbers.value.slice( 0, 6 )
 );
 const extraTicketCount = computed( () => Math.max( 0, ticketNumbers.value.length - 6 ) );
-function revealAllTicketNumbers() {
-	showAllTicketNumbers.value = true;
+// "+N more" opens the whole list and the same button closes it again ("Show less"):
+// it used to be one-way, so a player with a few hundred numbers could not get the
+// results card back to its normal height.
+function toggleAllTicketNumbers() {
+	showAllTicketNumbers.value = ! showAllTicketNumbers.value;
 }
 
 function isPlaying() {
@@ -612,11 +657,11 @@ const revealAnnouncement = computed( () => {
 	if ( lastResult.timed_out ) {
 		return answer
 			? t( 'revealTimeout', 'Time up, no answer counted. The correct answer was: %s' ).replace( '%s', answer )
-			: t( 'revealTimeoutBare', 'Time up — no answer counted.' );
+			: t( 'revealTimeoutBare', 'Time up. No answer counted.' );
 	}
 	return answer
 		? t( 'revealWrong', 'Wrong. The correct answer was: %s' ).replace( '%s', answer )
-		: t( 'revealWrongBare', 'Wrong — no tickets.' );
+		: t( 'revealWrongBare', 'Wrong. No tickets.' );
 } );
 
 // Green on the correct option; red only on a pick the server actually scored. A
@@ -668,6 +713,7 @@ function retry() {
 	errorMsg.value = '';
 	canRetry.value = false;
 	quizSessionActive = true;
+	startPing();
 	setupNavigationGuards();
 	armNavigationGuard();
 	phase.value = 'loading';
@@ -733,6 +779,7 @@ function releaseNavigationGuard() {
 	// expires after we have abandoned would try to serve the next slot of a run
 	// that is already finalized.
 	clearHold();
+	stopPing();
 	navGuardActive = false;
 	disarmHistoryTrap();
 	teardownNavigationGuards();
@@ -1059,15 +1106,33 @@ async function start() {
 	try {
 		const state = await api.startRun( props.competitionId, props.tier, props.startToken, chosenLanguage.value );
 		applyState( state );
-		breadcrumb.save( props.competitionId, runId.value );
+		// The same run as the one this browser was playing: pick the answers up where the
+		// player left them. Anything else (a new run, another device, cleared storage) starts
+		// from question 1 with nothing answered.
+		const saved = breadcrumb.read( props.competitionId );
+		const resumeFrom = ( saved && saved.run_id === runId.value && Array.isArray( saved.answers ) && saved.answers.length ) ? saved : null;
+		if ( resumeFrom ) {
+			experimentalAnswers.splice( 0, experimentalAnswers.length, ...resumeFrom.answers );
+			spinsSoFar.value = Number( resumeFrom.spins ) || 0;
+		} else {
+			experimentalAnswers.splice( 0, experimentalAnswers.length );
+			breadcrumb.save( props.competitionId, runId.value );
+		}
 		if ( state.status === 'finalized' ) {
 			quizSessionActive = false;
 			return toEnd();
 		}
 		quizSessionActive = true;
+		startPing();
 		armNavigationGuard();
 		if ( props.leaveNow ) {
 			return leaveNowFlow();
+		}
+		if ( resumeFrom ) {
+			// The question the player was on comes back with a full clock and may be answered
+			// again: it was never recorded. Questions already answered stay answered.
+			const nextSlot = Math.max( 1, Number( resumeFrom.next_slot ) || ( resumeFrom.answers.length + 1 ) );
+			return advanceAfterAnswer( buildExperimentalAdvanceState( nextSlot ) );
 		}
 		if ( maybeShowStageBreak( state ) ) {
 			return;
@@ -1077,7 +1142,7 @@ async function start() {
 		// Expired/invalid Start token: the play session lapsed. Show a friendly
 		// notice and reload the Overview to issue a fresh token (no run consumed).
 		if ( e && e.code === 'saw_bad_token' ) {
-			errorMsg.value = t( 'sessionExpired', 'Your play session expired — refreshing…' );
+			errorMsg.value = t( 'sessionExpired', 'Your play session expired. Refreshing…' );
 			phase.value = 'error';
 			if ( typeof window !== 'undefined' ) {
 				window.setTimeout( function () { window.location.reload(); }, 1600 );
@@ -1194,6 +1259,10 @@ function buildExperimentalAdvanceState( nextSlotNo ) {
 				stage_no: next.stage_no,
 				stage_count: next.stage_count,
 				reward_label: next.stage_reward_label,
+				// The stage-break sub-line ("Stage 2 of 4 · Moderate · 2 tickets per correct
+				// answer") reads this. The server's own look-ahead carries it; this client-built
+				// copy did not, so every stage after the first showed a blank sub-line.
+				stage_label: next.stage_label,
 				level_label: next.level_label,
 				level_text_color: next.level_text_color,
 			}
@@ -1224,6 +1293,12 @@ async function submit( option ) {
 
 	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
 	spinsSoFar.value = ( spinsSoFar.value || 0 ) + awarded;
+	// Kept in this browser (no request) so Continue your run can restore it.
+	breadcrumb.save( props.competitionId, runId.value, {
+		answers: experimentalAnswers.slice(),
+		spins: spinsSoFar.value,
+		next_slot: slot.slot_no + 1,
+	} );
 	Object.assign( lastResult, {
 		correct: isCorrect,
 		timed_out: ( '' === option ),
@@ -1384,7 +1459,6 @@ onUnmounted( () => {
 				<div class="saw-stagebreak__badge" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">{{ stageNo }}</div>
 				<h2 class="saw-stagebreak__title">{{ t('stageBreakHeadline_' + stageNo, slot.level_label) }}</h2>
 				<p class="saw-stagebreak__sub">{{ stageBreakLabel }}</p>
-				<p v-if="runOfTotalLabel" class="saw-stagebreak__run">{{ runOfTotalLabel }}</p>
 				<button type="button" class="saw-stagebreak__continue" @click="continueFromStageBreak">
 					{{ t('continueLabel', 'Continue') }}
 				</button>
@@ -1395,7 +1469,6 @@ onUnmounted( () => {
 					<div>
 						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}</p>
 						<span class="saw-qbody__worth">{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span>
-						<span v-if="runOfTotalLabel" class="saw-qbody__run">{{ runOfTotalLabel }}</span>
 					</div>
 					<div
 						class="saw-qtimer"
@@ -1475,13 +1548,14 @@ onUnmounted( () => {
 					<div class="saw-results__numbers">
 						<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
 						<button
-							v-if="!showAllTicketNumbers && extraTicketCount > 0"
+							v-if="extraTicketCount > 0"
 							type="button"
 							class="saw-numchip saw-numchip--more"
-							@click="revealAllTicketNumbers"
-						>{{ fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
+							:aria-expanded="showAllTicketNumbers"
+							@click="toggleAllTicketNumbers"
+						>{{ showAllTicketNumbers ? t('showLess', 'Show less') : fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
 					</div>
-					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are allocated at random from this draw's pool.") }}</p>
+					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.") }}</p>
 					<div class="saw-results__divider"></div>
 					<p class="saw-results__fineprint">
 						<template v-if="drawDate">{{ fmt('drawDatePrefix', 'Draw: %s', drawDate) }}. </template>{{ t('drawInfoWithEntry', "Random draw, independently witnessed. You'll be notified either way.") }}
@@ -1874,10 +1948,6 @@ onUnmounted( () => {
 }
 .saw-stagebreak__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-text); }
 .saw-stagebreak__sub { margin: 0 0 26px; color: var(--saw-text-muted); font-size: 14px; }
-.saw-stagebreak__run { margin: -18px 0 26px; color: var(--saw-text-muted); font-size: 13px; font-weight: 600; }
-/* Only renders alongside .saw-stagebreak__sub (both share one v-if ancestor,
-   .saw-stagebreak), so the negative top margin above just closes the gap its
-   own 26px bottom margin left — never applied with nothing above it. */
 .saw-stagebreak__continue {
 	padding: 12px 30px; border: 0; border-radius: 12px;
 	background: var(--saw-brand); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
@@ -1895,7 +1965,6 @@ onUnmounted( () => {
 	border: 1.5px solid var(--saw-level, var(--saw-brand)); color: var(--saw-level, var(--saw-brand));
 	font-size: 12px; font-weight: 700;
 }
-.saw-qbody__run { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--saw-text-muted); }
 
 /* The circular per-question countdown, replacing the old horizontal bar to
    match the reference. A ring drawn twice — a faint full track, and a solid

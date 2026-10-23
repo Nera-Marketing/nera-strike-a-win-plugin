@@ -34,7 +34,7 @@ class Nera_SAW_Ticket_Award {
 
 	/**
 	 * Order meta flag marking that this order's tickets were earned via the
-	 * Strike A Win quiz (not purchased). Read by the confirmation-email copy
+	 * Strike And Win quiz (not purchased). Read by the confirmation-email copy
 	 * filter to tailor the wording. @see Nera_SAW_Integrations::filter_email_body().
 	 */
 	const ORDER_FLAG_EARNED = '_nera_saw_quiz_earned';
@@ -203,7 +203,7 @@ class Nera_SAW_Ticket_Award {
 		}
 
 		/**
-		 * Fires after Strike A Win generates earned tickets for a run. Used to
+		 * Fires after Strike And Win generates earned tickets for a run. Used to
 		 * tailor the confirmation email copy for quiz-earned tickets.
 		 *
 		 * @param int   $order_id       Order ID.

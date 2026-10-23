@@ -20,7 +20,7 @@
  * ------------------
  * With fewer than two languages neither control renders and nothing is said about
  * it. A site with no multilingual plugin is not a broken site — it is a monolingual
- * one, which is what Strike A Win is by default. §3 of the plan.
+ * one, which is what Strike And Win is by default. §3 of the plan.
  *
  * The pop-up keeps its other job when the language half falls away: it still carries
  * the age acknowledgement, so it does not disappear along with the languages.
@@ -126,7 +126,12 @@ class Nera_SAW_Language_Switcher {
 	}
 
 	/**
-	 * Should the pop-up be shown on this screen?
+	 * Should the pop-up be in the markup of this screen?
+	 *
+	 * True on every standalone screen, whether or not the cookie is set: a
+	 * full-page cache can serve this markup to a visitor whose cookie it never saw,
+	 * so the cookie decides visibility (the `hidden` attribute, then
+	 * entry-gate.js), not presence. Use `entered()` for the initial state.
 	 *
 	 * @return bool
 	 */
@@ -139,7 +144,23 @@ class Nera_SAW_Language_Switcher {
 			return false;
 		}
 
-		return ! self::entered();
+		return true;
+	}
+
+	/**
+	 * Cookie settings for entry-gate.js, which writes the cookie itself so the
+	 * answer does not depend on a query string reaching an uncached request.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function cookie_data() {
+		return array(
+			'data-cookie' => self::COOKIE,
+			'data-path'   => COOKIEPATH ? COOKIEPATH : '/',
+			'data-domain' => COOKIE_DOMAIN ? (string) COOKIE_DOMAIN : '',
+			'data-secure' => is_ssl() ? '1' : '',
+			'data-life'   => (string) self::COOKIE_LIFE,
+		);
 	}
 
 	/**

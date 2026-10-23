@@ -9,7 +9,7 @@
  *
  * DEGRADE TO SILENCE
  * ------------------
- * A missing multilingual plugin is not a fault. Strike A Win is monolingual by
+ * A missing multilingual plugin is not a fault. Strike And Win is monolingual by
  * default and ships to sites that will never install Polylang, so every method here
  * answers plainly when there is no engine: no languages, not multilingual, English.
  * Nothing here assumes Polylang's functions exist, and nothing raises a notice when
@@ -107,6 +107,7 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
+			add_filter( 'woocommerce_order_details_status', array( __CLASS__, 'translate_order_status_sentence' ), 10, 2 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_complaints_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_player_protection_strings' ), 10, 3 );
@@ -114,6 +115,8 @@ class Nera_SAW_Language {
 			add_filter( 'woo_wallet_locate_template', array( __CLASS__, 'override_wallet_template' ), 99, 4 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_spending_limit_strings' ), 10, 3 );
 			add_filter( 'acf/load_value/name=nera_sl_over_limit_message', array( __CLASS__, 'translate_spending_limit_over_message' ), 20, 3 );
+			add_filter( 'acf/format_value/name=vc_footer_text', array( __CLASS__, 'translate_voluntary_code_footer' ), 20, 3 );
+			add_filter( 'gettext', array( __CLASS__, 'translate_voluntary_code_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_self_exclusion_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_theme_account_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_theme_checkout_strings' ), 10, 3 );
@@ -253,8 +256,8 @@ class Nera_SAW_Language {
 				// (get_field()/default_services()), not gettext calls, and
 				// stay English either way — a separate, flagged question,
 				// not fixed by this filter.
-				'Help is available — free, confidential services:'
-					=> 'Помощь доступна — бесплатные, конфиденциальные услуги:',
+				'Help is available: free, confidential services:'
+					=> 'Помощь доступна: бесплатные, конфиденциальные услуги:',
 				'Support organisations'        => 'Организации поддержки',
 				'No support services are currently listed.'
 					=> 'Сейчас нет доступных служб поддержки.',
@@ -591,6 +594,36 @@ class Nera_SAW_Language {
 		$ru = self::saw_ru_strings();
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The sentence at the top of an order: "Order #39032 was placed on October 14, 2026
+	 * and is currently On hold."
+	 *
+	 * Only the status was Russian. The sentence itself is one translatable string with
+	 * three markup-wrapped values, and the date is formatted by WordPress in the site's
+	 * locale rather than the section's language, so it stayed "October 14, 2026". Rebuilt
+	 * whole here in Russian, the date in the section's own Russian form.
+	 *
+	 * @param string   $sentence The English sentence WooCommerce built.
+	 * @param WC_Order $order    Order.
+	 * @return string
+	 */
+	public static function translate_order_status_sentence( $sentence, $order ) {
+		if ( is_admin() || 'ru' !== self::current() || ! $order instanceof WC_Order || ! self::is_account_screen() ) {
+			return $sentence;
+		}
+
+		$created = $order->get_date_created();
+		$date    = $created ? Nera_SAW_Date::format_ru( $created->getTimestamp(), false ) : '';
+
+		return sprintf(
+			/* translators: 1: order number 2: order date 3: order status (already translated) */
+			'Заказ №%1$s оформлен %2$s, текущий статус: %3$s.',
+			'<mark class="order-number">' . $order->get_order_number() . '</mark>',
+			'<mark class="order-date">' . $date . '</mark>',
+			'<mark class="order-status">' . wc_get_order_status_name( $order->get_status() ) . '</mark>'
+		);
 	}
 
 	/**
@@ -1152,6 +1185,67 @@ class Nera_SAW_Language {
 	}
 
 	/**
+	 * The Voluntary Code badge in the footer. Its text is a field value (the built-in
+	 * default or whatever an editor typed), not a gettext string, so it is translated here
+	 * when it is still the default.
+	 *
+	 * @param mixed      $value   Field value.
+	 * @param int|string $post_id Post ID.
+	 * @param array      $field   ACF field settings.
+	 * @return mixed
+	 */
+	public static function translate_voluntary_code_footer( $value, $post_id, $field ) {
+		unset( $post_id, $field );
+		if ( is_admin() || 'ru' !== self::current() || 'We follow the Voluntary Code for Prize Draw Operators' !== $value ) {
+			return $value;
+		}
+
+		return 'Мы следуем Добровольному кодексу операторов призовых розыгрышей';
+	}
+
+	/**
+	 * The Voluntary Code plugin's own gettext strings that a player reads.
+	 *
+	 * @param string $translated Translated text.
+	 * @param string $text       Original text.
+	 * @param string $domain     Text domain.
+	 * @return string
+	 */
+	public static function translate_voluntary_code_strings( $translated, $text, $domain ) {
+		if ( 'nera-voluntary-code-plugin' !== $domain || is_admin() || 'ru' !== self::current() ) {
+			return $translated;
+		}
+		$ru = array(
+			'Voluntary Code commitment' => 'Обязательство по Добровольному кодексу',
+		);
+
+		return isset( $ru[ $text ] ) ? $ru[ $text ] : $translated;
+	}
+
+	/**
+	 * A difficulty level's name as a Russian player reads it. The five names the ladder ships
+	 * with are translated; a name an administrator has changed is left exactly as written.
+	 * Never applied in the admin: the Ladder screen edits and saves the stored English name.
+	 *
+	 * @param string $label Level label.
+	 * @return string
+	 */
+	public static function translate_level_label( $label ) {
+		if ( is_admin() || 'ru' !== self::current() ) {
+			return $label;
+		}
+		static $ru = array(
+			'Easy'      => 'Легко',
+			'Moderate'  => 'Умеренно',
+			'Hard'      => 'Сложно',
+			'Very Hard' => 'Очень сложно',
+			'Expert'    => 'Эксперт',
+		);
+
+		return isset( $ru[ $label ] ) ? $ru[ $label ] : $label;
+	}
+
+	/**
 	 * The one genuine count-driven plural the spending-limit domain has:
 	 * `class-account.php`'s "Your limit is {amount} per selected {period} —
 	 * N period(s) configured." sentence. Same reasoning as
@@ -1258,7 +1352,7 @@ class Nera_SAW_Language {
 				'1 month'  => '1 месяц',
 				'3 months' => '3 месяца',
 				'6 months' => '6 месяцев',
-				'Or enter a custom number of days (1–183):' => 'Или укажите своё количество дней (1–183):',
+				'Or enter a custom number of days (1 to 183):' => 'Или укажите своё количество дней (от 1 до 183):',
 				'e.g. 14' => 'например, 14',
 				'Pause my account' => 'Поставить аккаунт на паузу',
 				'Longer suspension' => 'Длительная блокировка',
@@ -1302,8 +1396,8 @@ class Nera_SAW_Language {
 				// see this method's docblock.
 				'Your account has been permanently closed and can no longer be used to log in. Please contact support if you need help.'
 					=> 'Ваш аккаунт был окончательно закрыт, и вход больше невозможен. Если вам нужна помощь, свяжитесь со службой поддержки.',
-				'Your account is currently %1$s until %2$s. It will reactivate automatically — you cannot log in until then. Please contact support if you need help.'
-					=> 'Ваш аккаунт сейчас %1$s до %2$s. Он восстановится автоматически — до этого момента вход невозможен. Если вам нужна помощь, свяжитесь со службой поддержки.',
+				'Your account is currently %1$s until %2$s. It will reactivate automatically, you cannot log in until then. Please contact support if you need help.'
+					=> 'Ваш аккаунт сейчас %1$s до %2$s. Он восстановится автоматически, до этого момента вход невозможен. Если вам нужна помощь, свяжитесь со службой поддержки.',
 				'Your account is closed, so you cannot enter competitions.'
 					=> 'Ваш аккаунт закрыт, поэтому вы не можете участвовать в конкурсах.',
 				'Your account is currently %1$s, so you cannot enter competitions. It will reactivate on %2$s.'
@@ -1611,9 +1705,26 @@ class Nera_SAW_Language {
 	 * @return string
 	 */
 	public static function translate_saw_plurals( $translated, $single, $plural, $number, $domain ) {
-		unset( $single, $plural, $number );
+		unset( $plural );
 		if ( 'nera-strikeawin' !== $domain || is_admin() || 'ru' !== self::current() ) {
 			return $translated;
+		}
+
+		// Russian has three forms (1 забег, 2 забега, 5 забегов); the map below holds
+		// one string per English form, so the counted nouns are chosen here by number.
+		$forms = array(
+			'%s run'    => '%s забег|%s забега|%s забегов',
+			'%s ticket' => '%s билет|%s билета|%s билетов',
+			'%s ticket each'                   => '%s билет за каждый|%s билета за каждый|%s билетов за каждый',
+			'Perfect run: %s ticket'           => 'Идеальный забег: %s билет|Идеальный забег: %s билета|Идеальный забег: %s билетов',
+			'%s question'                      => '%s вопрос|%s вопроса|%s вопросов',
+			'%s question · mixed difficulty'   => '%s вопрос · смешанная сложность|%s вопроса · смешанная сложность|%s вопросов · смешанная сложность',
+			'%d ticket per correct answer'     => '%d билет за правильный ответ|%d билета за правильный ответ|%d билетов за правильный ответ',
+			'%d ticket' => '%d билет|%d билета|%d билетов',
+			'%d run'    => '%d забег|%d забега|%d забегов',
+		);
+		if ( isset( $forms[ $single ] ) ) {
+			return self::ru_plural_form( (int) $number, $forms[ $single ] );
 		}
 
 		$ru = self::saw_ru_strings();
@@ -1714,6 +1825,7 @@ class Nera_SAW_Language {
 				// results (styled after lottery-for-woocommerce's own
 				// instant-win account tab).
 				'Draw End'                                   => 'Розыгрыш окончен',
+				'Reassurance'                                => 'Гарантии',
 				'Entry %s'                                   => 'Номер %s',
 				// Add-to-basket toast (class-router.php) — found still
 				// English on a real purchase screenshot.
@@ -1730,10 +1842,35 @@ class Nera_SAW_Language {
 				'%1$s, in %2$s stages'                   => '%1$s, в %2$s этапах',
 				'Timer'                                    => 'Таймер',
 				'%d seconds per question'                 => '%d секунд на вопрос',
-				'Ticket ceiling'                           => 'Максимум билетов',
+				'I am over 18 and agree to the terms and conditions.' => 'Мне есть 18 лет, и я принимаю правила и условия.',
+				'Each run is one quiz. Correct answers earn tickets in the draw.' => 'Каждый забег, это одна викторина. Правильные ответы приносят билеты в розыгрыше.',
+				'Each run is one quiz against the clock. Every correct answer earns tickets in this draw.' => 'Каждый забег, это одна викторина на время. Каждый правильный ответ приносит билеты в этом розыгрыше.',
+				'Tap an answer to lock it in. There is no second tap, so choose with care.' => 'Нажмите на ответ, чтобы зафиксировать его. Второго нажатия нет, поэтому выбирайте внимательно.',
+				'Every correct answer earns tickets in this draw. One order can include several runs, and each run adds its tickets to the same entry.' => 'Каждый правильный ответ приносит билеты в этом розыгрыше. В один заказ можно включить несколько забегов, и билеты каждого забега попадают в одно и то же участие.',
+				'Refreshing, using the back button, or leaving mid-run will ask you to confirm. The countdown keeps running on the server, so time you spend away still counts.' => 'При обновлении страницы, нажатии «Назад» или выходе посреди забега вас попросят подтвердить действие. Обратный отсчёт идёт на сервере, поэтому время вне страницы тоже засчитывается.',
+				'Tick both boxes to continue'             => 'Отметьте оба поля, чтобы продолжить',
+				'End run and see my results'               => 'Завершить забег и посмотреть результаты',
+				'If you close this window the run ends. Tickets you have already won are kept.' => 'Если вы закроете это окно, забег завершится. Уже выигранные билеты сохранятся.',
+				'End this run?'                            => 'Завершить этот забег?',
+				'Ending the run finishes it now. Tickets you have already won are kept. This cannot be undone.' => 'Завершение забега происходит сразу. Уже выигранные билеты сохранятся. Отменить это действие нельзя.',
+				'Keep my run'                              => 'Оставить мой забег',
+				'End run anyway'                           => 'Всё равно завершить забег',
+				'Your run was interrupted'                 => 'Ваш забег был прерван',
+				'Pick up where you left off. It is held for you until %s.' => 'Продолжите с того места, где остановились. Забег сохранён для вас до %s.',
+				'OK'                                       => 'Хорошо',
+				'Run in progress'                          => 'Забег идёт',
+				'Continue your run'                        => 'Продолжить забег',
+				'Pick up where you left off.'              => 'Продолжите с того места, где остановились.',
+				'Your run was interrupted. It is held for you until %s.' => 'Ваш забег прерван. Он сохранён для вас до %s.',
+				'You have a run in progress. Finish it before you start another.' => 'У вас идёт забег. Завершите его, прежде чем начинать новый.',
+				'Your last run was interrupted'            => 'Ваш последний забег был прерван',
+				'It has been closed. Contact support and we will restore it. Your other runs are unaffected.' => 'Он закрыт. Свяжитесь с поддержкой, и мы его восстановим. Остальные ваши забеги не затронуты.',
+				'Last run interrupted and closed'          => 'Последний забег прерван и закрыт',
+				'Runs interrupted'                         => 'Прерванных попыток',
+				'Most this run'                           => 'Максимум за забег',
 				// Play screen (before a run starts).
-				'Please <a href="%s">log in</a> to use your runs and earn lottery tickets.'
-					=> 'Пожалуйста, <a href="%s">войдите</a>, чтобы использовать свои забеги и получать билеты лотереи.',
+				'Please <a href="%s">log in</a> to use your runs and earn tickets.'
+					=> 'Пожалуйста, <a href="%s">войдите</a>, чтобы использовать свои забеги и получать билеты.',
 				'No runs to play'                         => 'Нет доступных забегов',
 				'1 run to play'                            => '1 забег доступен',
 				'%d runs to play'                         => 'Доступно забегов: %d',
@@ -1746,15 +1883,14 @@ class Nera_SAW_Language {
 				'View competition'                        => 'Смотреть конкурс',
 				'Play again'                               => 'Играть снова',
 				'Choose an answer, then confirm to lock it in.' => 'Выберите ответ, затем подтвердите, чтобы зафиксировать его.',
-				'Submit answer'                           => 'Отправить ответ',
 				'Checking…'                                => 'Проверка…',
 				'Next question'                           => 'Следующий вопрос',
 				'See my results'                          => 'Посмотреть результаты',
 				'Correct. %d tickets earned.'             => 'Правильно. Получено билетов: %d.',
 				'Wrong. The correct answer was: %s'       => 'Неверно. Правильный ответ: %s',
 				"Time up, no answer counted. The correct answer was: %s" => 'Время вышло, ответ не засчитан. Правильный ответ: %s',
-				'Wrong — no tickets.'                     => 'Неверно — билеты не начислены.',
-				'Time up — no answer counted.'            => 'Время вышло — ответ не засчитан.',
+				'Wrong. No tickets.'                     => 'Неверно. Билеты не начислены.',
+				'Time up. No answer counted.'            => 'Время вышло. Ответ не засчитан.',
 				'Leave this page? The timer keeps running and unanswered questions score zero.'
 					=> 'Покинуть страницу? Таймер продолжает идти, а вопросы без ответа дают ноль баллов.',
 				'Leave the quiz?'                         => 'Покинуть викторину?',
@@ -1768,10 +1904,30 @@ class Nera_SAW_Language {
 				'Your ticket numbers'                     => 'Номера ваших билетов',
 				'%d runs left for this competition'       => 'Осталось забегов для этого конкурса: %d',
 				'%d runs left on %s'                      => 'Забегов осталось: %d на уровне %s',
+				'%d run left on %s'                       => 'Забегов осталось: %d на уровне %s',
+				'Enter for %1$s (%2$s)'                   => 'Участвовать за %1$s (%2$s)',
+				'%d run'                                  => 'забегов: %d',
+				'%d runs'                                 => 'забегов: %d',
+				'Fewer runs'                              => 'Меньше забегов',
+				'More runs'                               => 'Больше забегов',
+				'Closed'                                  => 'Закрыто',
+				'%s left'                                 => 'Осталось %s',
+				'Time left'                               => 'Осталось времени',
+				'Wallet'                                  => 'Кошелёк',
+				'Card'                     => 'Карта',
+				'Part wallet, part card'                  => 'Часть кошельком, часть картой',
+				'Please confirm your age and the rules on the previous screen before you pay.' => 'Прежде чем платить, подтвердите возраст и правила на предыдущем экране.',
+				'You can top up at most %s at a time.'    => 'За один раз можно пополнить не более %s.',
+				'You have reached the daily top-up limit of %s. Please try again tomorrow.' => 'Вы достигли дневного лимита пополнения: %s. Попробуйте завтра.',
+				'The daily top-up limit is %1$s. You have topped up %2$s today, so you can add %3$s more.' => 'Дневной лимит пополнения: %1$s. Сегодня вы уже пополнили %2$s, поэтому можно добавить ещё %3$s.',
+				'Previous'                                => 'Назад',
+				'Next'                                    => 'Далее',
+				'%1$d to %2$d of %3$d'                       => '%1$d до %2$d из %3$d',
+				'Completed runs pages'                    => 'Страницы завершённых забегов',
 				'We could not add your tickets right now.' => 'Не удалось добавить билеты прямо сейчас.',
 				'Try again'                                 => 'Повторить',
 				'Something went wrong. Please contact support and we will investigate and restore your run.'
-					=> 'Что-то пошло не так. Пожалуйста, свяжитесь с поддержкой — мы разберёмся и восстановим ваш забег.',
+					=> 'Что-то пошло не так. Пожалуйста, свяжитесь с поддержкой, мы разберёмся и восстановим ваш забег.',
 				'Run reference'                           => 'Номер забега',
 				'Quiz language'                           => 'Язык викторины',
 				'Questions and answers will appear in this language' => 'Вопросы и ответы будут показаны на этом языке',
@@ -1797,13 +1953,13 @@ class Nera_SAW_Language {
 				'%1$d tickets banked from %2$d correct answers.' => 'Начислено билетов: %1$d за %2$d правильных ответов.',
 				'No tickets this run'                     => 'В этом забеге билетов нет',
 				'None of the %d answers landed in time.'  => 'Ни один из %d ответов не уложился во время.',
-				'%1$d of %2$d correct, but not enough to bank a ticket.' => 'Правильных ответов: %1$d из %2$d — этого недостаточно для билета.',
+				'%1$d of %2$d correct, but not enough to bank a ticket.' => 'Правильных ответов: %1$d из %2$d, этого недостаточно для билета.',
 				'Score'                                     => 'Результат',
 				'%1$d of %2$d correct'                    => '%1$d из %2$d правильно',
 				'Tickets earned'                          => 'Получено билетов',
 				'Your entry numbers'                      => 'Номера ваших билетов',
 				'+%d more'                                  => 'ещё +%d',
-				"Numbers are allocated at random from this draw's pool." => 'Номера выбираются случайным образом из пула этого розыгрыша.',
+				"Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed." => 'Номера выдаются по порядку по мере получения билетов. Сам розыгрыш случаен и проходит под независимым наблюдением.',
 				"Random draw, independently witnessed. You'll be notified either way."
 					=> 'Случайный розыгрыш под независимым наблюдением. Мы сообщим вам о результате в любом случае.',
 				'Draw: %s'                                 => 'Розыгрыш: %s',
@@ -1818,23 +1974,32 @@ class Nera_SAW_Language {
 				// same treatment as everything else: only the fallback English text
 				// used when the field itself is empty, same as this whole map.
 				"You're in the draw!"                     => 'Вы участвуете в розыгрыше!',
-				'Your entry is confirmed — fingers crossed!' => 'Ваше участие подтверждено — держим кулачки!',
+				'Your entry is confirmed, fingers crossed!' => 'Ваше участие подтверждено, держим кулачки!',
 				'Good luck!'                                => 'Удачи!',
 				'Got it!'                                   => 'Понятно!',
 				'Thanks for entering!'                      => 'Спасибо за участие!',
-				'Not this time — but every entry brings you closer. There are always more competitions to enter!'
-					=> 'На этот раз не повезло — но каждая попытка приближает вас к победе. Впереди ещё много конкурсов!',
+				'Not this time, but every entry brings you closer. There are always more competitions to enter!'
+					=> 'На этот раз не повезло, но каждая попытка приближает вас к победе. Впереди ещё много конкурсов!',
 				'Browse more competitions'                  => 'Смотреть другие конкурсы',
 				// Entry gate (age/language pop-up).
 				'Close'                                      => 'Закрыть',
 				'Before you start'                          => 'Прежде чем начать',
+				'Welcome to %s'                             => 'Добро пожаловать в %s',
+				'%s is for players aged 18 and over.'       => '%s предназначен для игроков от 18 лет.',
+				"I'm 18 or over, enter"                     => 'Мне есть 18, войти',
+				"I'm under 18"                              => 'Мне нет 18',
+				'Sorry, you need to be 18 or over to play.' => 'К сожалению, играть можно только с 18 лет.',
+				'Back'                                      => 'Назад',
+				'Terms'                                     => 'Условия',
+				'Privacy policy'                            => 'Политику конфиденциальности',
+				'By entering you accept our %1$s and %2$s.' => 'Входя, вы принимаете наши %1$s и %2$s.',
 				'Choose your language'                      => 'Выберите язык',
 				'Verified: you have confirmed you are over 18.' => 'Подтверждено: вы указали, что вам больше 18 лет.',
 				'Continue'                                   => 'Продолжить',
 				'I confirm that I am 18 or over.'           => 'Я подтверждаю, что мне есть 18 лет.',
 				'This is a self-declaration. Nothing is recorded against your account.'
 					=> 'Это самостоятельное подтверждение. Оно нигде не фиксируется в вашем аккаунте.',
-				'Enter'                                      => 'Войти',
+				'Enter'                                      => 'Продолжить',
 				// Language toggle.
 				'Language'                                    => 'Язык',
 				// Walkthrough.
@@ -1863,7 +2028,7 @@ class Nera_SAW_Language {
 				// has supplied Russian in the dev-build JSON file (these are
 				// exact matches, not this plugin's own translation).
 				'Tier'                  => 'Уровень',
-				'%1$s - %2$s / run'     => '%1$s - %2$s / попытка',
+				'%1$s to %2$s / run'     => 'от %1$s до %2$s / забег',
 				' / run'                => ' / попытка',
 				// class-product-frontend.php's tier-picker widget (JS i18n
 				// via wp_localize_script) — no leading space, a different
@@ -2188,12 +2353,7 @@ class Nera_SAW_Language {
 		if ( ! class_exists( 'Nera_SAW_Router' ) ) {
 			return $url;
 		}
-		$prefix = trim( (string) Nera_SAW_Router::prefix(), '/' );
-		if ( '' === $prefix ) {
-			return $url;
-		}
-		$url_path = trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' );
-		if ( $url_path !== $prefix && 0 !== strpos( $url_path, $prefix . '/' ) ) {
+		if ( ! Nera_SAW_Router::path_in_section( (string) wp_parse_url( $url, PHP_URL_PATH ) ) ) {
 			return $url;
 		}
 

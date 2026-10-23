@@ -1,6 +1,6 @@
 <?php
 /**
- * Run clock migration screen — Strike A Win → Run Clock.
+ * Run clock migration screen — Strike And Win → Run Clock.
  *
  * Gives the runs that predate `expires_at` a wall clock, in batches, with a
  * preview first.
@@ -240,7 +240,7 @@ class Nera_SAW_Run_Clock_Admin {
 		$next = wp_next_scheduled( Nera_SAW_Reservations::CRON_HOOK );
 
 		echo '<div class="wrap saw-admin">';
-		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike A Win — Run Clock', 'nera-strikeawin' ) . '</h1>';
+		echo '<h1 class="saw-admin__title">' . esc_html__( 'Strike And Win — Run Clock', 'nera-strikeawin' ) . '</h1>';
 
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET['saw_done'] ) ) {

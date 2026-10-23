@@ -40,7 +40,21 @@ $saw_lang_url = static function ( $code ) use ( $saw_age ) {
 		: Nera_SAW_Language_Switcher::url_for( $code );
 };
 ?>
-<div class="saw-gate" role="dialog" aria-modal="true" aria-labelledby="saw-gate-title">
+<?php
+$saw_gate_attrs = '';
+foreach ( Nera_SAW_Language_Switcher::cookie_data() as $saw_k => $saw_v ) {
+	$saw_gate_attrs .= ' ' . $saw_k . '="' . esc_attr( $saw_v ) . '"';
+}
+$saw_current_lang = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::current() : '';
+?>
+<div
+	class="saw-gate"
+	data-saw-gate
+	data-current-lang="<?php echo esc_attr( $saw_current_lang ); ?>"
+	<?php echo $saw_gate_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each value escaped above. ?>
+	<?php echo Nera_SAW_Language_Switcher::entered() ? 'hidden data-entered' : ''; ?>
+	role="dialog" aria-modal="true" aria-labelledby="saw-gate-title"
+>
 	<div class="saw-gate__card">
 
 		<?php
@@ -56,6 +70,7 @@ $saw_lang_url = static function ( $code ) use ( $saw_age ) {
 		?>
 		<a
 			class="saw-gate__close"
+			data-saw-gate-close
 			href="<?php echo esc_url( Nera_SAW_Language_Switcher::close_url( 'en' ) ); ?>"
 			aria-label="<?php echo esc_attr__( 'Close', 'nera-strikeawin' ); ?>"
 		>
@@ -76,6 +91,7 @@ $saw_lang_url = static function ( $code ) use ( $saw_age ) {
 					<a
 						class="saw-gate__language<?php echo $saw_lang['current'] ? ' is-current' : ''; ?>"
 						href="<?php echo esc_url( $saw_lang_url( $saw_lang['code'] ) ); ?>"
+						data-lang="<?php echo esc_attr( $saw_lang['code'] ); ?>"
 						hreflang="<?php echo esc_attr( $saw_lang['code'] ); ?>"
 						lang="<?php echo esc_attr( $saw_lang['code'] ); ?>"
 					>

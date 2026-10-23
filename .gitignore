@@ -12,3 +12,7 @@ node_modules/
 /PROGRESS.md
 /SUMMARY.md
 /requirements.md
+# Local-only: planning notes with client details and estimates, and dev scripts that seed demo data
+# (they carry local paths, test addresses and a demo password), neither for this public repo nor the zip.
+/docs/PLAN-*.md
+/tools/

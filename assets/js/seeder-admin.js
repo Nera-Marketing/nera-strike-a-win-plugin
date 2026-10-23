@@ -1,5 +1,5 @@
 /**
- * Strike A Win demo seeder — staged AJAX with live per-phase progress.
+ * Strike And Win demo seeder — staged AJAX with live per-phase progress.
  *
  * The browser drives the operation one phase at a time: each request runs a
  * single phase server-side and returns the `next` phase (and, for submissions, a

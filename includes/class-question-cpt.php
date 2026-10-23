@@ -83,11 +83,11 @@ class Nera_SAW_Question_CPT {
 					'singular_name' => __( 'Question', 'nera-strikeawin' ),
 					'add_new_item'  => __( 'Add Question', 'nera-strikeawin' ),
 					'edit_item'     => __( 'Edit Question', 'nera-strikeawin' ),
-					'menu_name'     => __( 'Strike A Win', 'nera-strikeawin' ),
+					'menu_name'     => __( 'Strike And Win', 'nera-strikeawin' ),
 				),
 				'public'          => false,
 				'show_ui'         => true,
-				'show_in_menu'    => 'nera-strikeawin', // under the Strike A Win menu.
+				'show_in_menu'    => 'nera-strikeawin', // under the Strike And Win menu.
 				'show_in_rest'    => true,              // Gutenberg + Polylang/WPML friendliness.
 				'supports'        => array( 'title', 'editor' ),
 				'capability_type' => 'post',

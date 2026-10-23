@@ -404,17 +404,11 @@ class Nera_SAW_Standalone_Basket {
 	 * @return bool
 	 */
 	private static function path_is_section( $path ) {
-		if ( '' === $path || ! class_exists( 'Nera_SAW_Router' ) ) {
+		if ( ! class_exists( 'Nera_SAW_Router' ) ) {
 			return false;
 		}
 
-		$prefix = trim( (string) Nera_SAW_Router::prefix(), '/' );
-		if ( '' === $prefix ) {
-			return false;
-		}
-
-		$path = trim( $path, '/' );
-		return $path === $prefix || 0 === strpos( $path, $prefix . '/' );
+		return Nera_SAW_Router::path_in_section( $path );
 	}
 
 	/**
@@ -578,18 +572,12 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/*
-	 * THE CART PAGE IS LEFT ALONE, DELIBERATELY
+	 * THE CART PAGE IS BEFORE YOU PAY (ADR 0032)
 	 *
-	 * An earlier version of this class redirected /cart/ to Before you pay whenever
-	 * the basket held an entry. It worked, and it was wrong: the cart page belongs to
-	 * the main site, and a shopper who clicks the basket icon in the main site's own
-	 * header expects the main site's basket — not to be thrown into a section they
-	 * were not browsing.
-	 *
-	 * Standalone changes how competitions are sold. It does not take over pages the
-	 * section does not own. The section keeps players away from the cart by never
-	 * linking to it and by redirecting its own add-to-cart, which is the whole of
-	 * its business.
+	 * This once said the cart page was left alone, because it belonged to a main site
+	 * whose basket the section had no business hijacking. There is no main site now:
+	 * WooCommerce's Cart setting points at Before you pay, and Nera_SAW_Stock_Page_Redirects
+	 * sends the old `/cart/` address there too.
 	 */
 
 	/* ---------------------------------------------------------------------
