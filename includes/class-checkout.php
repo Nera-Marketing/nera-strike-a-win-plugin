@@ -8,9 +8,9 @@
  *  - BILLING: first name, last name, email, country. No street, town, postcode, phone,
  *    company or order notes (the date of birth is already taken at registration).
  *  - COUNTRY: United Kingdom and Ireland only.
- *  - CONSENT: the two ticks on Before you pay, nothing more at checkout. Since that is
- *    now the only record of the player's agreement, it is also CHECKED here, on the
- *    server, instead of trusting the browser: a checkout reached without both ticks goes
+ *  - CONSENT: the one tick on Before you pay (age, terms and rules), nothing more at
+ *    checkout. Since that is now the only record of the player's agreement, it is also
+ *    CHECKED here, on the server, instead of trusting the browser: a checkout reached without the tick goes
  *    back to Before you pay, and a submitted one is refused.
  *  - PAYMENT METHODS: Wallet only, until a provider is agreed. Which gateways show is a
  *    setting (Strike And Win -> Settings -> Checkout), so adding one later is ticking a box.
@@ -57,6 +57,7 @@ class Nera_SAW_Checkout {
 	 * Query args Before you pay's form sends to the checkout.
 	 */
 	const ARG_AGE   = 'saw_confirm_age';
+	/** The former second tick. No longer asked for; still stripped from old links. */
 	const ARG_RULES = 'saw_confirm_rules';
 
 	/** Present on every submission of the Before you pay form; tells a form post from a direct visit. */
@@ -197,7 +198,7 @@ class Nera_SAW_Checkout {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * No third tick at checkout: the two on Before you pay are the consent.
+	 * No second tick at checkout: the one on Before you pay is the consent.
 	 *
 	 * @param bool $show Whether to show the terms tick.
 	 * @return bool
@@ -263,7 +264,7 @@ class Nera_SAW_Checkout {
 	}
 
 	/**
-	 * The checkout page itself: take the two ticks from the Before you pay form and
+	 * The checkout page itself: take the tick from the Before you pay form and
 	 * remember them against this basket, or send a visitor who has not given them back.
 	 */
 	public static function require_consent() {
@@ -279,21 +280,19 @@ class Nera_SAW_Checkout {
 		}
 
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- the Before you pay form is a GET; the ticks are evidence, not an action.
-		$ticked = isset( $_GET[ self::ARG_AGE ], $_GET[ self::ARG_RULES ] )
-			&& '1' === (string) $_GET[ self::ARG_AGE ]
-			&& '1' === (string) $_GET[ self::ARG_RULES ];
+		$ticked = isset( $_GET[ self::ARG_AGE ] ) && '1' === (string) $_GET[ self::ARG_AGE ];
 		// phpcs:enable
 
 		if ( $ticked ) {
 			if ( WC()->session ) {
 				WC()->session->set( self::CONSENT_KEY, array( 'hash' => self::basket_hash(), 'at' => time() ) );
 			}
-			// Back to a clean address: the ticks need not sit in the URL.
+			// Back to a clean address: the tick need not sit in the URL.
 			wp_safe_redirect( remove_query_arg( array( self::ARG_AGE, self::ARG_RULES, self::ARG_CHECKED ) ) );
 			exit;
 		}
 
-		// The form was submitted without both ticks: whatever was agreed on an earlier visit
+		// The form was submitted without the tick: whatever was agreed on an earlier visit
 		// does not carry over.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET[ self::ARG_CHECKED ] ) && WC()->session ) {

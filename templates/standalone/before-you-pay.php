@@ -3,12 +3,12 @@
  * Standalone section — Before you pay.
  *
  * The screen that replaces the basket. It shows the one entry being bought, the
- * spec the player is agreeing to, and two consent checks, then hands over to
+ * spec the player is agreeing to, and one consent check, then hands over to
  * WooCommerce checkout.
  *
  * WHY THE CHECKBOXES ARE `required` AND NOT JAVASCRIPT
  * ---------------------------------------------------
- * The browser refuses to submit the form until both are ticked, with no script
+ * The browser refuses to submit the form until it is ticked, with no script
  * involved. A JS gate on a screen like this fails open the moment a script errors
  * earlier on the page — and the thing it is gating is the player's confirmation
  * that a run can earn nothing. Native validation cannot fail open.
@@ -178,12 +178,7 @@ Nera_SAW_Router::part(
 
 			<label class="saw-check">
 				<input type="checkbox" name="saw_confirm_age" value="1" autocomplete="off" aria-describedby="saw-consent-msg"<?php echo $saw_missing ? ' aria-invalid="true"' : ''; ?>>
-				<span><?php echo esc_html( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_age' ) ); ?></span>
-			</label>
-
-			<label class="saw-check">
-				<input type="checkbox" name="saw_confirm_rules" value="1" autocomplete="off" aria-describedby="saw-consent-msg"<?php echo $saw_missing ? ' aria-invalid="true"' : ''; ?>>
-				<span><?php echo wp_kses_post( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_rules' ) ); ?></span>
+				<span><?php echo wp_kses_post( Nera_SAW_Standalone_Fields::text( 'saw_pp_consent_age' ) ); ?></span>
 			</label>
 
 			<?php
@@ -197,7 +192,7 @@ Nera_SAW_Router::part(
 				: trim( $saw_cta . ' ' . $saw_sum );
 			?>
 			<button type="submit" class="saw-cta"><?php echo esc_html( $saw_label ); ?></button>
-			<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick both boxes to continue', 'nera-strikeawin' ); ?></p>
+			<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick the box to continue', 'nera-strikeawin' ); ?></p>
 
 			<?php
 			/*
