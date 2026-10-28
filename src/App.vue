@@ -310,6 +310,12 @@ const progressPct = computed( () =>
 
 let ticker = null;
 let holdTicker = null;
+// The countdown ring's arc is redrawn every frame between the whole-second
+// ticks, so it empties smoothly; ringAnchor is when the last tick landed.
+const ringArc = ref( null );
+const RING_LENGTH = 163.4; // 2 * PI * r(26)
+let ringFrame = 0;
+let ringAnchor = 0;
 let holdAdvance = null; // closure that advances past the reveal (button or timeout).
 // Reactive: the template's disabled states (options, Submit) depend on it, so a
 // plain let would only repaint by luck, whenever some other ref happened to change.
@@ -488,10 +494,31 @@ function getNavApi() {
 const leaveDialogOpen = ref( false );
 const stayButtonRef = ref( null );
 
-const timerPct = computed( () => {
+function drawRing() {
+	const el = ringArc.value;
+	if ( ! el ) {
+		return;
+	}
 	const total = slot.timer_seconds || 1;
-	return Math.max( 0, Math.min( 100, ( slot.seconds_left / total ) * 100 ) );
-} );
+	const into = ticker ? Math.min( 1, ( performance.now() - ringAnchor ) / 1000 ) : 0;
+	const left = Math.max( 0, slot.seconds_left - into );
+	const share = Math.min( 1, left / total );
+	el.setAttribute( 'stroke-dashoffset', ( RING_LENGTH * ( 1 - share ) ).toFixed( 2 ) );
+}
+
+function ringLoop() {
+	drawRing();
+	ringFrame = requestAnimationFrame( ringLoop );
+}
+
+// Draws the arc where it stands (frozen on an answer, empty on a timeout).
+function stopRing() {
+	if ( ringFrame ) {
+		cancelAnimationFrame( ringFrame );
+		ringFrame = 0;
+	}
+	drawRing();
+}
 
 const timerUrgent = computed( () => {
 	if ( phase.value !== 'question' ) {
@@ -589,6 +616,7 @@ function shouldBlockLeave() {
 }
 
 function clearTicker() {
+	stopRing();
 	if ( ticker ) {
 		clearInterval( ticker );
 		ticker = null;
@@ -1195,8 +1223,10 @@ async function loadSlot( slotNo ) {
 
 function startCountdown() {
 	clearTicker();
+	ringAnchor = performance.now();
 	ticker = setInterval( () => {
 		slot.seconds_left -= 1;
+		ringAnchor = performance.now();
 		if ( slot.seconds_left <= 0 ) {
 			clearTicker();
 			if ( ! locked.value ) {
@@ -1204,6 +1234,7 @@ function startCountdown() {
 			}
 		}
 	}, 1000 );
+	ringLoop();
 }
 
 // Reference design screen 26: no separate Submit step — picking an option answers
@@ -1453,11 +1484,10 @@ onUnmounted( () => {
 						<div
 							class="saw-qtimer"
 							:class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }"
-							:style="{ '--saw-qtimer-pct': timerPct }"
 						>
-							<svg viewBox="0 0 44 44" width="62" height="62" aria-hidden="true">
-								<circle class="saw-qtimer__track" cx="22" cy="22" r="19"></circle>
-								<circle class="saw-qtimer__fill" cx="22" cy="22" r="19"></circle>
+							<svg viewBox="0 0 62 62" width="62" height="62" aria-hidden="true">
+								<circle class="saw-qtimer__track" cx="31" cy="31" r="26"></circle>
+								<circle ref="ringArc" class="saw-qtimer__fill" cx="31" cy="31" r="26" stroke-dashoffset="0" transform="rotate(-90 31 31)"></circle>
 							</svg>
 							<span class="saw-qtimer__num">{{ Math.max(0, slot.seconds_left) }}</span>
 						</div>
@@ -1940,18 +1970,15 @@ onUnmounted( () => {
 .saw-qtop { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .saw-qtop .saw-question { margin: 0; min-width: 0; font-size: 22px; line-height: 1.25; font-weight: 800; color: var(--saw-text); }
 
-/* The circular per-question countdown, replacing the old horizontal bar to
-   match the reference. A ring drawn twice — a faint full track, and a solid
-   arc whose length is set by --saw-qtimer-pct via stroke-dasharray, animated
-   the same way the old bar animated its width. */
+/* The per-question countdown ring: a faint full track and an arc that starts
+   at 12 o'clock and empties; the script sets the arc's dash offset every frame. */
 .saw-qtimer { position: relative; width: 62px; height: 62px; flex: 0 0 auto; }
-.saw-qtimer svg { display: block; transform: rotate(-90deg); }
-.saw-qtimer__track { fill: none; stroke: var(--saw-surface); stroke-width: 4; }
+.saw-qtimer svg { display: block; }
+.saw-qtimer__track { fill: none; stroke: var(--saw-surface); stroke-width: 5; }
 .saw-qtimer__fill {
-	fill: none; stroke: var(--saw-level, var(--saw-brand)); stroke-width: 4; stroke-linecap: round;
-	stroke-dasharray: 119.4; /* 2 * PI * r(19) */
-	stroke-dashoffset: calc(119.4 - (119.4 * var(--saw-qtimer-pct, 100) / 100));
-	transition: stroke-dashoffset 1s linear, stroke .25s ease;
+	fill: none; stroke: var(--saw-level, var(--saw-brand)); stroke-width: 5; stroke-linecap: round;
+	stroke-dasharray: 163.4;
+	transition: stroke .3s ease;
 }
 .saw-qtimer.is-urgent .saw-qtimer__fill { stroke: var(--saw-danger); }
 .saw-qtimer.is-spent .saw-qtimer__fill { stroke: var(--saw-text-muted); }
