@@ -324,7 +324,8 @@ class Nera_SAW_Competition_Spec {
 
 			$out[] = array(
 				'key'         => $key,
-				'label'       => (string) $tier['label'],
+				// Shared English tier names ("Standard", "Premium") shown in the visitor's language.
+				'label'       => Nera_SAW_I18n::t( (string) $tier['label'] ),
 				'price'       => (float) $tier['price'],
 				'multiplier'  => (int) $tier['multiplier'],
 				'status'      => isset( $status['status'] ) ? (string) $status['status'] : 'green',

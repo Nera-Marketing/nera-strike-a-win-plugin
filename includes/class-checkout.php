@@ -190,7 +190,17 @@ class Nera_SAW_Checkout {
 			return $countries;
 		}
 
-		return array_intersect_key( (array) $countries, array_flip( array( 'GB', 'IE' ) ) );
+		$countries = array_intersect_key( (array) $countries, array_flip( array( 'GB', 'IE' ) ) );
+
+		// WooCommerce builds its country names once, before the section's Russian
+		// gettext map applies, so run the two names through it again here.
+		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() ) {
+			foreach ( $countries as $code => $name ) {
+				$countries[ $code ] = translate( $name, 'woocommerce' ); // phpcs:ignore WordPress.WP.I18n
+			}
+		}
+
+		return $countries;
 	}
 
 	/* ---------------------------------------------------------------------

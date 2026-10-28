@@ -433,6 +433,7 @@ class Nera_SAW_Language {
 		if ( null === $ru ) {
 			$ru = array(
 				'My Wallet'      => 'Мой кошелёк',
+				'Pay with wallet.' => 'Оплатить из кошелька.',
 				'Total Balance'  => 'Баланс',
 				'Wallet topup'   => 'Пополнить кошелёк',
 				'Transactions'   => 'Операции',
@@ -787,6 +788,11 @@ class Nera_SAW_Language {
 				// 'woocommerce'-domain map reached "Place order"/"Billing
 				// address"/etc. already, but never these.
 				'Country / Region'                      => 'Страна',
+				// Order review heading and the two countries the section sells to
+				// (values from WooCommerce's own ru_RU pack).
+				'Product'                               => 'Товар',
+				'United Kingdom (UK)'                   => 'Великобритания',
+				'Ireland'                               => 'Ирландия',
 				'Street address'                        => 'Адрес',
 				// NOT "Apartment, suite, unit, etc." (no "(optional)") — the
 				// theme's own nera_customize_default_address_fields() (inc/

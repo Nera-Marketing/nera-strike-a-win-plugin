@@ -39,6 +39,7 @@ class Nera_SAW_I18n {
 	const FILES = array(
 		'languages/ru/02-russian-strings-prototype.json',
 		'languages/ru/02b-russian-strings-dev-build.json',
+		'languages/ru/03-russian-strings-prototype-matched.json',
 	);
 
 	/**
