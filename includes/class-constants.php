@@ -184,6 +184,8 @@ class Nera_SAW_Constants {
 			// Per-question timer every competition uses (read via timer_seconds()).
 			'timer_seconds'      => self::TIMER_DEFAULT_SECONDS,
 			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
+			// Manual "Next question" button during the answer reveal. Off: the hold runs out by itself.
+			'reveal_next_button' => false,
 			// The site's name as players see it (Nera_SAW_Brand). One place, not typed into templates.
 			'brand_name'         => 'Strike And Win',
 			// Wallet top-up limits (Nera_SAW_Wallet). Provisional until the client
@@ -375,6 +377,24 @@ class Nera_SAW_Constants {
 		$s = self::settings();
 		$v = isset( $s['feedback_seconds'] ) ? (int) $s['feedback_seconds'] : self::FEEDBACK_SECONDS_DEFAULT;
 		return max( self::FEEDBACK_SECONDS_MIN, min( self::FEEDBACK_SECONDS_MAX, $v ) );
+	}
+
+	/**
+	 * Whether the player sees a Next button during the answer reveal (global
+	 * setting, off by default). Off: the reveal hold always runs its full length.
+	 *
+	 * @return bool
+	 */
+	public static function reveal_next_button() {
+		$s = self::settings();
+		$v = ! empty( $s['reveal_next_button'] );
+
+		/**
+		 * Filter whether the reveal shows a Next button.
+		 *
+		 * @param bool $v Value from Settings.
+		 */
+		return (bool) apply_filters( 'nera_saw_reveal_next_button', $v );
 	}
 
 	/**

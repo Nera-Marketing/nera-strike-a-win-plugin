@@ -97,6 +97,8 @@ class Nera_SAW_Settings_Admin {
 
 		$feedback_seconds = isset( $_POST['feedback_seconds'] ) ? (int) $_POST['feedback_seconds'] : Nera_SAW_Constants::FEEDBACK_SECONDS_DEFAULT;
 		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
+		// An unticked checkbox posts nothing: that is off.
+		$reveal_next_button = ! empty( $_POST['reveal_next_button'] );
 
 		$brand_name = isset( $_POST['brand_name'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['brand_name'] ) ) ) : '';
 		if ( '' === $brand_name ) {
@@ -147,6 +149,7 @@ class Nera_SAW_Settings_Admin {
 				'timer_warn_seconds' => $timer_warn,
 				'timer_seconds'      => $timer_seconds,
 				'feedback_seconds'   => $feedback_seconds,
+				'reveal_next_button' => $reveal_next_button,
 				'brand_name'                       => $brand_name,
 				'wallet_topup_max_per_transaction' => $wallet_per_txn,
 				'wallet_topup_max_per_day'         => $wallet_per_day,
@@ -449,7 +452,12 @@ class Nera_SAW_Settings_Admin {
 		// --- Answer reveal card --------------------------------------------
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Answer reveal', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated. The player can skip the wait with the Next button.', 'nera-strikeawin' ) . '</p>';
+		$reveal_next = Nera_SAW_Constants::reveal_next_button();
+		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated.', 'nera-strikeawin' ) . ' '
+			. ( $reveal_next
+				? esc_html__( 'The player can skip the wait with the Next button.', 'nera-strikeawin' )
+				: esc_html__( 'The next question follows by itself when the hold ends.', 'nera-strikeawin' ) )
+			. '</p>';
 		// The on/off switch lives with the other feature flags on the demo page; this
 		// card owns only the duration. If the reveal is not appearing, that switch is
 		// the first thing to check.
@@ -470,6 +478,11 @@ class Nera_SAW_Settings_Admin {
 			(int) Nera_SAW_Constants::feedback_seconds()
 		);
 		echo '</div>';
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="reveal_next_button" value="1"%1$s> <span>%2$s</span></label>',
+			checked( $reveal_next, true, false ),
+			esc_html__( 'Show the Next button during the answer reveal', 'nera-strikeawin' )
+		);
 		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
 		echo '</div>';
 

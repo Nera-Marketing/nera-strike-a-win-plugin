@@ -141,6 +141,9 @@ function feedbackHoldSeconds() {
 	return Number.isFinite( n ) && n > 0 ? n : FEEDBACK_SECONDS_FALLBACK;
 }
 
+// Manual Next button during the reveal (admin setting, off by default).
+const showNextButton = !! ( window.NeraSAW && window.NeraSAW.revealNextButton === true );
+
 const phase = ref( 'loading' ); // language | loading | question | reveal | end | error
 const errorMsg = ref( '' );
 const canRetry = ref( false ); // error screen: offer a "Try again" for the failed step.
@@ -1562,7 +1565,7 @@ onUnmounted( () => {
 					aria-hidden="true"
 				>{{ feedbackLine }}</div>
 				<button
-					v-if="phase === 'reveal'"
+					v-if="phase === 'reveal' && showNextButton"
 					type="button"
 					class="saw-banked__next"
 					:disabled="advancing"

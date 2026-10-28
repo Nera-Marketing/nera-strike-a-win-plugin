@@ -453,6 +453,13 @@ class Nera_SAW_Frontend {
 		}
 
 		wp_localize_script( self::SCRIPT_HANDLE, self::DATA_OBJECT, $data );
+		// wp_localize_script turns scalars into strings; this flag is set as a real boolean
+		// (the localized data prints before 'before' inline scripts).
+		wp_add_inline_script(
+			self::SCRIPT_HANDLE,
+			'window.' . self::DATA_OBJECT . '.revealNextButton = ' . ( Nera_SAW_Constants::reveal_next_button() ? 'true' : 'false' ) . ';',
+			'before'
+		);
 	}
 
 	/**
