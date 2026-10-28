@@ -90,7 +90,7 @@ class Nera_SAW_Constants {
 	 * into a question's timer and carries no compliance weight. Admin-tunable on
 	 * the Settings page within the MIN/MAX fence.
 	 * ------------------------------------------------------------------- */
-	const FEEDBACK_SECONDS_DEFAULT = 5;
+	const FEEDBACK_SECONDS_DEFAULT = 1;
 	const FEEDBACK_SECONDS_MIN     = 1;
 	const FEEDBACK_SECONDS_MAX     = 10;
 
