@@ -612,11 +612,9 @@ class Nera_SAW_Frontend {
 		$play_base  = get_permalink();
 		$shop_url   = get_permalink( $competition_id );
 		$hub_url    = remove_query_arg( array( Nera_SAW_Play_Page::QV_COMPETITION, Nera_SAW_Play_Page::QV_TIER, 'saw_start' ), $play_base );
-		$timer      = Nera_SAW_Constants::clamp_timer(
-			isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-		);
+		$timer      = Nera_SAW_Constants::timer_seconds();
 		$timer_note = sprintf(
-			/* translators: %d: seconds allowed per question (from competition config) */
+			/* translators: %d: seconds allowed per question (from Settings) */
 			_n(
 				'You have %d second per question. Wrong or too slow earns no tickets for that question.',
 				'You have %d seconds per question. Wrong or too slow earns no tickets for that question.',

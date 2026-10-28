@@ -121,11 +121,6 @@ class Nera_SAW_Competition_Admin {
 						<?php /* Type 2 (whole-quiz period) is built but withheld from live use pending Lewis sign-off. */ ?>
 					</select>
 				</p>
-				<p class="form-field saw-field-per-question">
-					<label for="saw_timer"><?php esc_html_e( 'Per-question timer (s)', 'nera-strikeawin' ); ?></label>
-					<input type="number" name="saw_timer" id="saw_timer" class="short" style="width:90px" min="<?php echo (int) Nera_SAW_Constants::timer_min(); ?>" max="<?php echo (int) Nera_SAW_Constants::timer_max(); ?>" value="<?php echo (int) $config['timer_seconds']; ?>" />
-					<span class="description"><?php echo esc_html( sprintf( __( 'Allowed window %1$d–%2$ds (set in Strike And Win → Settings).', 'nera-strikeawin' ), Nera_SAW_Constants::timer_min(), Nera_SAW_Constants::timer_max() ) ); ?></span>
-				</p>
 				<p class="form-field saw-field-whole-period" style="display:none">
 					<label for="saw_total_time"><?php esc_html_e( 'Total time (minutes)', 'nera-strikeawin' ); ?></label>
 					<input type="number" name="saw_total_time" id="saw_total_time" min="0" value="<?php echo (int) $config['total_time']; ?>" <?php disabled( 'whole_period' !== $config['quiz_type'] ); ?> />
@@ -540,7 +535,6 @@ class Nera_SAW_Competition_Admin {
 			'result_display' => ( isset( $_POST['saw_result_display_mode'] ) && 'own' === $_POST['saw_result_display_mode'] )
 				? Nera_SAW_Constants::sanitize_result_display( isset( $_POST['saw_result_display'] ) ? (array) wp_unslash( $_POST['saw_result_display'] ) : array() )
 				: '',
-			'timer_seconds'  => isset( $_POST['saw_timer'] ) ? (int) $_POST['saw_timer'] : Nera_SAW_Constants::timer_max(),
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
 			'level_rewards'  => $rewards,

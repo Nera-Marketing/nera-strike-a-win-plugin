@@ -29,6 +29,7 @@ class Nera_SAW_Constants {
 	 * ------------------------------------------------------------------- */
 	const TIMER_MIN_SECONDS = 5;  // Default working min (seeds settings).
 	const TIMER_MAX_SECONDS = 12; // Default working max (seeds settings).
+	const TIMER_DEFAULT_SECONDS = 12; // Default global per-question timer (seeds settings).
 
 	/**
 	 * @deprecated No longer used as a fence; retained so older references do not fatals.
@@ -180,6 +181,8 @@ class Nera_SAW_Constants {
 			'timer_min'          => self::TIMER_MIN_SECONDS,
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,
+			// Per-question timer every competition uses (read via timer_seconds()).
+			'timer_seconds'      => self::TIMER_DEFAULT_SECONDS,
 			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
 			// The site's name as players see it (Nera_SAW_Brand). One place, not typed into templates.
 			'brand_name'         => 'Strike And Win',
@@ -578,6 +581,24 @@ class Nera_SAW_Constants {
 		$seconds = max( self::timer_min(), $seconds );
 		$seconds = min( self::timer_max(), $seconds );
 		return $seconds;
+	}
+
+	/**
+	 * The per-question timer every competition uses (Settings), clamped to the
+	 * working window. Site-wide only: competitions have no timer of their own.
+	 *
+	 * @return int Seconds.
+	 */
+	public static function timer_seconds() {
+		$s = self::settings();
+		$v = isset( $s['timer_seconds'] ) && is_numeric( $s['timer_seconds'] ) ? (int) $s['timer_seconds'] : self::TIMER_DEFAULT_SECONDS;
+
+		/**
+		 * Filter the per-question timer (seconds, clamped afterwards).
+		 *
+		 * @param int $v Seconds from Settings.
+		 */
+		return self::clamp_timer( apply_filters( 'nera_saw_timer_seconds', $v ) );
 	}
 
 	/**

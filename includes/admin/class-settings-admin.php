@@ -92,6 +92,8 @@ class Nera_SAW_Settings_Admin {
 			$timer_max = $timer_min;
 		}
 		$timer_warn = max( 1, min( $timer_max, $timer_warn ) );
+		$timer_seconds = isset( $_POST['timer_seconds'] ) && is_numeric( $_POST['timer_seconds'] ) ? (int) $_POST['timer_seconds'] : Nera_SAW_Constants::TIMER_DEFAULT_SECONDS;
+		$timer_seconds = max( $timer_min, min( $timer_max, $timer_seconds ) );
 
 		$feedback_seconds = isset( $_POST['feedback_seconds'] ) ? (int) $_POST['feedback_seconds'] : Nera_SAW_Constants::FEEDBACK_SECONDS_DEFAULT;
 		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
@@ -143,6 +145,7 @@ class Nera_SAW_Settings_Admin {
 				'timer_min'          => $timer_min,
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
+				'timer_seconds'      => $timer_seconds,
 				'feedback_seconds'   => $feedback_seconds,
 				'brand_name'                       => $brand_name,
 				'wallet_topup_max_per_transaction' => $wallet_per_txn,
@@ -352,9 +355,16 @@ class Nera_SAW_Settings_Admin {
 
 		// --- Timer bounds card ---------------------------------------------
 		echo '<div class="saw-card">';
-		echo '<h2 class="saw-card__head">' . esc_html__( 'Per-question timer bounds', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'The window each competition\'s per-question timer may be set within. Minimum is at least 1 second; maximum must be greater than or equal to the minimum.', 'nera-strikeawin' ) . '</p>';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Per-question timer', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'The time a player has for each question. Every competition uses it. It is kept within the window below: minimum is at least 1 second; maximum must be greater than or equal to the minimum.', 'nera-strikeawin' ) . '</p>';
 		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="timer_seconds" min="%d" max="%d" value="%d"></label>',
+			esc_html__( 'Seconds per question', 'nera-strikeawin' ),
+			(int) Nera_SAW_Constants::timer_min(),
+			(int) Nera_SAW_Constants::timer_max(),
+			(int) Nera_SAW_Constants::timer_seconds()
+		);
 		printf(
 			'<label class="saw-field"><span>%s</span><input type="number" name="timer_min" min="1" value="%d"></label>',
 			esc_html__( 'Minimum (s)', 'nera-strikeawin' ),

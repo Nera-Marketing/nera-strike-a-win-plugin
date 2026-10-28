@@ -47,7 +47,6 @@ class Nera_SAW_Competition_Config {
 			// What the prize itself is worth on the market today, in pounds (a number, or empty to
 			// show nothing). Not the price of a run: that comes from the tiers.
 			'market_value'   => '',
-			'timer_seconds'  => Nera_SAW_Constants::TIMER_MAX_SECONDS, // per-question (Type 1).
 			'total_time'     => 0, // whole-quiz minutes (Type 2, future).
 			'distribution'   => array(), // level_key => count.
 			'level_rewards'  => array(), // level_key => tickets override.
@@ -233,9 +232,6 @@ class Nera_SAW_Competition_Config {
 
 		// 'tiers' is derived (global set + overrides); never persist it.
 		unset( $config['tiers'] );
-
-		// Compliance-locked clamps.
-		$config['timer_seconds'] = Nera_SAW_Constants::clamp_timer( $config['timer_seconds'] );
 
 		// Blank stays blank: "inherit" is a legal answer here, so the plain
 		// sanitiser's fall back to `random` would silently pin every competition.

@@ -410,7 +410,7 @@ class Nera_SAW_Run {
 		}
 
 		$config = json_decode( $run->config_snapshot, true );
-		$timer  = Nera_SAW_Constants::clamp_timer( isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS );
+		$timer  = self::timer_for( is_array( $config ) ? $config : array() );
 
 		// Snapshot the full question onto the slot on first serve (immune to later
 		// edits/soft-delete; drives scoring + the Report).
@@ -2251,15 +2251,19 @@ class Nera_SAW_Run {
 	 * ================================================================== */
 
 	/**
-	 * Per-question timer for a run's config, clamped.
+	 * Per-question timer for a run.
 	 *
-	 * @param array $config Config snapshot.
+	 * The timer is one site-wide setting, so the config is not consulted: a
+	 * `timer_seconds` left in an older competition config or run snapshot is
+	 * ignored. The parameter stays so every caller keeps passing the config
+	 * it already has.
+	 *
+	 * @param array $config Config snapshot (unused).
 	 * @return int Seconds.
 	 */
 	private static function timer_for( array $config ) {
-		return Nera_SAW_Constants::clamp_timer(
-			isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-		);
+		unset( $config );
+		return Nera_SAW_Constants::timer_seconds();
 	}
 
 	/**
