@@ -216,6 +216,29 @@ class Nera_SAW_Competition_Admin {
 					</select>
 					<span class="description"><?php esc_html_e( 'Ladder runs the levels in stages, easy to hard, and the competition page shows a stage for each. Random mixes them across the run, so there are no stages to show — only how many questions come from each level.', 'nera-strikeawin' ); ?></span>
 				</p>
+				<?php
+				// Result screen blocks: inherit the global list, or this
+				// competition's own (which may be none ticked).
+				$saw_result_own    = isset( $config['result_display'] ) && is_array( $config['result_display'] );
+				$saw_result_global = Nera_SAW_Constants::result_display();
+				$saw_result_blocks = Nera_SAW_Constants::result_blocks();
+				$saw_result_list   = $saw_result_own ? $config['result_display'] : $saw_result_global;
+				$saw_result_names  = $saw_result_global;
+				?>
+				<fieldset class="form-field saw-result-display">
+					<legend><?php esc_html_e( 'Result screen', 'nera-strikeawin' ); ?></legend>
+					<label style="display:block;margin:0 0 4px"><input type="radio" name="saw_result_display_mode" value="inherit" <?php checked( ! $saw_result_own ); ?> />
+						<?php
+						/* translators: %s: comma-separated block keys of the global setting, or "none". */
+						echo esc_html( sprintf( __( 'Inherit global (%s)', 'nera-strikeawin' ), $saw_result_names ? implode( ', ', $saw_result_names ) : __( 'none', 'nera-strikeawin' ) ) );
+						?>
+					</label>
+					<label style="display:block;margin:0 0 4px"><input type="radio" name="saw_result_display_mode" value="own" <?php checked( $saw_result_own ); ?> /> <?php esc_html_e( 'Use this competition\'s own choice:', 'nera-strikeawin' ); ?></label>
+					<?php foreach ( $saw_result_blocks as $saw_block => $saw_block_label ) : ?>
+						<label style="display:block;margin:0 0 4px 24px"><input type="checkbox" name="saw_result_display[]" value="<?php echo esc_attr( $saw_block ); ?>" <?php checked( in_array( $saw_block, $saw_result_list, true ) ); ?> /> <?php echo esc_html( $saw_block_label ); ?></label>
+					<?php endforeach; ?>
+					<span class="description"><?php esc_html_e( 'Optional blocks on the screen a player sees after a run. The boxes apply only with this competition\'s own choice.', 'nera-strikeawin' ); ?></span>
+				</fieldset>
 			</div>
 
 			<div class="options_group">
@@ -514,6 +537,9 @@ class Nera_SAW_Competition_Admin {
 			'quiz_method'    => Nera_SAW_Mode::sanitize_quiz_method_override(
 				isset( $_POST['saw_quiz_method'] ) ? wp_unslash( $_POST['saw_quiz_method'] ) : Nera_SAW_Mode::INHERIT
 			),
+			'result_display' => ( isset( $_POST['saw_result_display_mode'] ) && 'own' === $_POST['saw_result_display_mode'] )
+				? Nera_SAW_Constants::sanitize_result_display( isset( $_POST['saw_result_display'] ) ? (array) wp_unslash( $_POST['saw_result_display'] ) : array() )
+				: '',
 			'timer_seconds'  => isset( $_POST['saw_timer'] ) ? (int) $_POST['saw_timer'] : Nera_SAW_Constants::timer_max(),
 			'total_time'     => $total_time,
 			'distribution'   => $dist,

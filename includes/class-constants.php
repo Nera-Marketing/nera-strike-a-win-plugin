@@ -191,6 +191,8 @@ class Nera_SAW_Constants {
 			// provider is agreed -- and whether the coupon prompt does.
 			'checkout_gateways'                => array( 'wallet' ),
 			'checkout_show_coupon'             => false,
+			// Optional blocks on the quiz results screen (keys of result_blocks()).
+			'result_display'                   => array( 'draw_line' ),
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),
@@ -259,6 +261,61 @@ class Nera_SAW_Constants {
 			}
 		}
 		return update_option( self::OPTION_FEATURE_FLAGS, $clean );
+	}
+
+	/**
+	 * Optional blocks of the quiz results screen, key => admin label.
+	 *
+	 * @return array
+	 */
+	public static function result_blocks() {
+		return array(
+			'draw_line'     => __( 'Draw line: "Your tickets are entered in this prize draw" with the live draw date', 'nera-strikeawin' ),
+			'entry_numbers' => __( 'Entry numbers: the ticket numbers this run earned, with the numbering note', 'nera-strikeawin' ),
+			'fine_print'    => __( 'Fine print: the draw date and how the draw works', 'nera-strikeawin' ),
+			'runs_left'     => __( 'Runs left: how many runs the player still has on this competition', 'nera-strikeawin' ),
+		);
+	}
+
+	/**
+	 * Keep only known result block keys, in their canonical order.
+	 *
+	 * @param mixed $value Posted or stored list.
+	 * @return string[]
+	 */
+	public static function sanitize_result_display( $value ) {
+		$keys = is_array( $value ) ? array_map( 'strval', $value ) : array();
+		return array_values( array_intersect( array_keys( self::result_blocks() ), $keys ) );
+	}
+
+	/**
+	 * Which optional blocks the results screen shows: the global list, or the
+	 * competition's own list when it has one.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global).
+	 * @return string[]
+	 */
+	public static function result_display( $competition_id = 0 ) {
+		$s      = self::settings();
+		$global = self::sanitize_result_display( isset( $s['result_display'] ) ? $s['result_display'] : array() );
+		$value  = $global;
+
+		$competition_id = (int) $competition_id;
+		if ( $competition_id > 0 ) {
+			$config = Nera_SAW_Competition_Config::get( $competition_id );
+			if ( isset( $config['result_display'] ) && is_array( $config['result_display'] ) ) {
+				$value = self::sanitize_result_display( $config['result_display'] );
+			}
+		}
+
+		/**
+		 * Filter the results screen's optional blocks.
+		 *
+		 * @param string[] $value          Block keys.
+		 * @param int      $competition_id Competition product ID (0 = global).
+		 * @param string[] $global         The global list, before any override.
+		 */
+		return self::sanitize_result_display( apply_filters( 'nera_saw_result_display', $value, $competition_id, $global ) );
 	}
 
 	/**

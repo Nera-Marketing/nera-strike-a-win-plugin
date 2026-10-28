@@ -236,6 +236,11 @@ const runsRemainingTier = ref( null );
 const tierLabel = ref( '' );
 const slotResults = ref( [] ); // [{ slot_no, outcome, spins_awarded }] — the results chip row.
 const drawDate = ref( '' );
+const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
+const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
+const nextRunTotal = ref( 0 );
+const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
+const shownTickets = ref( 0 ); // the tickets-earned figure as it counts up.
 
 const slot = reactive( {
 	slot_no: 0,
@@ -559,42 +564,70 @@ const runsRemainingLine = computed( () => {
  * not a re-derivation from slotResults, so the two can never disagree.
  * ------------------------------------------------------------------------- */
 const correctCount = computed( () => slotResults.value.filter( ( r ) => 'correct' === r.outcome ).length );
-// Client finding #38: zero-ticket runs are not all the same story — every
-// slot timing out reads differently from every slot being answered wrong
-// (or a mix of the two), so resultsSubtitle below picks between three
-// zero-ticket lines, not one, instead of always saying "landed in time".
-const allTimedOut = computed( () => slotResults.value.length > 0 && slotResults.value.every( ( r ) => 'timeout' === r.outcome ) );
 const hasTickets = computed( () => finalSpins.value > 0 );
 
-const resultsTitle = computed( () => hasTickets.value ? t( 'inTheDrawTitle', "You're in the draw" ) : t( 'zeroTicketsTitle', 'No tickets this run' ) );
-
-const resultsSubtitle = computed( () => {
-	if ( hasTickets.value ) {
-		return fmt( 'inTheDrawSubtitle', '{t} tickets banked from {c} correct answers.|{t} tickets banked from {c} correct answers.', finalSpins.value, correctCount.value );
+// The headline under the kicker, by how much of the run was right (the scale is
+// out of ten whatever the run's length; only a full run is "perfect").
+const resultsHeadline = computed( () => {
+	const total = totalSlots.value || slotResults.value.length;
+	const right = correctCount.value;
+	if ( right < 1 ) {
+		return t( 'resultHeadNone', 'No correct answers this time.' );
 	}
-	if ( correctCount.value > 0 ) {
-		return fmt( 'zeroSomeCorrectSubtitle', '%1$d of %2$d correct, but not enough to bank a ticket.', correctCount.value, totalSlots.value );
+	if ( total > 0 && right >= total ) {
+		return t( 'resultHeadPerfect', 'Perfect score!' );
 	}
-	if ( allTimedOut.value ) {
-		return fmt( 'zeroCorrectSubtitle', 'None of the %d answers landed in time.', totalSlots.value );
+	const tenth = total > 0 ? Math.min( 9, Math.round( right / total * 10 ) ) : 0;
+	if ( tenth >= 7 ) {
+		return t( 'resultHeadHigh', 'Great score!' );
 	}
-	return fmt( 'zeroWrongSubtitle', 'None of the {n} answers were correct.', totalSlots.value );
+	if ( tenth >= 4 ) {
+		return t( 'resultHeadMid', 'Nice work.' );
+	}
+	return t( 'resultHeadLow', 'Challenge done.' );
 } );
 
-// One chip per slot: "+N" (correct), "0" (wrong), "–" (timeout) — matches the
-// vocabulary Nera_SAW_Run::slot_results() already scores in, so there is nothing
-// to re-derive here beyond the label.
+// One chip per question with what it was worth on this tier: right ones filled,
+// wrong or missed ones struck.
 const resultChips = computed( () =>
-	slotResults.value.map( ( r ) => {
-		if ( 'correct' === r.outcome ) {
-			return { key: r.slot_no, text: `+${ r.spins_awarded }`, kind: 'correct' };
-		}
-		if ( 'wrong' === r.outcome ) {
-			return { key: r.slot_no, text: '0', kind: 'wrong' };
-		}
-		return { key: r.slot_no, text: '–', kind: 'timeout' };
-	} )
+	slotResults.value.map( ( r ) => ( {
+		key: r.slot_no,
+		text: String( r.reward ?? r.spins_awarded ?? 0 ),
+		kind: 'correct' === r.outcome ? 'ok' : 'no',
+	} ) )
 );
+
+// Optional blocks the admin switched on for this competition.
+const resultDisplay = Array.isArray( window.NeraSAW && window.NeraSAW.resultDisplay ) ? window.NeraSAW.resultDisplay : [ 'draw_line' ];
+const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
+
+const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
+const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
+
+const prefersReducedMotion = () =>
+	typeof window !== 'undefined' && window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
+
+// Tickets earned counts up from 0 over about a second; at once with reduced motion.
+let countFrame = 0;
+let countTarget = null;
+function countUpTickets( to ) {
+	cancelAnimationFrame( countFrame );
+	countTarget = to || 0;
+	if ( ! to || prefersReducedMotion() ) {
+		shownTickets.value = to || 0;
+		return;
+	}
+	const from = performance.now();
+	const step = ( now ) => {
+		const p = Math.min( 1, ( now - from ) / 1000 );
+		shownTickets.value = Math.round( to * ( 1 - Math.pow( 1 - p, 3 ) ) );
+		if ( p < 1 ) {
+			countFrame = requestAnimationFrame( step );
+		}
+	};
+	shownTickets.value = 0;
+	countFrame = requestAnimationFrame( step );
+}
 
 const visibleTicketNumbers = computed( () =>
 	showAllTicketNumbers.value ? ticketNumbers.value : ticketNumbers.value.slice( 0, 6 )
@@ -1341,6 +1374,7 @@ async function fetchRunComplete() {
 	}
 	ticketsLoading.value = true;
 	ticketsError.value = '';
+	summaryReady.value = false;
 	try {
 		// EXPERIMENTAL: one call carrying every locally-accumulated answer,
 		// instead of a separate /answer per question plus this /complete call.
@@ -1356,6 +1390,14 @@ async function fetchRunComplete() {
 		tierLabel.value = summary.tier_label || summary.tier_key || '';
 		slotResults.value = Array.isArray( summary.slot_results ) ? summary.slot_results : [];
 		drawDate.value = summary.draw_date || '';
+		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
+		nextRunNo.value = Number( summary.next_run_no ) || 0;
+		nextRunTotal.value = Number( summary.next_run_total ) || 0;
+		summaryReady.value = true;
+		// The count started from the run's own tally; only a different confirmed total restarts it.
+		if ( countTarget !== finalSpins.value ) {
+			countUpTickets( finalSpins.value );
+		}
 	} catch ( e ) {
 		ticketsError.value = e && e.message ? e.message : t( 'ticketsMintError', 'We could not add your tickets right now.' );
 	} finally {
@@ -1368,12 +1410,18 @@ async function toEnd() {
 	quizSessionActive = false;
 	breadcrumb.clear( props.competitionId );
 	releaseNavigationGuard();
+	// Counts up from the run's own tally while the tickets are minted.
+	countUpTickets( finalSpins.value );
 	phase.value = 'end';
 	await fetchRunComplete();
 }
 
 const competitionUrl = computed( () => ( competitionId.value ? `/?p=${ competitionId.value }` : '#' ) );
 const competitionsListUrl = ( window.NeraSAW && window.NeraSAW.competitionsUrl ) || '';
+const competitionPageUrl = ( window.NeraSAW && window.NeraSAW.competitionPermalink ) || '';
+const myTicketsUrl = ( window.NeraSAW && window.NeraSAW.myTicketsUrl ) || '';
+const responsiblePlayUrl = ( window.NeraSAW && window.NeraSAW.responsiblePlayUrl ) || '';
+const hasNextRun = computed( () => ( runsRemainingTier.value || 0 ) > 0 && nextRunNo.value > 0 );
 const playAgainUrl = computed( () => {
 	if ( ! competitionId.value || typeof window === 'undefined' ) {
 		return '#';
@@ -1526,81 +1574,90 @@ onUnmounted( () => {
 		</div>
 
 		<div v-else-if="phase === 'end'" class="saw-results">
-			<p class="saw-results__eyebrow">{{ t('runComplete', 'Run complete') }}</p>
-			<h1 class="saw-results__title">{{ resultsTitle }}</h1>
-			<p class="saw-results__subtitle">{{ resultsSubtitle }}</p>
+			<p class="saw-results__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
+			<p class="saw-results__headline">{{ resultsHeadline }}</p>
+			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}</p>
 
-			<div class="saw-results__card">
-				<div class="saw-results__row">
-					<span class="saw-results__label">{{ t('scoreLabel', 'Score') }}</span>
-					<span class="saw-results__value">{{ fmt('scoreValue', '{c} of {total} correct', correctCount, totalSlots) }}</span>
+			<div class="saw-results__stats">
+				<div class="saw-results__stat">
+					<small>{{ t('scoreLabel', 'Score') }}</small>
+					<b>{{ correctCount }}<i>/{{ totalSlots || slotResults.length }}</i></b>
+					<span>{{ t('correctAnswers', 'correct answers') }}</span>
 				</div>
-				<div class="saw-results__row">
-					<span class="saw-results__label">{{ t('ticketsEarnedLabel', 'Tickets earned') }}</span>
-					<span class="saw-results__value saw-results__value--big" :class="{ 'is-zero': !hasTickets }">{{ finalSpins }}</span>
+				<div class="saw-results__stat saw-results__stat--tickets" :class="{ 'is-zero': !hasTickets }">
+					<small>{{ t('ticketsEarnedLabel', 'Tickets earned') }}</small>
+					<b>{{ hasTickets ? '+' + formatCount( shownTickets ) : '0' }}</b>
+					<span>{{ hasTickets ? t('inThisDraw', 'in this draw') : '—' }}</span>
 				</div>
+			</div>
 
-				<div class="saw-results__chips">
-					<span
-						v-for="c in resultChips"
-						:key="c.key"
-						class="saw-chip"
-						:class="'is-' + c.kind"
-					>{{ c.text }}</span>
-				</div>
+			<div v-if="resultChips.length" class="saw-qlad saw-results__chips" aria-hidden="true">
+				<i v-for="c in resultChips" :key="c.key" :class="'is-' + c.kind">{{ c.text }}</i>
+			</div>
 
-				<template v-if="hasTickets">
-					<div class="saw-results__divider"></div>
-					<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
-					<div class="saw-results__numbers">
-						<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
-						<button
-							v-if="extraTicketCount > 0"
-							type="button"
-							class="saw-numchip saw-numchip--more"
-							:aria-expanded="showAllTicketNumbers"
-							@click="toggleAllTicketNumbers"
-						>{{ showAllTicketNumbers ? t('showLess', 'Show less') : fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
-					</div>
-					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.") }}</p>
-					<div class="saw-results__divider"></div>
-					<p class="saw-results__fineprint">
-						<template v-if="drawDate">{{ fmt('drawDatePrefix', 'Draw: %s', drawDate) }}. </template>{{ t('drawInfoWithEntry', "Random draw, independently witnessed. You'll be notified either way.") }}
-					</p>
-				</template>
+			<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
+				<span class="saw-spinner" aria-hidden="true"></span>
+				<span>{{ t('mintingTickets', 'Adding your tickets to the draw…') }}</span>
+			</div>
+			<div v-else-if="ticketsError" class="saw-mint-error">
+				<p>{{ ticketsError }}</p>
+				<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
+			</div>
+			<template v-else>
+				<div v-if="hasTickets" class="saw-results__draw">
+					<div>{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div>
+				</div>
+				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div></div>
+			</template>
+
+			<p v-if="summaryReady && showBlock('draw_line')" class="saw-results__drawline">{{ fmt('resultDrawLine', 'Your tickets are entered in this prize draw · Live draw: {d}', drawDate || t('drawDateTbc', 'date to be confirmed')) }}</p>
+
+			<div v-if="showBlock('entry_numbers') && hasTickets && ticketNumbers.length" class="saw-results__entries">
+				<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
+				<div class="saw-results__numbers">
+					<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
+					<button
+						v-if="extraTicketCount > 0"
+						type="button"
+						class="saw-numchip saw-numchip--more"
+						:aria-expanded="showAllTicketNumbers"
+						@click="toggleAllTicketNumbers"
+					>{{ showAllTicketNumbers ? t('showLess', 'Show less') : fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
+				</div>
+				<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.") }}</p>
+			</div>
+
+			<div v-if="showBlock('fine_print')" class="saw-results__fine">
+				<p v-if="hasTickets" class="saw-results__fineprint">
+					<template v-if="drawDate">{{ fmt('drawDatePrefix', 'Draw: %s', drawDate) }}. </template>{{ t('drawInfoWithEntry', "Random draw, independently witnessed. You'll be notified either way.") }}
+				</p>
 				<template v-else>
-					<div class="saw-results__divider"></div>
 					<p class="saw-results__fineprint">{{ t('noEntryNote', 'No tickets were earned, so there is no entry in this draw, and no refund is due.') }}</p>
 					<p v-if="drawDate" class="saw-results__fineprint saw-results__fineprint--muted">{{ fmt('drawClosesPrefix', 'The draw closes %s.', drawDate) }}</p>
 				</template>
-
-				<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
-					<span class="saw-spinner" aria-hidden="true"></span>
-					<span>{{ t('mintingTickets', 'Adding your tickets to the draw…') }}</span>
-				</div>
-				<div v-else-if="ticketsError" class="saw-mint-error">
-					<p>{{ ticketsError }}</p>
-					<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
-				</div>
-
-				<p v-if="runsRemainingLine" class="saw-runs-left">{{ runsRemainingLine }}</p>
 			</div>
 
-			<!-- Client finding #39: the primary action is always the next thing a
-			     player would do — continue playing while runs remain, buy once
-			     they don't — regardless of this run's own ticket outcome. The
-			     earlier zero-tickets de-emphasis (a quiet "play again" + bare-link
-			     "back") contradicted that and is gone; playAgainUrl lands back on
-			     the hub either way, which already shows the right one of
-			     play/buy for the player's current balance. -->
-			<div class="saw-results__actions">
-				<a class="saw-results__primary" :href="playAgainUrl">
-					{{ runsRemainingTotal > 0 ? t('playAnotherRun', 'Play your next run') : t('buyAnotherRun', 'Buy another run') }}
-				</a>
+			<p v-if="showBlock('runs_left') && runsRemainingLine" class="saw-runs-left">{{ runsRemainingLine }}</p>
+
+			<div v-if="summaryReady" class="saw-results__actions">
+				<span v-if="hasNextRun" class="saw-results__ctawrap">
+					<a class="saw-results__primary" :href="playAgainUrl">{{ fmt('playQuizOf', 'Play quiz {i} of {n}', nextRunNo, nextRunTotal) }}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+				</span>
 				<a
 					class="saw-results__secondary"
-					:href="competitionsListUrl || competitionUrl"
-				>{{ t('backToCompetitions', 'Back to competitions') }}</a>
+					:class="{ 'is-primary': !hasNextRun }"
+					:href="myTicketsUrl || competitionsListUrl"
+				>{{ t('myTickets', 'My tickets') }}</a>
+				<a
+					v-if="! hasTickets && responsiblePlayUrl"
+					class="saw-results__back"
+					:href="responsiblePlayUrl"
+				>{{ t('responsiblePlay', 'Responsible play') }}</a>
+				<a
+					v-else
+					class="saw-results__back"
+					:href="competitionPageUrl || competitionUrl"
+				>{{ t('backToCompetition', 'Back to the competition') }}</a>
 			</div>
 		</div>
 	</div>
@@ -2030,67 +2087,52 @@ onUnmounted( () => {
 }
 .saw-banked__next:disabled { opacity: .5; cursor: default; }
 
-/* ---- results (28 / 29) ----------------------------------------------- */
-.saw-results { width: 100%; max-width: 560px; margin: 0 auto; text-align: center; }
-.saw-results__eyebrow { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--saw-text-muted); }
-.saw-results__title { margin: 0 0 8px; font-size: 26px; font-weight: 800; color: var(--saw-text); }
-.saw-results__subtitle { margin: 0 0 22px; color: var(--saw-text-muted); font-size: 15px; }
-
-.saw-results__card {
-	text-align: left; padding: 22px 24px; margin-bottom: 18px;
-	background: var(--saw-card, #fffaf4); border-radius: 18px;
-	box-shadow: 0 16px 40px -22px color-mix(in srgb, var(--saw-brand) 30%, transparent);
-}
-.saw-results__row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-.saw-results__label { font-size: 13px; color: var(--saw-text-muted); }
-.saw-results__value { font-size: 15px; font-weight: 800; color: var(--saw-text); }
-.saw-results__value--big { font-size: 26px; color: var(--saw-ok); }
-.saw-results__value--big.is-zero { color: var(--saw-text); }
-
-.saw-results__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
-.saw-chip {
-	min-width: 34px; padding: 5px 8px; border-radius: 8px; text-align: center;
-	font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
-}
-.saw-chip.is-correct { background: color-mix(in srgb, var(--saw-ok) 14%, #fff); color: var(--saw-ok); }
-.saw-chip.is-wrong { background: color-mix(in srgb, var(--saw-danger) 12%, #fff); color: var(--saw-danger); }
-.saw-chip.is-timeout { background: var(--saw-tint, #fcf4ec); color: var(--saw-text-muted); }
-
-.saw-results__divider { height: 1px; background: var(--saw-rule, var(--saw-surface)); margin: 16px 0; }
+/* ---- results ------------------------------------------------------------ */
+/* Neutral layout only: the theme decides the look. */
+.saw-results { box-sizing: border-box; width: 100%; max-width: 620px; margin: 0 auto; padding: 24px 20px; text-align: center; }
+.saw-results__kicker { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-results__headline { margin: 4px 0 0; font-size: 16px; font-weight: 800; color: var(--saw-text); }
+.saw-results__name { margin: 4px 0 0; font-size: 15px; font-weight: 800; color: var(--saw-text); }
+.saw-results__stats { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.saw-results__stat { display: flex; flex-direction: column; gap: 3px; padding: 14px 12px; border-radius: 18px; border: 1px solid var(--saw-surface); }
+.saw-results__stat small { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-results__stat b { font-size: 40px; line-height: 1; font-weight: 900; color: var(--saw-text); font-variant-numeric: tabular-nums; }
+.saw-results__stat b i { font-style: normal; font-size: .5em; color: var(--saw-text-muted); margin-left: 2px; }
+.saw-results__stat span { font-size: 12.5px; color: var(--saw-text-muted); }
+.saw-results__stat--tickets b { color: var(--saw-brand); }
+.saw-results__stat--tickets.is-zero b { color: var(--saw-text-muted); }
+.saw-results__chips { margin: 18px auto 0; max-width: 380px; }
+.saw-results .saw-minting, .saw-results .saw-mint-error { margin: 18px 0 0; }
+.saw-results__draw { margin-top: 18px; padding: 14px; border-radius: 16px; border: 1px solid var(--saw-surface); font-size: 14px; line-height: 1.5; }
+.saw-results__draw b { font-size: 16px; }
+.saw-results__drawsub { margin-top: 6px; }
+.saw-results__drawline { margin: 12px 0 0; font-size: 13px; color: var(--saw-text-muted); }
+.saw-results__entries, .saw-results__fine { margin-top: 16px; text-align: left; }
+.saw-results__label { margin: 0; font-size: 13px; color: var(--saw-text-muted); }
 .saw-results__numbers { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 8px; }
-.saw-numchip {
-	padding: 6px 12px; border-radius: 999px; background: var(--saw-tint, #fcf4ec);
-	border: 1px solid var(--saw-control, var(--saw-surface)); font-size: 13px; font-weight: 700; color: var(--saw-text);
-}
-.saw-numchip--more {
-	color: var(--saw-brand); border-color: transparent; background: transparent;
-	font: inherit; cursor: pointer;
-}
+.saw-numchip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--saw-surface); font-size: 13px; font-weight: 700; color: var(--saw-text); }
+.saw-numchip--more { color: var(--saw-brand); border-color: transparent; background: transparent; font: inherit; cursor: pointer; }
 .saw-results__note { margin: 0; font-size: 12px; color: var(--saw-text-muted); }
 .saw-results__fineprint { margin: 0; font-size: 13px; line-height: 1.6; color: var(--saw-text); }
 .saw-results__fineprint--muted { color: var(--saw-text-muted); margin-top: 4px; }
+.saw-results .saw-runs-left { margin: 12px 0 0; }
 
-.saw-results__actions { display: flex; flex-direction: column; gap: 10px; }
-.saw-results__primary {
-	display: block; padding: 15px; border-radius: 12px; text-align: center;
-	background: var(--saw-brand); color: #fff; font-weight: 700; font-size: 15px; text-decoration: none;
-}
-@media (hover: hover) and (pointer: fine) {
-	.saw-results__primary:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); color: #fff; }
-}
+.saw-results__actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+.saw-results__ctawrap { display: block; }
+.saw-results__primary,
 .saw-results__secondary {
-	display: block; padding: 15px; border-radius: 12px; text-align: center;
-	background: #fff; color: var(--saw-text); font-weight: 700; font-size: 15px; text-decoration: none;
-	border: 1.5px solid var(--saw-surface);
+	box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+	min-height: 52px; padding: 0 24px; border-radius: 12px; text-align: center;
+	font-weight: 800; font-size: 15px; text-decoration: none;
 }
-@media (hover: hover) and (pointer: fine) {
-	.saw-results__secondary:hover { border-color: var(--saw-brand); color: var(--saw-brand); }
-}
+.saw-results__primary { background: var(--saw-brand); color: #fff; }
+.saw-results__secondary { border: 1.5px solid currentColor; color: var(--saw-text); }
+.saw-results__secondary.is-primary { border-width: 2px; }
+.saw-results__back { align-self: center; min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 14px; color: var(--saw-text-muted); text-decoration: underline; }
 
 @media (max-width: 480px) {
 	.saw-langcard { padding: 32px 20px; }
 	.saw-langcard__options { flex-direction: column; }
-	.saw-results__card { padding: 18px; }
 }
 </style>
 

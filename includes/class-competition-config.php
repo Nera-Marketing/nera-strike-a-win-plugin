@@ -34,6 +34,10 @@ class Nera_SAW_Competition_Config {
 			// Per-competition Quiz Method. Blank = inherit the global setting;
 			// resolve through Nera_SAW_Mode::quiz_method(), never read directly.
 			'quiz_method'    => Nera_SAW_Mode::INHERIT,
+			// Results screen blocks: '' = inherit the global list, an array = this
+			// competition's own list (an empty array shows none). Resolve through
+			// Nera_SAW_Constants::result_display().
+			'result_display' => '',
 			// Free text, not a number: the prototype prints it verbatim ("£28,000")
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
@@ -238,6 +242,10 @@ class Nera_SAW_Competition_Config {
 		$config['quiz_method'] = Nera_SAW_Mode::sanitize_quiz_method_override(
 			isset( $config['quiz_method'] ) ? $config['quiz_method'] : Nera_SAW_Mode::INHERIT
 		);
+
+		$config['result_display'] = is_array( $config['result_display'] )
+			? Nera_SAW_Constants::sanitize_result_display( $config['result_display'] )
+			: '';
 
 		$config['cash_alternative'] = sanitize_text_field(
 			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''

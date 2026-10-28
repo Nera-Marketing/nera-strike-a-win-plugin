@@ -142,6 +142,31 @@ class Nera_SAW_Frontend {
 	}
 
 	/**
+	 * Where the result screen's "Responsible play" link goes.
+	 *
+	 * @return string
+	 */
+	public static function responsible_play_url() {
+		$url = class_exists( 'Nera_SAW_Standalone_Pages' ) ? Nera_SAW_Standalone_Pages::url( 'player-protection' ) : '';
+		if ( ! $url && function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$url = wc_get_account_endpoint_url( Nera_SAW_Account_Pages::RESPONSIBLE_PLAY );
+		}
+		return (string) $url;
+	}
+
+	/**
+	 * A competition's page: the standalone section's own route when there is
+	 * one, else the product permalink.
+	 *
+	 * @param int $competition_id Competition product ID.
+	 * @return string
+	 */
+	public static function competition_permalink( $competition_id ) {
+		$url = (string) apply_filters( 'nera_saw_standalone_competition_url', '', (int) $competition_id );
+		return '' !== $url ? $url : (string) get_permalink( (int) $competition_id );
+	}
+
+	/**
 	 * Enqueue the Vue island (Vite manifest in prod, dev server in dev) + localise.
 	 *
 	 * Public: the standalone section's own play template mounts the same Vue app
@@ -252,6 +277,13 @@ class Nera_SAW_Frontend {
 					? Nera_SAW_Standalone_Pages::url( 'competitions' )
 					: ( function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/' ) )
 			),
+			// The results screen: which optional blocks show, and where its links go.
+			'resultDisplay'      => Nera_SAW_Constants::result_display( $competition_id ),
+			'competitionPermalink' => $competition_id ? esc_url_raw( self::competition_permalink( $competition_id ) ) : '',
+			'myTicketsUrl'       => function_exists( 'wc_get_account_endpoint_url' ) ? esc_url_raw( wc_get_account_endpoint_url( 'my-runs-tickets' ) ) : '',
+			// A run with no tickets links to responsible play: the section's player
+			// protection page when it exists, else the account's responsible-play tab.
+			'responsiblePlayUrl' => esc_url_raw( self::responsible_play_url() ),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
@@ -391,6 +423,23 @@ class Nera_SAW_Frontend {
 				'playAnotherRun'     => Nera_SAW_I18n::t( 'Play your next run' ),
 				'buyAnotherRun'      => Nera_SAW_I18n::t( 'Buy another run' ),
 				'backToCompetitions' => Nera_SAW_I18n::t( 'Back to competitions' ),
+				'resultKicker'       => Nera_SAW_I18n::t( 'Challenge completed' ),
+				'resultHeadNone'     => Nera_SAW_I18n::t( 'No correct answers this time.' ),
+				'resultHeadLow'      => Nera_SAW_I18n::t( 'Challenge done.' ),
+				'resultHeadMid'      => Nera_SAW_I18n::t( 'Nice work.' ),
+				'resultHeadHigh'     => Nera_SAW_I18n::t( 'Great score!' ),
+				'resultHeadPerfect'  => Nera_SAW_I18n::t( 'Perfect score!' ),
+				'correctAnswers'     => Nera_SAW_I18n::t( 'correct answers' ),
+				'inThisDraw'         => Nera_SAW_I18n::t( 'in this draw' ),
+				'ticketsInDraw'      => Nera_SAW_I18n::t( 'Your tickets in this draw' ),
+				'ticketsCount'       => Nera_SAW_I18n::n_template( '{n} ticket', '{n} tickets' ),
+				'noTicketsThisQuiz'  => Nera_SAW_I18n::t( 'No tickets from this quiz.' ),
+				'resultDrawLine'     => Nera_SAW_I18n::t( 'Your tickets are entered in this prize draw · Live draw: {d}' ),
+				'drawDateTbc'        => Nera_SAW_I18n::t( 'date to be confirmed' ),
+				'playQuizOf'         => Nera_SAW_I18n::t( 'Play quiz {i} of {n}' ),
+				'myTickets'          => Nera_SAW_I18n::t( 'My tickets' ),
+				'backToCompetition'  => Nera_SAW_I18n::t( 'Back to the competition' ),
+				'responsiblePlay'    => Nera_SAW_I18n::t( 'Responsible play' ),
 			),
 		);
 

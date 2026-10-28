@@ -149,6 +149,8 @@ class Nera_SAW_Settings_Admin {
 				'wallet_topup_max_per_day'         => $wallet_per_day,
 				'checkout_gateways'                => $checkout_gateways,
 				'checkout_show_coupon'             => $checkout_coupon,
+				// Unticking every box posts nothing: that is an empty list, not the default.
+				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
 				'tiers'              => $tiers,
 			)
 		);
@@ -459,6 +461,21 @@ class Nera_SAW_Settings_Admin {
 		);
 		echo '</div>';
 		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
+		echo '</div>';
+
+		// --- Result screen card --------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Result screen', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'Optional blocks on the screen a player sees after a run. The score, tickets earned, the per-question bar, the draw box and the actions always show. Each competition can use its own choice on its Strike And Win tab.', 'nera-strikeawin' ) . '</p>';
+		$result_on = Nera_SAW_Constants::result_display();
+		foreach ( Nera_SAW_Constants::result_blocks() as $block => $block_label ) {
+			printf(
+				'<label class="saw-field saw-field--check"><input type="checkbox" name="result_display[]" value="%1$s"%2$s> <span>%3$s</span></label>',
+				esc_attr( $block ),
+				checked( in_array( $block, $result_on, true ), true, false ),
+				esc_html( $block_label )
+			);
+		}
 		echo '</div>';
 
 		// --- Global tiers card ---------------------------------------------
