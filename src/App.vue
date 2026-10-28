@@ -141,7 +141,7 @@ function feedbackHoldSeconds() {
 	return Number.isFinite( n ) && n > 0 ? n : FEEDBACK_SECONDS_FALLBACK;
 }
 
-const phase = ref( 'loading' ); // language | loading | stage-break | question | reveal | end | error
+const phase = ref( 'loading' ); // language | loading | question | reveal | end | error
 const errorMsg = ref( '' );
 const canRetry = ref( false ); // error screen: offer a "Try again" for the failed step.
 
@@ -167,33 +167,27 @@ const chosenLanguage = ref( '' );
  * ------------------------------------------------------------------------- */
 const stageNo = ref( 1 );
 const stageCount = ref( 1 );
-// The stage-break screen's subtitle — the server's own combined, plural-aware
-// "Stage {n} of {total} · {band} · {k} ticket(s) per correct answer" sentence
-// (Nera_SAW_Competition_Config::stage_label(), client finding #47), set from
-// `next.stage_label` wherever `next.reward_label` was read before.
-const stageBreakLabel = ref( '' );
+// The quiz bar: the competition (name, prize photo, market value, tiers),
+// localised once per page load in class-frontend.php's enqueue_app().
+const competition = ( window.NeraSAW && window.NeraSAW.competition ) || {};
+// The run's tier key: the Start/Resume state's tier_key once it lands (a
+// resumed run or "End run" may arrive without a tier prop).
+const tierKey = ref( props.tier || '' );
 
-// The stage chip in the header is the SHORT label -- "Stage 2 of 4 · Medium" -- on
-// every screen, as in the design. It used to read the server's combined sentence
-// off the slot once one had loaded ("... · 2 tickets per correct answer"), so the
-// chip changed length between the stage-break screen (no slot yet: short) and the
-// question screens (long), and repeated what "Worth N tickets" already says. The
-// reward clause stays where it belongs, on the stage-break sub-line
-// (stageBreakLabel) and the Worth chip.
-const stagePillLabel = computed( () =>
-	fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
-);
+// "Quiz n of N · Premium ×10": n is this run's place among the runs the same
+// purchase bought for this tier, N how many it bought (also "Quiz 1 of 1").
+// The multiplier is only shown above 1.
+const quizOfLabel = computed( () => {
+	const tiers = competition.tiers && 'object' === typeof competition.tiers ? competition.tiers : {};
+	const tier = tiers[ tierKey.value ] || null;
+	const label = tier ? tier.label : tierKey.value;
+	const mult = tier ? Number( tier.multiplier ) || 1 : 1;
+	const head = fmt( 'quizOf', 'Quiz {n} of {total}', runIndex.value, runTotal.value );
+	return label ? head + ' · ' + label + ( mult > 1 ? ' ×' + mult : '' ) : head;
+} );
 
-// "Run X of N" (client finding #36 / requirements.md's own "Run 1 of 3"):
-// blank — not "Run 1 of 1" — when only one run was bought, per
-// requirements.md's own "when several runs were bought" qualifier.
-const runOfTotalLabel = computed( () =>
-	runTotal.value > 1 ? fmt( 'runOfTotal', 'Run {n} of {total}', runIndex.value, runTotal.value ) : ''
-);
-
-// Pre-run header preview: lets the .saw-stagebar header (normally driven by the
-// current slot, once a run exists) also render on the language-choice screen,
-// matching the reference design's screen 24. Localised server-side from the
+// Pre-run stage count, seeded before the language-choice screen
+// (reference design screen 24). Localised server-side from the
 // competition's config with no run started — see class-frontend.php's
 // enqueue_app(); blank/default in random-mode competitions, where "stage 1"
 // isn't a deterministic concept before the run's slots are actually drawn. (The
@@ -205,12 +199,6 @@ const runOfTotalLabel = computed( () =>
 		stageCount.value = preRunStageCount;
 	}
 }() );
-// Which stage the break screen has already been shown for, so a retry or a
-// resume that re-fetches the same slot does not show it a second time.
-let stageBreakShownFor = 0;
-// The slot payload fetched while the break screen is up, applied once the
-// player continues past it.
-let pendingSlotData = null;
 
 const runId = ref( 0 );
 const competitionId = ref( 0 );
@@ -253,7 +241,7 @@ const slot = reactive( {
 	slot_no: 0,
 	level: '',
 	// Pre-seeded from the server's pre-run stage preview (see seedPreRunStageCount
-	// above) so the language screen's .saw-stagebar shows real stage-1 info before
+	// above) so the language screen has real stage-1 info before
 	// any slot has loaded; serve_slot()'s real values overwrite these the moment
 	// the run actually starts.
 	level_label: ( window.NeraSAW && window.NeraSAW.firstStageLabel ) || '',
@@ -264,7 +252,7 @@ const slot = reactive( {
 	seconds_left: 0,
 	reward: 0, // tickets this question is worth if answered correctly.
 	// Server-combined "Stage n of total · band · reward" sentence — empty
-	// until a real slot loads; see stagePillLabel's own fallback for why.
+	// until a real slot loads.
 	stage_label: '',
 } );
 
@@ -276,6 +264,9 @@ const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 
 // before it arms that slot's clock, so switching screens never has to wait on
 // a fetch for content the client already holds.
 const slotContentCache = new Map();
+// The ladder chips: every slot's reward (already times the tier multiplier) and
+// its obfuscated key, in slot order. Reactive copy of the cache, which is not.
+const ladderSlots = ref( [] );
 function cacheSlotContent( slots ) {
 	if ( ! Array.isArray( slots ) ) {
 		return;
@@ -285,7 +276,37 @@ function cacheSlotContent( slots ) {
 			slotContentCache.set( entry.slot_no, entry );
 		}
 	}
+	ladderSlots.value = [ ...slotContentCache.values() ]
+		.sort( ( a, b ) => a.slot_no - b.slot_no )
+		.map( ( e ) => ( { slot_no: e.slot_no, reward: Number( e.reward ) || 0, key: e.answer_key } ) );
 }
+
+// How many answers experimentalAnswers holds; a plain array is not reactive, so
+// every change to it sets this too.
+const answeredCount = ref( 0 );
+
+// One chip per question: answered right (is-ok), answered wrong or timed out
+// (is-no), the current one (is-cur), later ones plain. Built from the answers
+// themselves, so a resumed run (answers restored, no per-question results)
+// shows the same chips as one played straight through.
+const ladderChips = computed( () => {
+	const chosen = new Map( experimentalAnswers.slice( 0, answeredCount.value ).map( ( a ) => [ a.slot_no, a.chosen_index ] ) );
+	return ladderSlots.value.map( ( s ) => {
+		let state = '';
+		if ( chosen.has( s.slot_no ) ) {
+			const pick = chosen.get( s.slot_no );
+			state = -1 !== pick && pick === ( s.key ^ obfuscationSeed.value ) ? 'is-ok' : 'is-no';
+		} else if ( s.slot_no === slot.slot_no ) {
+			state = 'is-cur';
+		}
+		return { no: s.slot_no, reward: s.reward, state };
+	} );
+} );
+
+// The progress line under the quiz bar: answered / total.
+const progressPct = computed( () =>
+	totalSlots.value ? Math.min( 100, ( answeredCount.value / totalSlots.value ) * 100 ) : 0
+);
 
 let ticker = null;
 let holdTicker = null;
@@ -441,6 +462,11 @@ function onVisibilityChange() {
 	// whole point of not polling.
 }
 
+// The quiz bar's ×: the same Leave dialog; leaving ends the run and shows the results.
+function onQuizBarLeave() {
+	requestLeavePrompt( toEnd );
+}
+
 function requestLeavePrompt( proceed ) {
 	if ( leavePromptInFlight || leaveDialogOpen.value ) {
 		return leavePromptPromise || Promise.resolve( false );
@@ -474,13 +500,6 @@ const timerUrgent = computed( () => {
 	const left = slot.seconds_left;
 	return left > 0 && left <= timerWarnThreshold();
 } );
-
-// The slot's difficulty colour, exposed as a custom property so the question text
-// and the head-bar level name pick it up from one place. Absent (unparseable
-// ladder colour) leaves the property unset and the CSS falls back to normal text.
-const levelStyle = computed( () =>
-	slot.level_text_color ? { '--saw-level': slot.level_text_color } : {}
-);
 
 const finalSpins = computed( () =>
 	spinsFinal.value !== null && spinsFinal.value !== undefined ? spinsFinal.value : spinsSoFar.value
@@ -662,6 +681,19 @@ const revealAnnouncement = computed( () => {
 	return answer
 		? t( 'revealWrong', 'Wrong. The correct answer was: %s' ).replace( '%s', answer )
 		: t( 'revealWrongBare', 'Wrong. No tickets.' );
+} );
+
+// The line under the question card once an answer is scored.
+const feedbackLine = computed( () => {
+	if ( phase.value !== 'reveal' ) {
+		return '';
+	}
+	if ( lastResult.correct ) {
+		return fmt( 'feedbackRight', 'Right: +{k} ticket|Right: +{k} tickets', lastResult.spins_awarded );
+	}
+	return lastResult.timed_out
+		? t( 'feedbackTimeout', 'Time’s up: 0 tickets' )
+		: t( 'feedbackWrong', 'Wrong: 0 tickets' );
 } );
 
 // Green on the correct option; red only on a pick the server actually scored. A
@@ -1022,7 +1054,7 @@ watch( phase, ( p ) => {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
-	const takeover = p === 'loading' || p === 'language' || p === 'stage-break' || p === 'question' || p === 'reveal' || p === 'end';
+	const takeover = p === 'loading' || p === 'language' || p === 'question' || p === 'reveal' || p === 'end';
 	document.body.classList.toggle( 'saw-quiz-takeover', takeover );
 }, { immediate: true } );
 
@@ -1036,6 +1068,9 @@ function applyState( state ) {
 	}
 	if ( state.run_total ) {
 		runTotal.value = state.run_total;
+	}
+	if ( state.tier_key ) {
+		tierKey.value = state.tier_key;
 	}
 	if ( state.spins_final !== null && state.spins_final !== undefined ) {
 		spinsFinal.value = state.spins_final;
@@ -1056,51 +1091,6 @@ function applyState( state ) {
 // single string comparison.
 const Nera_SAW_QUIZ_LADDER = 'ladder';
 
-/**
- * Show the stage-break screen for the state's next slot, if one is due, WITHOUT
- * fetching that slot yet.
- *
- * Order matters here: serve_slot() stamps the clock on first fetch, so deciding
- * "does this need a break screen" has to happen from state()'s next_stage
- * look-ahead (a read of the already-drawn run_slots row) rather than from
- * getSlot()'s response — fetching early just to check would start the next
- * question's timer behind the very screen meant to give the player a breath
- * before it.
- *
- * @param {object} state Whatever start()/submit()/resume returned.
- * @return {boolean} true if the break screen is now showing (caller stops here).
- */
-function maybeShowStageBreak( state ) {
-	const next = state && state.next_stage;
-	if (
-		! next ||
-		! state.next_slot ||
-		Nera_SAW_QUIZ_LADDER !== next.quiz_method ||
-		! next.is_first_of_stage ||
-		stageBreakShownFor === next.stage_no
-	) {
-		return false;
-	}
-
-	stageBreakShownFor = next.stage_no;
-	pendingSlotData = state.next_slot;
-	stageNo.value = next.stage_no;
-	stageCount.value = next.stage_count;
-	slot.level_label = next.level_label;
-	slot.level_text_color = next.level_text_color;
-	stageBreakLabel.value = next.stage_label;
-	phase.value = 'stage-break';
-	return true;
-}
-
-function continueFromStageBreak() {
-	const slotNo = pendingSlotData;
-	pendingSlotData = null;
-	if ( slotNo ) {
-		loadSlot( slotNo );
-	}
-}
-
 async function start() {
 	retryAction = start;
 	try {
@@ -1118,6 +1108,7 @@ async function start() {
 			experimentalAnswers.splice( 0, experimentalAnswers.length );
 			breadcrumb.save( props.competitionId, runId.value );
 		}
+		answeredCount.value = experimentalAnswers.length;
 		if ( state.status === 'finalized' ) {
 			quizSessionActive = false;
 			return toEnd();
@@ -1133,9 +1124,6 @@ async function start() {
 			// again: it was never recorded. Questions already answered stay answered.
 			const nextSlot = Math.max( 1, Number( resumeFrom.next_slot ) || ( resumeFrom.answers.length + 1 ) );
 			return advanceAfterAnswer( buildExperimentalAdvanceState( nextSlot ) );
-		}
-		if ( maybeShowStageBreak( state ) ) {
-			return;
 		}
 		await loadSlot( state.next_slot || 1 );
 	} catch ( e ) {
@@ -1189,10 +1177,7 @@ async function loadSlot( slotNo ) {
 	slot.slot_no = slotNo;
 	slot.timer_seconds = timerSeconds.value;
 	slot.seconds_left = timerSeconds.value;
-	// The head-bar's "Stage N of M" reads these on every slot, not only the
-	// first of a stage — maybeShowStageBreak() sets them for the transition,
-	// but a plain loadSlot() (stage 1, or the second+ question within a stage)
-	// never goes through there and must not be left showing a stale stage.
+	// The slot's stage, read on every slot so it never shows a stale one.
 	stageNo.value = ( cached && cached.stage_no ) || stageNo.value;
 	stageCount.value = ( cached && cached.stage_count ) || stageCount.value;
 
@@ -1236,12 +1221,13 @@ function selectOption( index ) {
 function advanceAfterAnswer( state ) {
 	if ( state.status === 'finalized' || ! state.next_slot ) {
 		toEnd();
-	} else if ( ! maybeShowStageBreak( state ) ) {
+	} else {
+		// No break between levels: the next question follows straight on.
 		loadSlot( state.next_slot );
 	}
 }
 
-// EXPERIMENTAL: same shape advanceAfterAnswer()/maybeShowStageBreak() expect
+// EXPERIMENTAL: same shape advanceAfterAnswer() expects
 // from the server's per-answer response, built instead from the slot content
 // Start/Resume already cached — nothing here is fetched.
 function buildExperimentalAdvanceState( nextSlotNo ) {
@@ -1292,6 +1278,7 @@ async function submit( option ) {
 	const awarded = isCorrect ? ( slot.reward || 0 ) : 0;
 
 	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
+	answeredCount.value = experimentalAnswers.length;
 	spinsSoFar.value = ( spinsSoFar.value || 0 ) + awarded;
 	// Kept in this browser (no request) so Continue your run can restore it.
 	breadcrumb.save( props.competitionId, runId.value, {
@@ -1414,32 +1401,24 @@ onUnmounted( () => {
 		</div>
 
 		<div
-			v-else-if="phase === 'language' || phase === 'stage-break' || phase === 'question' || phase === 'reveal'"
+			v-else-if="phase === 'language' || phase === 'question' || phase === 'reveal'"
 			class="saw-play"
 		>
-			<div class="saw-stagebar" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">
-				<div class="saw-stagebar__row">
-					<div class="saw-stagebar__pills">
-						<span class="saw-stagebar__pill">{{ stagePillLabel }}</span>
-						<span v-if="runOfTotalLabel" class="saw-stagebar__run">{{ runOfTotalLabel }}</span>
-					</div>
-					<span class="saw-stagebar__tickets">
-						<span class="saw-stagebar__ticketslabel">{{ t('ticketsLabel', 'Tickets') }}</span>
-						<span class="saw-stagebar__ticketsvalue">{{ spinsSoFar }}</span>
-					</span>
-				</div>
-				<!-- No slot has loaded yet on the language screen, so totalSlots/slot.slot_no
-				     aren't known — the progress dots would just be an empty bar; skip them
-				     there rather than render something meaningless. -->
-				<div v-if="phase !== 'language'" class="saw-stagebar__dots">
-					<span
-						v-for="n in totalSlots"
-						:key="n"
-						class="saw-stagebar__dot"
-						:class="{ 'is-filled': n <= slot.slot_no }"
-					></span>
+			<!-- The quiz bar: competition, "Quiz n of N · tier" and leave. The language
+			     card comes before the run exists, so it shows the name alone. -->
+			<div class="saw-qbar">
+				<div class="saw-qbar__wrap">
+					<div class="saw-qbar__t">{{ competition.name }}<span v-if="phase !== 'language'">{{ quizOfLabel }}</span></div>
+					<button
+						v-if="phase !== 'language'"
+						type="button"
+						class="saw-qbar__x"
+						:aria-label="t('leaveLabel', 'Leave')"
+						@click="onQuizBarLeave"
+					><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 				</div>
 			</div>
+			<div v-if="phase !== 'language'" class="saw-qprog" aria-hidden="true"><i :style="{ width: progressPct + '%' }"></i></div>
 
 			<div v-if="phase === 'language'" class="saw-langcard">
 				<h2 class="saw-langcard__title">{{ t('quizLanguageTitle', 'Quiz language') }}</h2>
@@ -1455,66 +1434,64 @@ onUnmounted( () => {
 				</div>
 			</div>
 
-			<div v-else-if="phase === 'stage-break'" class="saw-stagebreak">
-				<div class="saw-stagebreak__badge" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">{{ stageNo }}</div>
-				<h2 class="saw-stagebreak__title">{{ t('stageBreakHeadline_' + stageNo, slot.level_label) }}</h2>
-				<p class="saw-stagebreak__sub">{{ stageBreakLabel }}</p>
-				<button type="button" class="saw-stagebreak__continue" @click="continueFromStageBreak">
-					{{ t('continueLabel', 'Continue') }}
-				</button>
-			</div>
+			<div v-else class="saw-qmain" :class="{ 'is-revealing': phase === 'reveal' }">
+				<div class="saw-qlad" aria-hidden="true"><i v-for="c in ladderChips" :key="c.no" :class="c.state">{{ c.reward }}</i></div>
 
-			<div v-else class="saw-qbody" :class="{ 'is-revealing': phase === 'reveal' }" :style="levelStyle">
-				<div class="saw-qbody__head">
-					<div>
-						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}</p>
-						<span class="saw-qbody__worth">{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span>
+				<div class="saw-qmeta">
+					<div class="saw-qmeta__level">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}<template v-if="slot.level_label"> · {{ slot.level_label }}</template><span>{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span></div>
+					<div class="saw-qmeta__tix"><small>{{ t('ticketsLabel', 'Tickets') }}</small><b>{{ spinsSoFar }}</b></div>
+				</div>
+
+				<div v-if="competition.name" class="saw-qprize" aria-hidden="true">
+					<div class="saw-qprize__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
+					<div><small>{{ t('playingFor', 'Playing for') }}</small><b v-if="competition.value">{{ competition.value }}</b><span>{{ competition.name }}</span></div>
+				</div>
+
+				<div class="saw-qcard">
+					<div class="saw-qtop">
+						<h1 class="saw-question">{{ slot.question }}</h1>
+						<div
+							class="saw-qtimer"
+							:class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }"
+							:style="{ '--saw-qtimer-pct': timerPct }"
+						>
+							<svg viewBox="0 0 44 44" width="62" height="62" aria-hidden="true">
+								<circle class="saw-qtimer__track" cx="22" cy="22" r="19"></circle>
+								<circle class="saw-qtimer__fill" cx="22" cy="22" r="19"></circle>
+							</svg>
+							<span class="saw-qtimer__num">{{ Math.max(0, slot.seconds_left) }}</span>
+						</div>
 					</div>
-					<div
-						class="saw-qtimer"
-						:class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }"
-						:style="{ '--saw-qtimer-pct': timerPct }"
-					>
-						<svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
-							<circle class="saw-qtimer__track" cx="22" cy="22" r="19"></circle>
-							<circle class="saw-qtimer__fill" cx="22" cy="22" r="19"></circle>
-						</svg>
-						<span class="saw-qtimer__num">{{ Math.max(0, slot.seconds_left) }}</span>
+					<p class="saw-sr-only" role="status" aria-live="polite">{{ revealAnnouncement }}</p>
+
+					<div class="saw-answers">
+						<button
+							v-for="(a, i) in slot.answers"
+							:key="a.index"
+							type="button"
+							class="saw-answer"
+							:class="optionClass(a)"
+							:disabled="locked || submitting"
+							:aria-pressed="selectedAnswer === a.index"
+							@click="selectOption(a.index)"
+						><em aria-hidden="true">{{ 'ABCDEFGHIJ'.charAt(i) }}</em>{{ a.text }}</button>
 					</div>
 				</div>
 
-				<h1 class="saw-question">{{ slot.question }}</h1>
-				<p class="saw-sr-only" role="status" aria-live="polite">{{ revealAnnouncement }}</p>
-
-				<div class="saw-answers">
-					<button
-						v-for="a in slot.answers"
-						:key="a.index"
-						type="button"
-						class="saw-answer"
-						:class="optionClass(a)"
-						:disabled="locked || submitting"
-						:aria-pressed="selectedAnswer === a.index"
-						@click="selectOption(a.index)"
-					>{{ a.text }}</button>
-				</div>
-
-				<div v-if="phase === 'reveal'" class="saw-banked" :class="{ 'is-zero': !lastResult.correct }">
-					{{ lastResult.correct
-						? fmt('bankedLine', '+{k} banked. {t} tickets total.', lastResult.spins_awarded, spinsSoFar)
-						: ( lastResult.timed_out
-							? fmt('timeUpLine', "Time's up. {t} tickets total.", spinsSoFar)
-							: fmt('wrongLine', 'Not this time. {t} tickets total.', spinsSoFar) )
-					}}
-					<button
-						type="button"
-						class="saw-banked__next"
-						:disabled="advancing"
-						@click="endHold"
-					>{{ revealIsFinal
-						? t('seeResults', 'See my results') + ' (' + Math.max(0, revealSecondsLeft) + ')'
-						: fmt('nextQuestion', 'Next question ({s})', Math.max(0, revealSecondsLeft)) }}</button>
-				</div>
+				<div
+					class="saw-qfb"
+					:class="{ 'is-good': phase === 'reveal' && lastResult.correct, 'is-bad': phase === 'reveal' && !lastResult.correct }"
+					aria-hidden="true"
+				>{{ feedbackLine }}</div>
+				<button
+					v-if="phase === 'reveal'"
+					type="button"
+					class="saw-banked__next"
+					:disabled="advancing"
+					@click="endHold"
+				>{{ revealIsFinal
+					? t('seeResults', 'See my results') + ' (' + Math.max(0, revealSecondsLeft) + ')'
+					: fmt('nextQuestion', 'Next question ({s})', Math.max(0, revealSecondsLeft)) }}</button>
 			</div>
 		</div>
 
@@ -1877,26 +1854,18 @@ onUnmounted( () => {
 
 /* =====================================================================
  * Reference design (strikeawin-elements.pages.dev, screens 24–29): the
- * language pick, the stage-shelled question/reveal, the stage-break, and the
- * two results layouts. Everything below is new; the rules above this point
+ * language pick, the question/reveal, and the two results layouts. Everything below is new; the rules above this point
  * belong to the pre-reference default skin and are left in place rather than
  * pruned, since nothing here still uses their class names.
  * ===================================================================== */
 
-/* A single white-card shell. The language pick now shares the same
-   .saw-play-wrapped stage-bar header as the stage-break/question/reveal
-   screens (reference design screen 24), so .saw-langcard is always nested
-   inside .saw-play and only needs its own inner padding below — the shell
-   itself (sizing, background, radius, shadow) lives on .saw-play alone so it
-   isn't doubled up. */
+/* The run's screen: the quiz bar across the top, a progress line under it,
+   then one centred column (ladder, meta, prize, question card, feedback). The
+   language pick shares the bar. Neutral layout only; a theme adds the look. */
 .saw-play {
 	width: 100%;
-	max-width: 560px;
-	margin: 0 auto;
-	background: var(--saw-card, #fffaf4);
-	border-radius: 20px;
-	box-shadow: 0 20px 50px -24px color-mix(in srgb, var(--saw-brand) 35%, transparent);
-	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
 
 /* ---- quiz language (screen 24) ------------------------------------- */
@@ -1914,64 +1883,69 @@ onUnmounted( () => {
 	.saw-langcard__btn:hover { border-color: var(--saw-brand); box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--saw-brand) 30%, transparent); }
 }
 
-/* ---- the stage bar, shared by stage-break and question/reveal (25/26/27) --
-   Background colour comes straight off slot.level_text_color: a value already
-   corrected to sit safely under white text (Nera_SAW_Constants::level_text_color()
-   darkens a level's colour until it passes contrast against white) — the same
-   arithmetic works unchanged whichever of the two colours plays "background". */
-.saw-stagebar { padding: 18px 22px 14px; color: var(--saw-on-dark, #fff); }
-.saw-stagebar__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.saw-stagebar__pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.saw-stagebar__pill {
-	display: inline-block; padding: 5px 12px; border-radius: 999px;
-	background: rgba(0, 0, 0, .18); font-size: 13px; font-weight: 700;
+/* ---- quiz bar and progress line --------------------------------------- */
+.saw-qbar { border-bottom: 1px solid var(--saw-surface); }
+.saw-qbar__wrap {
+	box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+	gap: 12px; min-height: 60px; padding: 0 16px;
 }
-/* "Run X of N" (client finding #36) -- a quieter sibling pill next to the
-   stage pill, not competing with it for attention. */
-.saw-stagebar__run {
-	display: inline-block; padding: 5px 12px; border-radius: 999px;
-	background: rgba(0, 0, 0, .1); font-size: 12px; font-weight: 600; opacity: .9;
+.saw-qbar__t { min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.3; }
+.saw-qbar__t span { display: block; font-weight: 600; color: var(--saw-text-muted); }
+.saw-qbar__x {
+	flex: none; width: 44px; height: 44px; padding: 0; border-radius: 50%;
+	border: 1px solid var(--saw-surface); background: transparent; color: inherit;
+	display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.saw-stagebar__tickets { text-align: right; }
-.saw-stagebar__ticketslabel { display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
-.saw-stagebar__ticketsvalue { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; }
-.saw-stagebar__dots { display: flex; gap: 5px; }
-.saw-stagebar__dot { flex: 1 1 0; height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .3); }
-.saw-stagebar__dot.is-filled { background: rgba(255, 255, 255, .95); }
-
-/* ---- stage break (screen 25) ---------------------------------------- */
-.saw-stagebreak { padding: 60px 32px; text-align: center; }
-.saw-stagebreak__badge {
-	width: 64px; height: 64px; margin: 0 auto 22px; border-radius: 50%;
-	display: grid; place-items: center; color: var(--saw-on-dark, #fff);
-	font-size: 26px; font-weight: 800;
-}
-.saw-stagebreak__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-text); }
-.saw-stagebreak__sub { margin: 0 0 26px; color: var(--saw-text-muted); font-size: 14px; }
-.saw-stagebreak__continue {
-	padding: 12px 30px; border: 0; border-radius: 12px;
-	background: var(--saw-brand); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-	.saw-stagebreak__continue:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); }
-}
+.saw-qprog { position: sticky; top: 0; z-index: 5; height: 4px; background: var(--saw-surface); }
+.saw-qprog > i { display: block; height: 100%; background: var(--saw-brand); }
 
 /* ---- question / reveal (26 / 27) ------------------------------------ */
-.saw-qbody { padding: 22px 24px 26px; }
-.saw-qbody__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
-.saw-qbody__count { margin: 0 0 6px; font-size: 13px; color: var(--saw-text-muted); }
-.saw-qbody__worth {
-	display: inline-block; padding: 4px 12px; border-radius: 999px;
-	border: 1.5px solid var(--saw-level, var(--saw-brand)); color: var(--saw-level, var(--saw-brand));
-	font-size: 12px; font-weight: 700;
+.saw-qmain {
+	box-sizing: border-box; width: 100%; max-width: 680px; margin: 0 auto;
+	padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 16px;
 }
+
+/* The ladder: one chip per question with its tickets. */
+.saw-qlad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.saw-qlad > i {
+	height: 32px; border-radius: 8px; border: 1.5px solid var(--saw-surface);
+	display: flex; align-items: center; justify-content: center;
+	font-size: 12px; font-style: normal; font-weight: 800; color: var(--saw-text-muted);
+}
+.saw-qlad > i.is-cur { border-color: var(--saw-brand); color: var(--saw-text); }
+.saw-qlad > i.is-ok { background: var(--saw-brand); border-color: var(--saw-brand); color: #fff; }
+.saw-qlad > i.is-no { text-decoration: line-through; }
+
+.saw-qmeta { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.saw-qmeta__level { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qmeta__level span { display: block; margin-top: 5px; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--saw-text); }
+.saw-qmeta__tix { text-align: right; }
+.saw-qmeta__tix small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qmeta__tix b { display: block; margin-top: 4px; font-size: 28px; line-height: 1; }
+
+.saw-qprize {
+	display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+	border-radius: 18px; border: 1px solid var(--saw-surface);
+}
+.saw-qprize__photo { flex: none; width: 52px; height: 72px; display: flex; align-items: center; justify-content: center; }
+.saw-qprize__photo img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.saw-qprize small,
+.saw-qprize b,
+.saw-qprize span { display: block; }
+.saw-qprize small { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qprize b { margin-top: 5px; font-size: 20px; }
+.saw-qprize span { margin-top: 3px; font-size: 13px; color: var(--saw-text-muted); }
+
+.saw-qcard { padding: 22px 18px; border-radius: 20px; border: 1.5px solid var(--saw-surface); background: #fff; }
+.saw-qtop { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.saw-qtop .saw-question { margin: 0; min-width: 0; font-size: 22px; line-height: 1.25; font-weight: 800; color: var(--saw-text); }
 
 /* The circular per-question countdown, replacing the old horizontal bar to
    match the reference. A ring drawn twice — a faint full track, and a solid
    arc whose length is set by --saw-qtimer-pct via stroke-dasharray, animated
    the same way the old bar animated its width. */
-.saw-qtimer { position: relative; width: 44px; height: 44px; flex: 0 0 auto; }
-.saw-qtimer svg { transform: rotate(-90deg); }
+.saw-qtimer { position: relative; width: 62px; height: 62px; flex: 0 0 auto; }
+.saw-qtimer svg { display: block; transform: rotate(-90deg); }
 .saw-qtimer__track { fill: none; stroke: var(--saw-surface); stroke-width: 4; }
 .saw-qtimer__fill {
 	fill: none; stroke: var(--saw-level, var(--saw-brand)); stroke-width: 4; stroke-linecap: round;
@@ -1986,13 +1960,11 @@ onUnmounted( () => {
 	font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--saw-text);
 }
 
-.saw-play .saw-question { margin: 0 0 18px; font-size: 21px; line-height: 1.35; font-weight: 700; color: var(--saw-text); }
-
 /* Single column, click-to-answer: no separate Submit step (see selectOption()
    in the script) — picking an option is answering it. */
-.saw-answers { display: flex; flex-direction: column; gap: 12px; }
+.saw-answers { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .saw-answer {
-	display: block; width: 100%; text-align: left; padding: 16px 18px;
+	display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; text-align: left; padding: 8px 18px;
 	background: var(--saw-tint, #fcf4ec); border: 1.5px solid var(--saw-control, var(--saw-surface));
 	border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--saw-text); cursor: pointer;
 	transition: border-color .12s, background .12s, box-shadow .12s, opacity .12s;
@@ -2007,18 +1979,25 @@ onUnmounted( () => {
 .saw-answer.is-selected { border-color: var(--saw-brand); box-shadow: 0 0 0 1px var(--saw-brand); }
 .saw-answer.is-correct { background: var(--saw-ok); border-color: var(--saw-ok); color: #fff; }
 .saw-answer.is-wrong { background: var(--saw-danger); border-color: var(--saw-danger); color: #fff; opacity: 1; }
-.saw-play .is-revealing .saw-answer:not(.is-correct):not(.is-wrong) { opacity: .55; }
-
-/* The reveal's outcome line — replaces the old Submit/Next button chrome. The
-   whole banner doubles as the "next question" control (click anywhere on it),
-   with the countdown that was in .saw-next-count now printed inline. */
-.saw-banked {
-	margin-top: 14px; padding: 14px 16px; border-radius: 12px;
-	background: color-mix(in srgb, var(--saw-ok) 12%, #fff); color: var(--saw-ok);
-	font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+.saw-answer em {
+	flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--saw-surface);
+	display: inline-flex; align-items: center; justify-content: center;
+	font-size: 13px; font-style: normal; font-weight: 800; color: var(--saw-text-muted);
 }
-.saw-banked.is-zero { background: var(--saw-tint, #fcf4ec); color: var(--saw-text-muted); }
+.saw-answer.is-correct em,
+.saw-answer.is-wrong em { border-color: currentColor; color: inherit; }
+.saw-qmain.is-revealing .saw-answer:not(.is-correct):not(.is-wrong) { opacity: .55; }
+
+/* The reveal's outcome line, then the Next button. Empty but kept in place
+   while a question shows, so the reveal does not move the page. */
+.saw-qfb {
+	min-height: 22px; align-self: center; text-align: center; padding: 7px 16px;
+	border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1.4;
+}
+.saw-qfb.is-good { color: var(--saw-ok); background: var(--saw-ok-soft); }
+.saw-qfb.is-bad { color: var(--saw-danger); background: var(--saw-danger-soft); }
 .saw-banked__next {
+	align-self: center; min-height: 44px; padding: 0 8px;
 	border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800;
 	text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap;
 }
@@ -2084,7 +2063,6 @@ onUnmounted( () => {
 @media (max-width: 480px) {
 	.saw-langcard { padding: 32px 20px; }
 	.saw-langcard__options { flex-direction: column; }
-	.saw-qbody { padding: 18px 16px 20px; }
 	.saw-results__card { padding: 18px; }
 }
 </style>

@@ -195,6 +195,33 @@ class Nera_SAW_Frontend {
 			}
 		}
 
+		// The quiz bar and the playing-for banner: the competition's name, prize
+		// photo and market value (already formatted, empty when not set), and each
+		// tier's label and multiplier keyed by tier key ("Quiz 1 of 3 · Premium ×10").
+		$quiz_competition = array(
+			'name'  => '',
+			'value' => '',
+			'photo' => '',
+			'tiers' => array(),
+		);
+		$quiz_spec = ( $competition_id && class_exists( 'Nera_SAW_Competition_Spec' ) ) ? Nera_SAW_Competition_Spec::get( $competition_id ) : null;
+		if ( $quiz_spec ) {
+			$quiz_competition['name']  = (string) $quiz_spec['name'];
+			$quiz_competition['photo'] = (string) $quiz_spec['image']['url'];
+			$market_value              = (float) $quiz_spec['market_value'];
+			if ( $market_value > 0 ) {
+				$quiz_competition['value'] = function_exists( 'wc_price' )
+					? html_entity_decode( wp_strip_all_tags( wc_price( $market_value, array( 'decimals' => 0 ) ) ), ENT_QUOTES, 'UTF-8' )
+					: number_format_i18n( $market_value );
+			}
+			foreach ( (array) $quiz_spec['tiers'] as $quiz_tier ) {
+				$quiz_competition['tiers'][ (string) $quiz_tier['key'] ] = array(
+					'label'      => (string) $quiz_tier['label'],
+					'multiplier' => (int) $quiz_tier['multiplier'],
+				);
+			}
+		}
+
 		$data = array(
 			'root'               => esc_url_raw( rest_url( Nera_SAW_Rest::NS ) ),
 			'nonce'              => wp_create_nonce( 'wp_rest' ),
@@ -216,6 +243,7 @@ class Nera_SAW_Frontend {
 			'stageCount'         => $stage_count,
 			'firstStageLabel'    => $first_stage_label,
 			'firstStageColor'    => $first_stage_color,
+			'competition'        => $quiz_competition,
 			// "Back to competitions" on the results screen — the section's own list
 			// in standalone; the main shop page in mix, where there is no equivalent
 			// dedicated list. Never the empty string, so the button is never dead.
@@ -294,6 +322,13 @@ class Nera_SAW_Frontend {
 				// count-dependent string here (pickPluralForm() in App.vue).
 				'worthTicket'        => Nera_SAW_I18n::n_template( 'Worth {k} ticket', 'Worth {k} tickets' ),
 				'ticketsLabel'       => Nera_SAW_I18n::t( 'Tickets' ),
+				// The quiz bar, the playing-for banner and the answer feedback line.
+				'quizOf'             => Nera_SAW_I18n::t( 'Quiz {n} of {total}' ),
+				'leaveLabel'         => Nera_SAW_I18n::t( 'Leave' ),
+				'playingFor'         => Nera_SAW_I18n::t( 'Playing for' ),
+				'feedbackRight'      => Nera_SAW_I18n::n_template( 'Right: +{k} ticket', 'Right: +{k} tickets' ),
+				'feedbackWrong'      => Nera_SAW_I18n::t( 'Wrong: 0 tickets' ),
+				'feedbackTimeout'    => Nera_SAW_I18n::t( 'Time’s up: 0 tickets' ),
 				// Pre-run fallback only now (see stagePillLabel in App.vue) — the
 				// in-game stage bar pill and stage-break subtitle read the server's
 				// own combined, plural-aware sentence instead (slot.stage_label /
