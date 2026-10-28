@@ -170,7 +170,13 @@ class Nera_SAW_Account_Pages {
 	 * "My runs & tickets" endpoint content.
 	 */
 	public static function render_runs_tickets() {
-		$path = NERA_SAW_PLUGIN_DIR . 'templates/woocommerce/myaccount/my-runs-tickets.php';
+		// Theme first, like WooCommerce's own account templates: a theme copy at
+		// nera-strikeawin/myaccount/my-runs-tickets.php replaces this view. Not
+		// Nera_SAW_Router::locate(), whose fallback is the standalone templates folder.
+		$path = locate_template( 'nera-strikeawin/myaccount/my-runs-tickets.php' );
+		if ( ! $path ) {
+			$path = NERA_SAW_PLUGIN_DIR . 'templates/woocommerce/myaccount/my-runs-tickets.php';
+		}
 		if ( is_readable( $path ) ) {
 			include $path;
 		}
@@ -239,8 +245,10 @@ class Nera_SAW_Account_Pages {
 		if ( ! $config || ! class_exists( 'Nera_SAW_Competition_Config' ) ) {
 			return (string) $tier_key;
 		}
-		$tier = Nera_SAW_Competition_Config::tier( $config, $tier_key );
-		return $tier && ! empty( $tier['label'] ) ? (string) $tier['label'] : (string) $tier_key;
+		$tier  = Nera_SAW_Competition_Config::tier( $config, $tier_key );
+		$label = $tier && ! empty( $tier['label'] ) ? (string) $tier['label'] : (string) $tier_key;
+		// Tier labels are the shared English ones ("Standard", "Premium"): show them in the visitor's language.
+		return class_exists( 'Nera_SAW_I18n' ) ? Nera_SAW_I18n::t( $label ) : $label;
 	}
 
 	/**

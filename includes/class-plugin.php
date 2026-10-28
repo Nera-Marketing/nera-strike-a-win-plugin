@@ -78,6 +78,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-stock-page-redirects.php';
 		require_once $dir . 'class-standalone-account.php';
 		require_once $dir . 'class-account-pages.php';
+		require_once $dir . 'class-my-tickets.php';
 		require_once $dir . 'class-standalone-result-screen.php';
 		require_once $dir . 'class-spin-pool.php';
 		require_once $dir . 'class-reservations.php';
