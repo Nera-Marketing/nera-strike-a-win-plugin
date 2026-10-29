@@ -610,6 +610,88 @@ const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, {
 const prefersReducedMotion = () =>
 	typeof window !== 'undefined' && window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 
+/* --- Ticket fly ------------------------------------------------------------
+ * On a correct answer a "+n" pill rises from the picked answer and flies into
+ * the Tickets counter. The counter keeps the old total while it flies, then
+ * shows the new one and pops (is-landed). Without the Web Animations API or
+ * with reduced motion the counter updates and pops at once.
+ * ------------------------------------------------------------------------- */
+const appEl = ref( null );
+const tixHeld = ref( null );
+const tixLanded = ref( false );
+let flyEl = null;
+let flyAnim = null;
+let landTimer = 0;
+const TICKET_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M10 6v12" stroke-dasharray="2 2"/></svg>';
+
+function landTickets() {
+	tixHeld.value = null;
+	tixLanded.value = true;
+	clearTimeout( landTimer );
+	landTimer = setTimeout( () => {
+		tixLanded.value = false;
+	}, 350 );
+}
+
+// Drops a pill still in flight (slot change, run end, unmount) without landing it.
+function removeTicketFly() {
+	if ( flyAnim ) {
+		flyAnim.onfinish = null;
+		flyAnim.cancel();
+		flyAnim = null;
+	}
+	if ( flyEl ) {
+		flyEl.remove();
+		flyEl = null;
+	}
+	tixHeld.value = null;
+}
+
+function flyTicket( option, before, gain ) {
+	removeTicketFly();
+	const root = appEl.value;
+	const pos = Array.isArray( slot.answers ) ? slot.answers.findIndex( ( a ) => a.index === option ) : -1;
+	const from = root && pos > -1 ? root.querySelectorAll( '.saw-answer' )[ pos ] : null;
+	const to = root ? root.querySelector( '.saw-qmeta__tix b' ) : null;
+	if ( ! from || ! to || typeof from.animate !== 'function' || prefersReducedMotion() ) {
+		landTickets();
+		return;
+	}
+	tixHeld.value = before;
+	const a = from.getBoundingClientRect();
+	const b = to.getBoundingClientRect();
+	const x0 = a.left + a.width / 2;
+	const y0 = a.top + a.height / 2;
+	const dx = b.left + b.width / 2 - x0;
+	const dy = b.top + b.height / 2 - y0;
+	const el = document.createElement( 'div' );
+	el.className = 'saw-tkfly';
+	el.setAttribute( 'aria-hidden', 'true' );
+	el.innerHTML = TICKET_ICON + '<b>+' + Number( gain ) + '</b>';
+	el.style.left = x0 + 'px';
+	el.style.top = y0 + 'px';
+	document.body.appendChild( el );
+	flyEl = el;
+	const done = () => {
+		flyAnim = null;
+		removeTicketFly();
+		landTickets();
+	};
+	try {
+		flyAnim = el.animate(
+			[
+				{ transform: 'translate(-50%,-50%) scale(.85)', opacity: 0 },
+				{ transform: 'translate(-50%,-90%) scale(1.08)', opacity: 1, offset: 0.28 },
+				{ transform: 'translate(calc(-50% + ' + dx + 'px),calc(-50% + ' + dy + 'px)) scale(.55)', opacity: 0.85 },
+			],
+			{ duration: 620, easing: 'cubic-bezier(.3,.7,.3,1)' }
+		);
+		flyAnim.onfinish = done;
+	} catch ( e ) {
+		done();
+	}
+}
+
 // Tickets earned counts up from 0 over about a second; at once with reduced motion.
 let countFrame = 0;
 let countTarget = null;
@@ -1252,6 +1334,7 @@ async function loadSlot( slotNo ) {
 	revealCorrectIndex.value = -1;
 	revealSecondsLeft.value = 0;
 	revealIsFinal.value = false;
+	removeTicketFly();
 
 	phase.value = 'question';
 	startCountdown();
@@ -1343,6 +1426,7 @@ async function submit( option ) {
 	const chosenIndex = ( '' === option ) ? -1 : option;
 	const isCorrect = ( -1 !== chosenIndex && chosenIndex === correctIndex );
 	const awarded = isCorrect ? ( slot.reward || 0 ) : 0;
+	const spinsBefore = spinsSoFar.value || 0;
 
 	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
 	answeredCount.value = experimentalAnswers.length;
@@ -1369,6 +1453,9 @@ async function submit( option ) {
 	revealIsFinal.value = ( 'finalized' === state.status || ! state.next_slot );
 	phase.value = 'reveal';
 	startHold( state );
+	if ( awarded > 0 && -1 !== chosenIndex ) {
+		flyTicket( chosenIndex, spinsBefore, awarded );
+	}
 }
 
 async function fetchRunComplete() {
@@ -1410,6 +1497,7 @@ async function fetchRunComplete() {
 
 async function toEnd() {
 	clearTicker();
+	removeTicketFly();
 	quizSessionActive = false;
 	breadcrumb.clear( props.competitionId );
 	releaseNavigationGuard();
@@ -1457,6 +1545,8 @@ onMounted( () => {
 } );
 onUnmounted( () => {
 	clearTicker();
+	removeTicketFly();
+	clearTimeout( landTimer );
 	releaseNavigationGuard();
 	if ( typeof document !== 'undefined' ) {
 		document.body.classList.remove( 'saw-quiz-dialog-open' );
@@ -1466,7 +1556,7 @@ onUnmounted( () => {
 </script>
 
 <template>
-	<div class="saw-app">
+	<div ref="appEl" class="saw-app">
 		<div v-if="phase === 'loading'" class="saw-loading">{{ t('loading', 'Loading your entry…') }}</div>
 
 		<div v-else-if="phase === 'error'" class="saw-notice saw-error">
@@ -1521,7 +1611,7 @@ onUnmounted( () => {
 
 				<div class="saw-qmeta">
 					<div class="saw-qmeta__level">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}<template v-if="slot.level_label"> · {{ slot.level_label }}</template><span>{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span></div>
-					<div class="saw-qmeta__tix"><small>{{ t('ticketsLabel', 'Tickets') }}</small><b>{{ spinsSoFar }}</b></div>
+					<div class="saw-qmeta__tix" :class="{ 'is-landed': tixLanded }"><small>{{ t('ticketsLabel', 'Tickets') }}</small><b>{{ tixHeld !== null ? tixHeld : spinsSoFar }}</b></div>
 				</div>
 
 				<div v-if="competition.name" class="saw-qprize" aria-hidden="true">
@@ -2011,7 +2101,20 @@ onUnmounted( () => {
 .saw-qmeta__level span { display: block; margin-top: 5px; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--saw-text); }
 .saw-qmeta__tix { text-align: right; }
 .saw-qmeta__tix small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
-.saw-qmeta__tix b { display: block; margin-top: 4px; font-size: 28px; line-height: 1; }
+.saw-qmeta__tix b { display: block; margin-top: 4px; font-size: 28px; line-height: 1; transition: transform .3s; }
+.saw-qmeta__tix.is-landed b { transform: scale(1.18); }
+/* Neutral look; the theme sets colours and type. */
+.saw-tkfly {
+	position: fixed; z-index: 200; pointer-events: none;
+	display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px;
+	background: #fff; color: #111; border: 1px solid rgba(0, 0, 0, .15); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, .5);
+	font-size: 15px; font-weight: 800; line-height: 1; white-space: nowrap;
+	transform: translate(-50%, -50%);
+}
+.saw-tkfly svg { width: 16px; height: 16px; flex: none; }
+@media (prefers-reduced-motion: reduce) {
+	.saw-qmeta__tix.is-landed b { transform: none; }
+}
 
 .saw-qprize {
 	display: flex; align-items: center; gap: 14px; padding: 8px 14px;
