@@ -1100,6 +1100,142 @@ function onLeaveDialogKeydown( e ) {
 	}
 }
 
+// Share my score: a sheet with a 9:16 story card of this run and the run's
+// public link. The link is fetched on the first open and kept; a failed fetch
+// is not kept, so reopening tries again.
+const shareCardData = ( window.NeraSAW && window.NeraSAW.shareCard ) || {};
+const shareBrand = shareCardData.brand || 'Strike & Win';
+const shareHost = window.location.host;
+const shareOpen = ref( false );
+const shareUrl = ref( '' );
+const shareLoading = ref( false );
+const shareError = ref( false );
+const shareNote = ref( '' );
+const shareButtonRef = ref( null );
+const shareGoRef = ref( null );
+const shareCloseRef = ref( null );
+let shareRequest = null;
+
+const shareTotal = computed( () => totalSlots.value || slotResults.value.length );
+const shareText = computed( () => fmt(
+	'shareText',
+	'I scored {r}/{n} on Strike & Win. Can you beat my score?',
+	correctCount.value,
+	{ r: correctCount.value, n: shareTotal.value }
+) );
+const shareTixWord = computed( () => fmt( 'shareTixEarned', 'ticket earned|tickets earned', finalSpins.value ) );
+const shareChallenge = computed( () => t( 'shareChallenge', 'Can you beat\nmy score?' ).split( '\n' ) );
+const shareCardLabel = computed( () => t( 'shareMy', 'My score' ) + ': ' + correctCount.value + '/' + shareTotal.value + ', ' + ticketsWord( finalSpins.value ) );
+
+function loadShareLink() {
+	if ( shareUrl.value || shareRequest || ! runId.value ) {
+		return shareRequest || Promise.resolve();
+	}
+	shareError.value = false;
+	shareLoading.value = true;
+	shareRequest = api.shareRun( runId.value )
+		.then( ( r ) => {
+			if ( r && r.url ) {
+				shareUrl.value = r.url;
+			} else {
+				shareError.value = true;
+			}
+		} )
+		.catch( () => {
+			shareError.value = true;
+		} )
+		.finally( () => {
+			shareLoading.value = false;
+			shareRequest = null;
+		} );
+	return shareRequest;
+}
+
+function onShareKeydown( e ) {
+	if ( e.key === 'Escape' ) {
+		e.preventDefault();
+		closeShareSheet();
+	}
+}
+
+function openShareSheet() {
+	shareNote.value = '';
+	shareOpen.value = true;
+	document.addEventListener( 'keydown', onShareKeydown );
+	nextTick( () => ( shareGoRef.value || shareCloseRef.value )?.focus() );
+	loadShareLink().then( () => {
+		if ( shareOpen.value && shareUrl.value ) {
+			nextTick( () => shareGoRef.value?.focus() );
+		}
+	} );
+}
+
+function closeShareSheet() {
+	shareOpen.value = false;
+	document.removeEventListener( 'keydown', onShareKeydown );
+	nextTick( () => shareButtonRef.value?.focus() );
+}
+
+// Copy through a selected textarea inside the sheet, for pages without the
+// clipboard API (plain http). Focus goes back where it was.
+function copyBySelection( text ) {
+	const back = document.activeElement;
+	const area = document.createElement( 'textarea' );
+	area.value = text;
+	area.setAttribute( 'readonly', '' );
+	area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+	( document.querySelector( '.saw-sharesheet__panel' ) || document.body ).appendChild( area );
+	area.select();
+	let ok = false;
+	try {
+		ok = document.execCommand( 'copy' );
+	} catch ( e ) {
+		ok = false;
+	}
+	area.remove();
+	back?.focus?.();
+	return ok;
+}
+
+function copyText( text ) {
+	const done = () => {
+		shareNote.value = t( 'shareCopied', 'Copied to clipboard' );
+	};
+	const fallback = () => {
+		if ( copyBySelection( text ) ) {
+			done();
+		} else {
+			shareNote.value = t( 'shareCopyFail', 'Copy this: {x}' ).replace( '{x}', text );
+		}
+	};
+	if ( navigator.clipboard && typeof navigator.clipboard.writeText === 'function' ) {
+		navigator.clipboard.writeText( text ).then( done, fallback );
+		return;
+	}
+	fallback();
+}
+
+// Share: the phone's share menu when there is one, else the text and link are copied.
+async function shareGo() {
+	const text = shareText.value;
+	const url = shareUrl.value;
+	if ( typeof navigator.share === 'function' ) {
+		try {
+			await navigator.share( { title: shareBrand, text, url } );
+			return;
+		} catch ( e ) {
+			if ( e && e.name === 'AbortError' ) {
+				return;
+			}
+		}
+	}
+	copyText( text + ' ' + url );
+}
+
+function shareCopy() {
+	copyText( shareUrl.value );
+}
+
 async function proceedLeave( action ) {
 	leaveBypass = true;
 	quizSessionActive = false;
@@ -1741,6 +1877,14 @@ onUnmounted( () => {
 					:class="{ 'is-primary': !hasNextRun }"
 					:href="myTicketsUrl || competitionsListUrl"
 				>{{ t('myTickets', 'My tickets') }}</a>
+				<button
+					v-if="runId"
+					type="button"
+					class="saw-results__share saw-share-btn"
+					ref="shareButtonRef"
+					aria-haspopup="dialog"
+					@click="openShareSheet"
+				><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('shareMyScore', 'Share my score') }}</button>
 				<a
 					v-if="! hasTickets && responsiblePlayUrl"
 					class="saw-results__back"
@@ -1788,6 +1932,69 @@ onUnmounted( () => {
 						{{ t('leaveQuiz', 'Leave anyway') }}
 					</button>
 				</div>
+			</div>
+		</div>
+	</Teleport>
+
+	<Teleport to="body">
+		<div
+			v-if="shareOpen"
+			class="saw-sharesheet"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="saw-sharesheet-title"
+		>
+			<button type="button" class="saw-sharesheet__backdrop" tabindex="-1" :aria-label="t('shareClose', 'Close')" @click="closeShareSheet"></button>
+			<div class="saw-sharesheet__panel">
+				<div class="saw-sharesheet__head">
+					<div>
+						<h2 id="saw-sharesheet-title" class="saw-sharesheet__title">{{ t('shareMyScore', 'Share my score') }}</h2>
+						<span class="saw-sharesheet__sub">{{ t('shareStory', 'Story format · 9:16') }}</span>
+					</div>
+					<button type="button" class="saw-sharesheet__close" ref="shareCloseRef" :aria-label="t('shareClose', 'Close')" @click="closeShareSheet"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+				</div>
+				<div class="saw-sharesheet__prev">
+					<div class="saw-sharesheet__card" role="img" :aria-label="shareCardLabel">
+						<div class="saw-sharesheet__glow" aria-hidden="true"></div>
+						<span class="saw-sharesheet__amp" aria-hidden="true">&amp;</span>
+						<div class="saw-sharesheet__in" aria-hidden="true">
+							<div class="saw-sharesheet__top">
+								<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
+								<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
+								<span class="saw-sharesheet__kicker">{{ t('shareKicker', 'Prize quiz') }}</span>
+							</div>
+							<div class="saw-sharesheet__mid">
+								<small class="saw-sharesheet__label">{{ t('shareMy', 'My score') }}</small>
+								<div class="saw-sharesheet__score">{{ correctCount }}<span>/{{ shareTotal }}</span></div>
+								<div class="saw-sharesheet__bars">
+									<i v-for="r in slotResults" :key="r.slot_no" class="saw-sharesheet__bar" :class="{ 'is-correct': 'correct' === r.outcome }"></i>
+								</div>
+								<div class="saw-sharesheet__tix"><b>+{{ formatCount( finalSpins ) }}</b> {{ shareTixWord }}</div>
+							</div>
+							<div class="saw-sharesheet__prize">
+								<div class="saw-sharesheet__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
+								<div>
+									<small>{{ t('sharePlayingFor', 'Playing for') }}</small>
+									<b>{{ competition.name }}</b>
+									<span v-if="competition.value">{{ competition.value }}</span>
+								</div>
+							</div>
+							<div class="saw-sharesheet__ch"><template v-for="( line, i ) in shareChallenge" :key="i"><br v-if="i">{{ line }}</template></div>
+							<div class="saw-sharesheet__foot">
+								<div><span>{{ t('sharePlayFree', 'Play free at') }}</span><b>{{ shareHost }}</b></div>
+								<em>{{ t('shareAge', '18+ · Skill-based prize competitions') }}</em>
+							</div>
+						</div>
+					</div>
+				</div>
+				<p v-if="shareError" class="saw-sharesheet__error" role="alert">{{ t('shareError', "We couldn't make your link. Close this and try again.") }}</p>
+				<div v-else-if="shareUrl" class="saw-sharesheet__acts">
+					<span class="saw-sharesheet__gowrap">
+						<button type="button" class="saw-sharesheet__go" ref="shareGoRef" @click="shareGo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('shareGo', 'Share') }}</button>
+					</span>
+					<button type="button" class="saw-sharesheet__copy" @click="shareCopy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>{{ t('shareCopy', 'Copy link') }}</button>
+				</div>
+				<p v-if="shareLoading || shareNote" class="saw-sharesheet__status" role="status">{{ shareLoading ? t('shareMaking', 'Making your link…') : shareNote }}</p>
 			</div>
 		</div>
 	</Teleport>
@@ -2244,6 +2451,79 @@ onUnmounted( () => {
 
 <style>
 body.saw-quiz-dialog-open { overflow: hidden; }
+/* Share my score: neutral layout only; a theme supplies the look. */
+.saw-results__share {
+	box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	min-height: 46px; padding: 0 16px; border-radius: 999px;
+	border: 1px solid #d0d5dd; background: #fff; color: #0d0d1b;
+	font: inherit; font-weight: 700; cursor: pointer;
+}
+.saw-sharesheet {
+	position: fixed; inset: 0; z-index: 100050;
+	display: flex; align-items: center; justify-content: center; padding: 12px;
+}
+.saw-sharesheet__backdrop {
+	position: absolute; inset: 0; margin: 0; padding: 0; border: 0;
+	background: rgba(13, 13, 27, 0.55); cursor: default;
+}
+.saw-sharesheet__panel {
+	position: relative; box-sizing: border-box; width: calc(100% - 24px); max-width: 420px;
+	max-height: calc(100dvh - 24px); overflow: auto;
+	padding: 16px 16px 18px; border-radius: 20px; background: #fff; color: #0d0d1b;
+}
+@media (min-width: 700px) { .saw-sharesheet__panel { max-width: 440px; } }
+.saw-sharesheet__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.saw-sharesheet__title { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; }
+.saw-sharesheet__sub { font-size: 12.5px; line-height: 1.3; }
+.saw-sharesheet__close {
+	position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center;
+	width: 44px; height: 44px; padding: 0; border-radius: 50%;
+	border: 1px solid #d0d5dd; background: #fff; color: inherit; cursor: pointer;
+}
+.saw-sharesheet__prev { margin-top: 12px; display: flex; justify-content: center; }
+.saw-sharesheet__card {
+	position: relative; box-sizing: border-box; container-type: inline-size;
+	width: min(100%, calc((100dvh - 250px) * 9 / 16), 300px); aspect-ratio: 9 / 16;
+	border-radius: 22px; overflow: hidden; background: #1f2433; color: #fff;
+}
+.saw-sharesheet__glow { position: absolute; inset: auto -20% 38% auto; width: 80%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; }
+.saw-sharesheet__amp { position: absolute; right: -14cqw; top: 6cqw; font-size: 118cqw; line-height: 1; opacity: 0.06; transform: rotate(-7deg); pointer-events: none; user-select: none; }
+.saw-sharesheet__in { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 7cqw 7cqw 6cqw; }
+.saw-sharesheet__top { display: flex; justify-content: space-between; align-items: center; gap: 3cqw; }
+.saw-sharesheet__logo { display: block; max-width: 45%; height: auto; max-height: 9cqw; font-size: 4.6cqw; font-weight: 900; line-height: 1; }
+.saw-sharesheet__kicker { font-size: 2.7cqw; font-weight: 800; line-height: 1; text-transform: uppercase; padding: 1.6cqw 2.8cqw; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.3); }
+.saw-sharesheet__mid { margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
+.saw-sharesheet__label { font-size: 3.2cqw; font-weight: 800; text-transform: uppercase; }
+.saw-sharesheet__score { margin-top: 2.4cqw; font-size: 40cqw; font-weight: 900; line-height: 0.86; }
+.saw-sharesheet__score span { font-size: 0.36em; margin-left: 1cqw; }
+.saw-sharesheet__bars { margin-top: 5cqw; width: 100%; display: grid; grid-template-columns: repeat(10, 1fr); gap: 1.4cqw; }
+.saw-sharesheet__bar { height: 2.6cqw; border-radius: 99px; background: rgba(255, 255, 255, 0.2); }
+.saw-sharesheet__bar.is-correct { background: #fff; }
+.saw-sharesheet__tix { margin-top: 4.4cqw; font-size: 4.2cqw; line-height: 1.2; }
+.saw-sharesheet__prize { margin-top: 6cqw; display: flex; align-items: center; gap: 3.4cqw; padding: 3.2cqw; border-radius: 5cqw; border: 1px solid rgba(255, 255, 255, 0.2); }
+.saw-sharesheet__photo { flex: none; width: 13cqw; height: 13cqw; }
+.saw-sharesheet__photo img { width: 100%; height: 100%; object-fit: contain; }
+.saw-sharesheet__prize small, .saw-sharesheet__prize b, .saw-sharesheet__prize span { display: block; }
+.saw-sharesheet__prize small { font-size: 2.5cqw; text-transform: uppercase; }
+.saw-sharesheet__prize b { margin-top: 0.6cqw; font-size: 4.2cqw; line-height: 1.15; }
+.saw-sharesheet__prize span { margin-top: 0.4cqw; font-size: 3.2cqw; }
+.saw-sharesheet__ch { margin-top: 7cqw; font-size: 7.4cqw; font-weight: 900; line-height: 1.02; text-transform: uppercase; }
+.saw-sharesheet__foot { margin-top: 6cqw; padding-top: 4cqw; border-top: 1px solid rgba(255, 255, 255, 0.2); display: flex; justify-content: space-between; align-items: flex-end; gap: 3cqw; }
+.saw-sharesheet__foot span, .saw-sharesheet__foot b { display: block; }
+.saw-sharesheet__foot span { font-size: 2.9cqw; }
+.saw-sharesheet__foot b { margin-top: 0.6cqw; font-size: 4.6cqw; line-height: 1; }
+.saw-sharesheet__foot em { font-size: 2.4cqw; font-style: normal; text-align: right; max-width: 40%; }
+.saw-sharesheet__error, .saw-sharesheet__status { margin: 14px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.saw-sharesheet__error { padding: 12px 14px; border-radius: 12px; border: 1px solid #dc2626; }
+.saw-sharesheet__acts { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+.saw-sharesheet__gowrap { display: block; }
+.saw-sharesheet__go, .saw-sharesheet__copy {
+	box-sizing: border-box; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	min-height: 46px; padding: 0 16px; border-radius: 999px;
+	border: 1px solid #d0d5dd; background: #fff; color: #0d0d1b;
+	font: inherit; font-weight: 700; cursor: pointer;
+}
+.saw-sharesheet__go { border-color: #0d0d1b; background: #0d0d1b; color: #fff; }
 body.saw-quiz-takeover .saw-hero,
 body.saw-quiz-takeover .saw-spec,
 body.saw-quiz-takeover .saw-result-teaser,

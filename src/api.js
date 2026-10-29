@@ -82,6 +82,10 @@ export const api = {
 	resumeRun( runId ) {
 		return request( `/run/${ runId }/resume`, 'POST', {} );
 	},
+	// The public link for a finished run: the same link on every call for this run.
+	shareRun( runId ) {
+		return request( `/run/${ runId }/share`, 'POST', {} );
+	},
 	// EXPERIMENTAL: one call at the very end instead of one /answer per question.
 	// See Nera_SAW_Run::submit_all_experimental()'s docblock for the security
 	// tradeoff this reopens (answer key visible to the client before answering).

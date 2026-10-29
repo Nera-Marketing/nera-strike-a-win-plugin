@@ -284,6 +284,10 @@ class Nera_SAW_Frontend {
 			// A run with no tickets links to responsible play: the section's player
 			// protection page when it exists, else the account's responsible-play tab.
 			'responsiblePlayUrl' => esc_url_raw( self::responsible_play_url() ),
+			// The share sheet's story card: the brand logo (a theme can supply a
+			// version made for the card's dark background) and the brand name, shown
+			// as text when there is no logo.
+			'shareCard'          => self::share_card(),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
@@ -440,6 +444,26 @@ class Nera_SAW_Frontend {
 				'myTickets'          => Nera_SAW_I18n::t( 'My tickets' ),
 				'backToCompetition'  => Nera_SAW_I18n::t( 'Back to the competition' ),
 				'responsiblePlay'    => Nera_SAW_I18n::t( 'Responsible play' ),
+				// Share my score sheet and its story card.
+				'shareMyScore'       => Nera_SAW_I18n::t( 'Share my score' ),
+				'shareStory'         => Nera_SAW_I18n::t( 'Story format · 9:16' ),
+				'shareGo'            => Nera_SAW_I18n::t( 'Share' ),
+				'shareCopy'          => Nera_SAW_I18n::t( 'Copy link' ),
+				'shareCopied'        => Nera_SAW_I18n::t( 'Copied to clipboard' ),
+				'shareCopyFail'      => Nera_SAW_I18n::t( 'Copy this: {x}' ),
+				'shareClose'         => Nera_SAW_I18n::t( 'Close' ),
+				'shareMaking'        => Nera_SAW_I18n::t( 'Making your link…' ),
+				'shareError'         => Nera_SAW_I18n::t( "We couldn't make your link. Close this and try again." ),
+				'shareKicker'        => Nera_SAW_I18n::t( 'Prize quiz' ),
+				'shareMy'            => Nera_SAW_I18n::t( 'My score' ),
+				'shareTixEarned'     => Nera_SAW_I18n::n_template( 'ticket earned', 'tickets earned' ),
+				// Same English as the quiz bar's "Playing for", first person in Russian.
+				'sharePlayingFor'    => self::t_as( 'Playing for (share card)', 'Playing for' ),
+				// One line break, kept on the card.
+				'shareChallenge'     => Nera_SAW_I18n::t( "Can you beat\nmy score?" ),
+				'sharePlayFree'      => Nera_SAW_I18n::t( 'Play free at' ),
+				'shareAge'           => Nera_SAW_I18n::t( '18+ · Skill-based prize competitions' ),
+				'shareText'          => Nera_SAW_I18n::t( 'I scored {r}/{n} on [BRAND]. Can you beat my score?' ),
 			),
 		);
 
@@ -843,6 +867,43 @@ class Nera_SAW_Frontend {
 		$html .= '</div></div></div>';
 
 		return $html;
+	}
+
+	/**
+	 * Logo and brand name for the share sheet's story card.
+	 *
+	 * @return array{logo:string,brand:string}
+	 */
+	private static function share_card() {
+		$logo = class_exists( 'Nera_SAW_Standalone_Fields' ) ? Nera_SAW_Standalone_Fields::shell( 'saw_logo' ) : null;
+		$card = array(
+			'logo'  => ( is_array( $logo ) && ! empty( $logo['url'] ) ) ? (string) $logo['url'] : '',
+			'brand' => Nera_SAW_Brand::name(),
+		);
+		/**
+		 * Filters the share card's logo URL and brand name.
+		 *
+		 * @param array{logo:string,brand:string} $card Logo URL ('' = brand name as text) and brand name.
+		 */
+		$card = (array) apply_filters( 'nera_saw_share_card', $card );
+
+		return array(
+			'logo'  => esc_url_raw( (string) ( $card['logo'] ?? '' ) ),
+			'brand' => (string) ( $card['brand'] ?? Nera_SAW_Brand::name() ),
+		);
+	}
+
+	/**
+	 * A string looked up by a key that differs from its English text: the
+	 * translation when there is one, else the English.
+	 *
+	 * @param string $key     Lookup key in the language files.
+	 * @param string $english English text.
+	 * @return string
+	 */
+	private static function t_as( $key, $english ) {
+		$value = Nera_SAW_I18n::t( $key );
+		return $value === $key ? $english : $value;
 	}
 
 	/**
