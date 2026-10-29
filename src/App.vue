@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { api, breadcrumb } from './api.js';
+import { toBlob } from 'html-to-image';
 
 const props = defineProps( {
 	competitionId: { type: Number, required: true },
@@ -1114,7 +1115,10 @@ const shareNote = ref( '' );
 const shareButtonRef = ref( null );
 const shareGoRef = ref( null );
 const shareCloseRef = ref( null );
+const shareCardRef = ref( null );
 let shareRequest = null;
+let shareImage = null;
+const SHARE_IMAGE_NAME = 'strike-and-win-score.png';
 
 const shareTotal = computed( () => totalSlots.value || slotResults.value.length );
 const shareText = computed( () => fmt(
@@ -1168,6 +1172,119 @@ function openShareSheet() {
 			nextTick( () => shareGoRef.value?.focus() );
 		}
 	} );
+	// Made while the sheet is open, so Share can hand it over straight away:
+	// share menus refuse a call that comes too long after the tap.
+	nextTick( makeShareImage );
+}
+
+// The story card as a 1080 x 1920 PNG, drawn from the card in the sheet.
+// The card never changes after the run, so one image is kept. Any failure
+// (a font or photo that can't be embedded, an old browser) resolves to null
+// and Share falls back to text and link.
+function makeShareImage() {
+	if ( shareImage ) {
+		return shareImage;
+	}
+	const card = shareCardRef.value;
+	if ( ! card ) {
+		return Promise.resolve( null );
+	}
+	const photo = card.querySelector( '.saw-sharesheet__photo img' );
+	const photoReady = photo && ! photo.complete
+		? new Promise( ( done ) => {
+			photo.addEventListener( 'load', done, { once: true } );
+			photo.addEventListener( 'error', done, { once: true } );
+		} )
+		: Promise.resolve();
+	const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+	shareImage = Promise.all( [ photoReady, fontsReady ] )
+		.then( () => shareFontCss().catch( () => '' ) )
+		.then( ( fontEmbedCSS ) => toBlob( card, { pixelRatio: 1, canvasWidth: 1080, canvasHeight: 1920, fontEmbedCSS } ) )
+		.then( ( blob ) => blob || null )
+		.catch( () => null );
+	shareImage.then( ( blob ) => {
+		if ( ! blob ) {
+			shareImage = null;
+		}
+	} );
+	return shareImage;
+}
+
+// The @font-face rules of the fonts this page has actually loaded, with their
+// files inlined, for the card image. Built here rather than by html-to-image,
+// which logs an error for every cross-origin stylesheet (hosted web fonts) it
+// can't read, and inlines every subset of a family instead of the ones in use.
+const fontKey = ( family, range, style ) => [
+	String( family || '' ).replace( /["']/g, '' ).trim().toLowerCase(),
+	String( range || 'U+0-10FFFF' ).toUpperCase().replace( /\s/g, '' ).replace( /[0-9A-F?]+/g, ( h ) => h.replace( /^0+(?=.)/, '' ) ),
+	String( style || 'normal' ).trim().toLowerCase(),
+].join( '|' );
+
+function toDataUrl( url ) {
+	return fetch( url )
+		.then( ( r ) => ( r.ok ? r.blob() : Promise.reject( new Error( String( r.status ) ) ) ) )
+		.then( ( blob ) => new Promise( ( done, fail ) => {
+			const reader = new FileReader();
+			reader.onload = () => done( reader.result );
+			reader.onerror = fail;
+			reader.readAsDataURL( blob );
+		} ) );
+}
+
+async function shareFontCss() {
+	const loaded = new Set();
+	document.fonts.forEach( ( f ) => {
+		if ( 'loaded' === f.status ) {
+			loaded.add( fontKey( f.family, f.unicodeRange, f.style ) );
+		}
+	} );
+	const sheets = await Promise.all( Array.from( document.styleSheets ).map( ( sheet ) => {
+		const base = sheet.href || document.baseURI;
+		try {
+			return { base, text: Array.from( sheet.cssRules ).map( ( r ) => r.cssText ).join( '\n' ) };
+		} catch ( e ) {
+			return sheet.href
+				? fetch( sheet.href ).then( ( r ) => ( r.ok ? r.text() : '' ) ).catch( () => '' ).then( ( text ) => ( { base, text } ) )
+				: { base, text: '' };
+		}
+	} ) );
+	const pick = ( rule, prop ) => ( rule.match( new RegExp( '(?:^|[;{\\s])' + prop + '\\s*:\\s*([^;}]+)', 'i' ) ) || [] )[ 1 ];
+	const rules = [];
+	sheets.forEach( ( { base, text } ) => {
+		( text.match( /@font-face\s*\{[^}]*\}/gi ) || [] ).forEach( ( rule ) => {
+			if ( loaded.has( fontKey( pick( rule, 'font-family' ), pick( rule, 'unicode-range' ), pick( rule, 'font-style' ) ) ) ) {
+				rules.push( { base, rule } );
+			}
+		} );
+	} );
+	const css = await Promise.all( rules.map( async ( { base, rule } ) => {
+		const urls = rule.match( /url\(\s*(['"]?)[^'")]+\1\s*\)/g ) || [];
+		let out = rule;
+		for ( const u of urls ) {
+			const raw = u.replace( /^url\(\s*['"]?|['"]?\s*\)$/g, '' );
+			if ( raw.startsWith( 'data:' ) ) {
+				continue;
+			}
+			const data = await toDataUrl( new URL( raw, base ).href ).catch( () => null );
+			if ( data ) {
+				out = out.replace( u, 'url("' + data + '")' );
+			}
+		}
+		return out;
+	} ) );
+	return css.join( '\n' );
+}
+
+function downloadBlob( blob, name ) {
+	const href = URL.createObjectURL( blob );
+	const link = document.createElement( 'a' );
+	link.href = href;
+	link.download = name;
+	link.style.display = 'none';
+	document.body.appendChild( link );
+	link.click();
+	link.remove();
+	setTimeout( () => URL.revokeObjectURL( href ), 30000 );
 }
 
 function closeShareSheet() {
@@ -1215,19 +1332,26 @@ function copyText( text ) {
 	fallback();
 }
 
-// Share: the phone's share menu when there is one, else the text and link are copied.
+// Share: the story card image with the text and link through the phone's share
+// menu; text and link only where files can't be shared; with no share menu the
+// image is downloaded and the text and link are copied. A cancelled menu is silent.
 async function shareGo() {
 	const text = shareText.value;
 	const url = shareUrl.value;
+	const blob = await makeShareImage();
 	if ( typeof navigator.share === 'function' ) {
+		const file = blob ? new File( [ blob ], SHARE_IMAGE_NAME, { type: 'image/png' } ) : null;
+		const withFile = file && typeof navigator.canShare === 'function' && navigator.canShare( { files: [ file ] } );
 		try {
-			await navigator.share( { title: shareBrand, text, url } );
+			await navigator.share( withFile ? { files: [ file ], title: shareBrand, text, url } : { title: shareBrand, text, url } );
 			return;
 		} catch ( e ) {
 			if ( e && e.name === 'AbortError' ) {
 				return;
 			}
 		}
+	} else if ( blob ) {
+		downloadBlob( blob, SHARE_IMAGE_NAME );
 	}
 	copyText( text + ' ' + url );
 }
@@ -1954,7 +2078,7 @@ onUnmounted( () => {
 					<button type="button" class="saw-sharesheet__close" ref="shareCloseRef" :aria-label="t('shareClose', 'Close')" @click="closeShareSheet"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
 				</div>
 				<div class="saw-sharesheet__prev">
-					<div class="saw-sharesheet__card" role="img" :aria-label="shareCardLabel">
+					<div class="saw-sharesheet__card" ref="shareCardRef" role="img" :aria-label="shareCardLabel">
 						<div class="saw-sharesheet__glow" aria-hidden="true"></div>
 						<span class="saw-sharesheet__amp" aria-hidden="true">&amp;</span>
 						<div class="saw-sharesheet__in" aria-hidden="true">
