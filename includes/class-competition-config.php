@@ -38,6 +38,9 @@ class Nera_SAW_Competition_Config {
 			// competition's own list (an empty array shows none). Resolve through
 			// Nera_SAW_Constants::result_display().
 			'result_display' => '',
+			// Days a shared result link lives: '' = inherit the global setting.
+			// Resolve through Nera_SAW_Share::days().
+			'share_link_days' => '',
 			// Free text, not a number: the prototype prints it verbatim ("£28,000")
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
@@ -242,6 +245,9 @@ class Nera_SAW_Competition_Config {
 		$config['result_display'] = is_array( $config['result_display'] )
 			? Nera_SAW_Constants::sanitize_result_display( $config['result_display'] )
 			: '';
+
+		$share_days                = isset( $config['share_link_days'] ) ? trim( (string) $config['share_link_days'] ) : '';
+		$config['share_link_days'] = ( '' !== $share_days && (int) $share_days >= 1 ) ? (string) (int) $share_days : '';
 
 		$config['cash_alternative'] = sanitize_text_field(
 			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''

@@ -234,6 +234,18 @@ class Nera_SAW_Competition_Admin {
 					<?php endforeach; ?>
 					<span class="description"><?php esc_html_e( 'Optional blocks on the screen a player sees after a run. The boxes apply only with this competition\'s own choice.', 'nera-strikeawin' ); ?></span>
 				</fieldset>
+				<p class="form-field">
+					<label for="saw_share_link_days"><?php esc_html_e( 'Share link days', 'nera-strikeawin' ); ?></label>
+					<input type="number" min="1" step="1" name="saw_share_link_days" id="saw_share_link_days" class="short" style="width:120px"
+						value="<?php echo esc_attr( isset( $config['share_link_days'] ) ? $config['share_link_days'] : '' ); ?>"
+						placeholder="<?php echo esc_attr( (string) Nera_SAW_Share::days() ); ?>" />
+					<span class="description">
+						<?php
+						/* translators: %d: the global number of days. */
+						echo esc_html( sprintf( __( 'How long a shared result link works. Leave empty to inherit the global setting (%d days). The draw ends every link sooner.', 'nera-strikeawin' ), (int) Nera_SAW_Share::days() ) );
+						?>
+					</span>
+				</p>
 			</div>
 
 			<div class="options_group">
@@ -535,6 +547,7 @@ class Nera_SAW_Competition_Admin {
 			'result_display' => ( isset( $_POST['saw_result_display_mode'] ) && 'own' === $_POST['saw_result_display_mode'] )
 				? Nera_SAW_Constants::sanitize_result_display( isset( $_POST['saw_result_display'] ) ? (array) wp_unslash( $_POST['saw_result_display'] ) : array() )
 				: '',
+			'share_link_days' => isset( $_POST['saw_share_link_days'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_share_link_days'] ) ) : '',
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
 			'level_rewards'  => $rewards,

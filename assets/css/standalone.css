@@ -4558,3 +4558,11 @@ html.saw-live-modal-open { overflow: hidden; }
   outline: 2px solid var(--saw-primary);
   outline-offset: 2px;
 }
+
+/* Shared result page (/r/<token>/): layout only, the theme gives it its look. */
+.saw-share { margin: 24px 16px; }
+.saw-share__photo { margin: 0 0 16px; }
+.saw-share__photo img { display: block; width: 100%; height: auto; }
+.saw-share__stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.saw-share__stat dd { margin: 4px 0 0; font-size: 1.5em; font-weight: 700; }
+.saw-share__title { overflow-wrap: anywhere; }

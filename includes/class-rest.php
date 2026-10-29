@@ -93,6 +93,17 @@ class Nera_SAW_Rest {
 			)
 		);
 
+		// A public link to a finished run's result (Nera_SAW_Share).
+		register_rest_route(
+			self::NS,
+			'/run/(?P<id>\d+)/share',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'require_login' ),
+				'callback'            => array( __CLASS__, 'share' ),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/run/(?P<id>\d+)/heartbeat',
@@ -445,6 +456,22 @@ class Nera_SAW_Rest {
 				'status'    => $row->status,
 			),
 			200
+		);
+	}
+
+	/**
+	 * POST /run/<id>/share — the run owner's share link (made once, reused while live).
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function share( WP_REST_Request $req ) {
+		return self::respond(
+			Nera_SAW_Share::create_for_run( (int) $req['id'], get_current_user_id() ),
+			array(
+				'op'     => 'share',
+				'run_id' => (int) $req['id'],
+			)
 		);
 	}
 

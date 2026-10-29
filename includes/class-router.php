@@ -309,6 +309,13 @@ class Nera_SAW_Router {
 			'top'
 		);
 
+		// A shared result: /r/<token>/ (see Nera_SAW_Share).
+		add_rewrite_rule(
+			'^' . $prefix . 'r/([A-Za-z0-9_-]+)/?$',
+			'index.php?' . self::QV_ROUTE . '=share&' . self::QV_ARG . '=$matches[1]',
+			'top'
+		);
+
 		/*
 		 * No rule for the section root. It is a real page now, and claiming its URL
 		 * here would shadow the page an administrator is editing -- they would save
@@ -552,6 +559,7 @@ class Nera_SAW_Router {
 			array(
 				'competitions' => 'competitions.php',
 				'competition'  => 'competition.php',
+				'share'        => 'share.php',
 			)
 		);
 	}

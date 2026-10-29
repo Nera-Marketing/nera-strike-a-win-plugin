@@ -198,6 +198,8 @@ class Nera_SAW_Constants {
 			'checkout_show_coupon'             => false,
 			// Optional blocks on the quiz results screen (keys of result_blocks()).
 			'result_display'                   => array( 'draw_line' ),
+			// Days a shared result link stays live (Nera_SAW_Share::days()); the draw ends it sooner.
+			'share_link_days'                  => 30,
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),

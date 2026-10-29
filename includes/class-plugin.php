@@ -80,6 +80,7 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-account-pages.php';
 		require_once $dir . 'class-my-tickets.php';
 		require_once $dir . 'class-standalone-result-screen.php';
+		require_once $dir . 'class-share.php';
 		require_once $dir . 'class-spin-pool.php';
 		require_once $dir . 'class-reservations.php';
 		require_once $dir . 'class-run-grants.php';
@@ -167,6 +168,7 @@ class Nera_SAW_Plugin {
 		Nera_SAW_Standalone_Account::init();
 		Nera_SAW_Account_Pages::init();
 		Nera_SAW_Standalone_Result_Screen::init();
+		Nera_SAW_Share::init();
 		Nera_SAW_Ticket_Award::init();
 
 		// Finalize abandoned runs on the reservation sweep tick.

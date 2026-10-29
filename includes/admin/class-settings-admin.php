@@ -116,6 +116,10 @@ class Nera_SAW_Settings_Admin {
 		}
 		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
 
+		// Whole days, at least one; blank or nonsense falls back to the default.
+		$share_link_days = isset( $_POST['share_link_days'] ) ? (int) $_POST['share_link_days'] : Nera_SAW_Share::DEFAULT_DAYS;
+		$share_link_days = $share_link_days >= 1 ? $share_link_days : Nera_SAW_Share::DEFAULT_DAYS;
+
 		$tiers = array();
 		foreach ( (array) ( $_POST['tier'] ?? array() ) as $row ) {
 			$key = isset( $row['key'] ) ? sanitize_key( $row['key'] ) : '';
@@ -157,6 +161,7 @@ class Nera_SAW_Settings_Admin {
 				'checkout_show_coupon'             => $checkout_coupon,
 				// Unticking every box posts nothing: that is an empty list, not the default.
 				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
+				'share_link_days'                  => $share_link_days,
 				'tiers'              => $tiers,
 			)
 		);
@@ -484,6 +489,19 @@ class Nera_SAW_Settings_Admin {
 			esc_html__( 'Show the Next button during the answer reveal', 'nera-strikeawin' )
 		);
 		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
+		echo '</div>';
+
+		// --- Share link card -----------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Shared result links', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'A player can share a link to a finished run\'s result. The link stops working after this many days, or once the competition is drawn, whichever comes first. Each competition can set its own number on its Strike And Win tab.', 'nera-strikeawin' ) . '</p>';
+		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="share_link_days" min="1" step="1" value="%d"></label>',
+			esc_html__( 'Link lives for (days)', 'nera-strikeawin' ),
+			(int) Nera_SAW_Share::days()
+		);
+		echo '</div>';
 		echo '</div>';
 
 		// --- Result screen card --------------------------------------------
