@@ -40,6 +40,17 @@ class Nera_SAW_Rest {
 	 * Define routes.
 	 */
 	public static function routes() {
+		// Free sign-up: email a code. Public; the REST nonce is checked in the permission callback.
+		register_rest_route(
+			self::NS,
+			'/free/code',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( 'Nera_SAW_Free_Signup', 'rest_permission' ),
+				'callback'            => array( 'Nera_SAW_Free_Signup', 'rest_send' ),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/run/start',
