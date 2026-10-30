@@ -115,6 +115,11 @@ class Nera_SAW_Competition_Admin {
 					<span class="description"><?php esc_html_e( 'Players earn this competition\'s LFW tickets only by answering quiz questions correctly (Section 9). Ticket stock and draw date come from the Lottery product settings.', 'nera-strikeawin' ); ?></span>
 				</p>
 				<p class="form-field">
+					<label for="saw_is_free"><?php esc_html_e( 'Free competition', 'nera-strikeawin' ); ?></label>
+					<input type="checkbox" class="checkbox" name="saw_is_free" id="saw_is_free" value="1" <?php checked( Nera_SAW_Competition_Config::is_free( $product_id ), true ); ?> />
+					<span class="description"><?php esc_html_e( 'Entered by one free quiz per person, never bought: it cannot be added to the basket, is left out of the paid lists and has its own page (Free).', 'nera-strikeawin' ); ?></span>
+				</p>
+				<p class="form-field">
 					<label for="saw_quiz_type"><?php esc_html_e( 'Quiz type', 'nera-strikeawin' ); ?></label>
 					<select id="saw_quiz_type" name="saw_quiz_type" class="select short" style="width:180px">
 						<option value="per_question" <?php selected( $config['quiz_type'], 'per_question' ); ?>><?php esc_html_e( 'Timeout per question', 'nera-strikeawin' ); ?></option>
@@ -484,9 +489,16 @@ class Nera_SAW_Competition_Admin {
 
 		// If our field wasn't present at all (non-lottery product), do nothing.
 		if ( ! isset( $_POST['saw_quiz_type'] ) && ! isset( $_POST['saw_quiz_enabled'] ) && ! isset( $_POST['saw_dist'] )
-			&& ! isset( $_POST['saw_draw_closed'] ) && ! isset( $_POST['saw_prize'] )
+			&& ! isset( $_POST['saw_draw_closed'] ) && ! isset( $_POST['saw_prize'] ) && ! isset( $_POST['saw_is_free'] )
 		) {
 			return;
+		}
+
+		// Free or paid: independent of the quiz switch below, so it is saved either way.
+		if ( ! empty( $_POST['saw_is_free'] ) ) {
+			update_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE, '1' );
+		} else {
+			delete_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE );
 		}
 
 		$existing    = Nera_SAW_Competition_Config::get( $post_id );

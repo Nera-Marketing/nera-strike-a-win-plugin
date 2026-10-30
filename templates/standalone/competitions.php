@@ -37,6 +37,8 @@ $saw_query = new WP_Query(
 				'key'   => Nera_SAW_Competition_Config::META_IS_COMP,
 				'value' => '1',
 			),
+			// Free competitions have their own page.
+			Nera_SAW_Free::paid_only_clause(),
 		),
 	)
 );

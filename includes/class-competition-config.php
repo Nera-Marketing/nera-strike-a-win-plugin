@@ -19,6 +19,7 @@ class Nera_SAW_Competition_Config {
 
 	const META_KEY     = '_saw_config';
 	const META_IS_COMP = '_saw_is_competition';
+	const META_IS_FREE = '_saw_is_free';
 
 	/**
 	 * Default config skeleton.
@@ -216,6 +217,16 @@ class Nera_SAW_Competition_Config {
 	 */
 	public static function is_competition( $product_id ) {
 		return '1' === (string) get_post_meta( (int) $product_id, self::META_IS_COMP, true );
+	}
+
+	/**
+	 * Is this competition a free one? Entered by a free quiz run, never bought.
+	 *
+	 * @param int $product_id Product ID.
+	 * @return bool
+	 */
+	public static function is_free( $product_id ) {
+		return '1' === (string) get_post_meta( (int) $product_id, self::META_IS_FREE, true );
 	}
 
 	/**
