@@ -50,6 +50,26 @@ class Nera_SAW_Rest {
 				'callback'            => array( 'Nera_SAW_Free_Signup', 'rest_send' ),
 			)
 		);
+		// The code step: check the code (logs in), or send a new one. The address
+		// comes from the pending cookie or the logged-in account, never the request.
+		register_rest_route(
+			self::NS,
+			'/free/verify',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( 'Nera_SAW_Free_Signup', 'rest_permission' ),
+				'callback'            => array( 'Nera_SAW_Free_Signup', 'rest_verify' ),
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/free/resend',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( 'Nera_SAW_Free_Signup', 'rest_permission' ),
+				'callback'            => array( 'Nera_SAW_Free_Signup', 'rest_resend' ),
+			)
+		);
 
 		register_rest_route(
 			self::NS,

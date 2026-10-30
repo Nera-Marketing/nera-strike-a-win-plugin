@@ -15,8 +15,14 @@
  *
  * Code rules: 6 random digits, stored only as a password hash, valid `ttl` seconds;
  * another send waits `wait` seconds; at most `per_email` sends per address and
- * `per_ip` per IP in `window` seconds (filter `nera_saw_free_code_limits`). A new
- * code voids the old one.
+ * `per_ip` per IP in `window` seconds; `tries` wrong codes void it (filter
+ * `nera_saw_free_code_limits`). A new code voids the old one.
+ *
+ * The right code is the login: a new address becomes a WooCommerce customer, an
+ * address that already has an account logs into it (the code proves the address,
+ * as a password reset link does). Accounts that can edit content and accounts a
+ * login gate refuses (`wp_authenticate_user`) are not logged in this way. A
+ * logged-in visitor verifies their own account's address only.
  *
  * @package Nera_Strikeawin
  */
@@ -78,6 +84,21 @@ class Nera_SAW_Free_Signup {
 	private static $posted = null;
 
 	/**
+	 * User meta written when an address is proved by a code.
+	 */
+	const META_VERIFIED  = '_nera_saw_email_verified';
+	const META_CONSENT   = '_nera_saw_free_consent';
+	const META_PHONE     = '_nera_saw_phone_e164';
+	const META_MARKETING = '_nera_saw_marketing_optin';
+
+	/**
+	 * Error and notice of the verify screen's plain form post, for its template.
+	 *
+	 * @var array{error:WP_Error|null,notice:string}
+	 */
+	private static $verify_state = array( 'error' => null, 'notice' => '' );
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -91,7 +112,7 @@ class Nera_SAW_Free_Signup {
 	/**
 	 * Code limits.
 	 *
-	 * @return array{ttl:int,wait:int,per_email:int,per_ip:int,window:int}
+	 * @return array{ttl:int,wait:int,per_email:int,per_ip:int,window:int,tries:int}
 	 */
 	public static function limits() {
 		$limits = (array) apply_filters(
@@ -102,6 +123,7 @@ class Nera_SAW_Free_Signup {
 				'per_email' => 5,
 				'per_ip'    => 10,
 				'window'    => HOUR_IN_SECONDS,
+				'tries'     => 5,
 			)
 		);
 		return array_map( 'intval', $limits );
@@ -185,7 +207,16 @@ class Nera_SAW_Free_Signup {
 		if ( ! $fields['competition_id'] ) {
 			return new WP_Error( 'saw_free_closed', Nera_SAW_I18n::t( 'No free competition is open right now.' ), array( 'status' => 409 ) );
 		}
+		return self::issue_code( $fields );
+	}
 
+	/**
+	 * Store a pending sign-up and email it a new code, within the send limits.
+	 *
+	 * @param array $fields Normalised fields (see validate()); `email` is required.
+	 * @return true|WP_Error
+	 */
+	public static function issue_code( array $fields ) {
 		$limits = self::limits();
 		$now    = time();
 		$key    = self::record_key( $fields['email'] );
@@ -216,13 +247,13 @@ class Nera_SAW_Free_Signup {
 				'email'          => $fields['email'],
 				'code_hash'      => wp_hash_password( $code ),
 				'expires'        => $now + $limits['ttl'],
-				'tries'          => 0,
 				'sends'          => $sends,
 				'competition_id' => $fields['competition_id'],
 				'fields'         => $fields,
 			),
 			$limits['window']
 		);
+		self::reset_tries( $key, $limits['window'] );
 		set_transient( $ip_key, $ip_sends, $limits['window'] );
 
 		if ( ! self::mail_code( $fields['email'], $code, $limits['ttl'] ) ) {
@@ -264,6 +295,265 @@ class Nera_SAW_Free_Signup {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Send a new code to an address that has a pending sign-up (same fields).
+	 *
+	 * @param string $email Address.
+	 * @return true|WP_Error
+	 */
+	public static function resend( $email ) {
+		$record = '' !== (string) $email ? get_transient( self::record_key( $email ) ) : false;
+		if ( ! is_array( $record ) || empty( $record['fields'] ) ) {
+			return self::code_error( 'saw_code_expired' );
+		}
+		return self::issue_code( (array) $record['fields'] );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Checking the code
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Check a code and log its owner in: a new customer for a new address, the
+	 * existing account otherwise. A logged-in visitor stays logged in and only their
+	 * own address is accepted.
+	 *
+	 * @param string $email Address the code was sent to.
+	 * @param string $code  6 digits.
+	 * @param array  $extra `consent`: the 18+ and free rules tick, needed when the
+	 *                      pending sign-up has none (a logged-in account).
+	 * @return int|WP_Error User ID.
+	 */
+	public static function verify( $email, $code, array $extra = array() ) {
+		$email   = strtolower( trim( (string) $email ) );
+		$code    = preg_replace( '/\D+/', '', (string) $code );
+		$limits  = self::limits();
+		$current = is_user_logged_in() ? wp_get_current_user() : null;
+
+		// An old pending cookie for another address must not switch accounts.
+		if ( $current && strtolower( (string) $current->user_email ) !== $email ) {
+			return self::code_error( 'saw_code_account' );
+		}
+
+		$key    = '' !== $email ? self::record_key( $email ) : '';
+		$record = '' !== $key ? get_transient( $key ) : false;
+		if ( ! is_array( $record ) || empty( $record['code_hash'] ) ) {
+			return self::code_error( 'saw_code_expired' );
+		}
+		// Anyone can start a sign-up for any address, so a logged-in account takes
+		// nothing (phone, marketing, consent) from the pending record: only its own tick.
+		$fields = ! $current && isset( $record['fields'] ) ? (array) $record['fields'] : array();
+
+		if ( empty( $fields['consent_at'] ) && empty( $extra['consent'] ) ) {
+			$message = Nera_SAW_I18n::t( 'Tick this box to continue.' );
+			return new WP_Error( 'saw_invalid', $message, array( 'status' => 400, 'fields' => array( 'consent' => $message ) ) );
+		}
+		if ( (int) $record['expires'] <= time() ) {
+			return self::code_error( 'saw_code_expired' );
+		}
+
+		// The try is counted before the code is checked, atomically, so requests sent
+		// at the same time cannot share one count.
+		$try = self::claim_try( $key, $limits['tries'] );
+		if ( is_string( $try ) ) {
+			return self::code_error( $try );
+		}
+		if ( 6 !== strlen( $code ) || ! wp_check_password( $code, $record['code_hash'] ) ) {
+			return self::code_error( $try >= $limits['tries'] ? 'saw_code_void' : 'saw_code_wrong' );
+		}
+
+		// A code works once, whatever happens next: only the request that removes the
+		// counter goes on.
+		if ( ! self::drop_tries( $key ) ) {
+			return self::code_error( 'saw_code_expired' );
+		}
+		self::forget( $key );
+
+		if ( $current ) {
+			$user = $current;
+		} else {
+			$user = get_user_by( 'email', $email );
+			if ( $user ) {
+				// Staff accounts keep their password (and any second factor).
+				if ( user_can( $user, 'edit_posts' ) ) {
+					return self::code_error( 'saw_use_login' );
+				}
+				// The login gates a password login passes through (self-exclusion…).
+				$user = apply_filters( 'wp_authenticate_user', $user, '' );
+				if ( is_wp_error( $user ) ) {
+					$user->add_data( array( 'status' => 403, 'field' => 'code' ) );
+					return $user;
+				}
+			} else {
+				$id = wc_create_new_customer( $email, wc_create_new_customer_username( $email ), wp_generate_password() );
+				if ( is_wp_error( $id ) ) {
+					$id->add_data( array( 'status' => 500, 'field' => 'code' ) );
+					return $id;
+				}
+				$user = get_user_by( 'id', $id );
+				update_user_meta( $id, 'billing_email', $email );
+			}
+		}
+
+		self::mark_verified( (int) $user->ID, $fields, ! empty( $extra['consent'] ) );
+
+		if ( ! $current ) {
+			wc_set_customer_auth_cookie( $user->ID );
+			do_action( 'wp_login', $user->user_login, $user );
+		}
+		return (int) $user->ID;
+	}
+
+	/**
+	 * Whether an account's address has been proved by a code.
+	 *
+	 * @param int $user_id User ID.
+	 * @return bool
+	 */
+	public static function is_verified( $user_id ) {
+		return (int) get_user_meta( (int) $user_id, self::META_VERIFIED, true ) > 0;
+	}
+
+	/**
+	 * Wrong-code counter of a pending sign-up. It has its own row (stored as a
+	 * transient, so the expired-transient sweep removes leftovers) because the
+	 * record's value cannot be raised atomically.
+	 *
+	 * @param string $key Record transient name.
+	 * @return string Transient name.
+	 */
+	private static function tries_name( $key ) {
+		return 'nera_saw_free_try_' . md5( (string) $key );
+	}
+
+	/**
+	 * Start the counter at 0 for a new code.
+	 *
+	 * @param string $key Record transient name.
+	 * @param int    $ttl Seconds to keep it.
+	 */
+	private static function reset_tries( $key, $ttl ) {
+		global $wpdb;
+		$name = self::tries_name( $key );
+		$rows = array(
+			'_transient_timeout_' . $name => (string) ( time() + (int) $ttl ),
+			'_transient_' . $name         => '0',
+		);
+		foreach ( $rows as $option => $value ) {
+			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)", $option, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			wp_cache_delete( $option, 'options' );
+		}
+	}
+
+	/**
+	 * Tries used on the current code, or null when it has no counter (used or gone).
+	 *
+	 * @param string $key Record transient name.
+	 * @return int|null
+	 */
+	public static function tries( $key ) {
+		global $wpdb;
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", '_transient_' . self::tries_name( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return null === $value ? null : (int) $value;
+	}
+
+	/**
+	 * Count one try in a single UPDATE, refused once the limit is reached.
+	 *
+	 * @param string $key   Record transient name.
+	 * @param int    $limit Tries allowed.
+	 * @return int|string This try's number, or the error code when none is left.
+	 */
+	private static function claim_try( $key, $limit ) {
+		global $wpdb;
+		$option = '_transient_' . self::tries_name( $key );
+		$done   = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = LAST_INSERT_ID( CAST( option_value AS UNSIGNED ) + 1 ) WHERE option_name = %s AND CAST( option_value AS UNSIGNED ) < %d", $option, (int) $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( $option, 'options' );
+		if ( ! $done ) {
+			return null === self::tries( $key ) ? 'saw_code_expired' : 'saw_code_void';
+		}
+		return (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Remove the counter; true only for the one request that removed it.
+	 *
+	 * @param string $key Record transient name.
+	 * @return bool
+	 */
+	private static function drop_tries( $key ) {
+		global $wpdb;
+		$name = self::tries_name( $key );
+		$done = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s", '_transient_' . $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s", '_transient_timeout_' . $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( '_transient_' . $name, 'options' );
+		wp_cache_delete( '_transient_timeout_' . $name, 'options' );
+		return 1 === (int) $done;
+	}
+
+	/**
+	 * Store what the sign-up gave on the account. Never the age check of paid
+	 * entries: the 18+ tick is self-declared.
+	 *
+	 * @param int   $user_id User ID.
+	 * @param array $fields  Pending sign-up fields.
+	 * @param bool  $ticked  The tick was given on the verify screen.
+	 */
+	private static function mark_verified( $user_id, array $fields, $ticked ) {
+		$now = time();
+		update_user_meta( $user_id, self::META_VERIFIED, $now );
+
+		$consent = ! empty( $fields['consent_at'] ) ? (int) $fields['consent_at'] : ( $ticked ? $now : 0 );
+		if ( $consent ) {
+			update_user_meta( $user_id, self::META_CONSENT, $consent );
+		}
+		if ( ! empty( $fields['phone'] ) ) {
+			update_user_meta( $user_id, self::META_PHONE, (string) $fields['phone'] );
+			if ( '' === (string) get_user_meta( $user_id, 'billing_phone', true ) ) {
+				update_user_meta( $user_id, 'billing_phone', (string) $fields['phone'] );
+			}
+		}
+		if ( isset( $fields['marketing'] ) && in_array( $fields['marketing'], array( 'yes', 'no' ), true ) ) {
+			update_user_meta( $user_id, self::META_MARKETING, $fields['marketing'] );
+			update_user_meta( $user_id, self::META_MARKETING . '_at', $now );
+		}
+	}
+
+	/**
+	 * Drop a used pending sign-up and this browser's pointer to it.
+	 *
+	 * @param string $key Record transient name.
+	 */
+	private static function forget( $key ) {
+		delete_transient( $key );
+		$token = isset( $_COOKIE[ self::COOKIE ] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) wp_unslash( $_COOKIE[ self::COOKIE ] ) ) : '';
+		if ( '' !== $token ) {
+			delete_transient( self::TOKEN_PREFIX . $token );
+		}
+		if ( ! headers_sent() ) {
+			setcookie( self::COOKIE, '', array( 'expires' => time() - YEAR_IN_SECONDS, 'path' => COOKIEPATH ? COOKIEPATH : '/', 'domain' => COOKIE_DOMAIN, 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Lax' ) );
+		}
+		unset( $_COOKIE[ self::COOKIE ] );
+	}
+
+	/**
+	 * Errors of the code step, shown under the code boxes.
+	 *
+	 * @param string $code saw_code_wrong, saw_code_void, saw_code_expired, saw_code_account, saw_use_login.
+	 * @return WP_Error
+	 */
+	private static function code_error( $code ) {
+		$errors = array(
+			'saw_code_wrong'   => array( 400, 'That code is not right. Check the email and try again.' ),
+			'saw_code_void'    => array( 429, 'Too many wrong codes. Ask for a new one.' ),
+			'saw_code_expired' => array( 410, 'This code has expired. Ask for a new one.' ),
+			'saw_code_account' => array( 403, 'This code is for another email address.' ),
+			'saw_use_login'    => array( 403, 'This account signs in with its password. Use Sign in.' ),
+		);
+		$e = $errors[ $code ];
+		return new WP_Error( $code, Nera_SAW_I18n::t( $e[1] ), array( 'status' => $e[0], 'field' => 'code' ) );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -328,7 +618,7 @@ class Nera_SAW_Free_Signup {
 	/**
 	 * The pending sign-up this browser started, or null.
 	 *
-	 * @return array|null The record (email, code_hash, expires, tries, sends, fields…) plus its `key`.
+	 * @return array|null The record (email, code_hash, expires, sends, fields…) plus its `key`.
 	 */
 	public static function pending() {
 		$token = isset( $_COOKIE[ self::COOKIE ] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) wp_unslash( $_COOKIE[ self::COOKIE ] ) ) : '';
@@ -367,8 +657,73 @@ class Nera_SAW_Free_Signup {
 	}
 
 	/**
-	 * Both screens are per visitor: never cached. A plain form post is handled
-	 * here; the verify screen without a pending sign-up goes back to the form.
+	 * Where a verified player goes: the Free page.
+	 *
+	 * @return string
+	 */
+	public static function free_url() {
+		$page = Nera_SAW_Free::page_url();
+		$page = '' !== $page ? $page : home_url( '/free/' );
+		return class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::carry_current_language( $page ) : $page;
+	}
+
+	/**
+	 * Address the code step works on: the account's when logged in, else the
+	 * pending sign-up's (from the cookie), never a request parameter.
+	 *
+	 * @return string
+	 */
+	public static function session_email() {
+		if ( is_user_logged_in() ) {
+			return strtolower( (string) wp_get_current_user()->user_email );
+		}
+		$pending = self::pending();
+		return $pending ? (string) $pending['email'] : '';
+	}
+
+	/**
+	 * A logged-in account that has not proved its address: make sure a live code
+	 * is on its way. A code still running is reused, so a reload sends nothing.
+	 *
+	 * @param WP_User $user  Account.
+	 * @param int     $asked Competition ID from the link.
+	 * @return WP_Error|null Why no code could be sent.
+	 */
+	private static function ensure_account_code( WP_User $user, $asked ) {
+		$email  = strtolower( (string) $user->user_email );
+		$key    = self::record_key( $email );
+		$record = get_transient( $key );
+		$tries  = self::tries( $key );
+		$fields = array(
+			'email'          => $email,
+			'phone'          => '',
+			'country'        => '',
+			'consent_at'     => 0,
+			'competition_id' => self::competition( $asked ),
+		);
+		if ( ! is_array( $record ) || (int) $record['expires'] <= time() || null === $tries || $tries >= self::limits()['tries'] ) {
+			$sent = self::issue_code( $fields );
+			if ( true !== $sent ) {
+				return $sent;
+			}
+		} elseif ( ! empty( $record['fields']['phone'] ) || ! empty( $record['fields']['consent_at'] ) || isset( $record['fields']['marketing'] ) ) {
+			// A sign-up someone started for this address while logged out: its code
+			// still went to the account's inbox, but its phone and ticks are not the account's.
+			$record['fields'] = $fields;
+			set_transient( $key, $record, self::limits()['window'] );
+		}
+		$pending = self::pending();
+		if ( ! $pending || $pending['email'] !== $email ) {
+			self::remember( $email );
+		}
+		return null;
+	}
+
+	/**
+	 * Both screens are per visitor: never cached. Plain form posts are handled
+	 * here. A logged-in account that proved its address goes to the Free page; one
+	 * that has not goes to the code step with a code sent to its address. The code
+	 * step without a pending sign-up goes back to the form.
 	 */
 	public static function handle_screens() {
 		$route = Nera_SAW_Router::current_route();
@@ -377,16 +732,35 @@ class Nera_SAW_Free_Signup {
 		}
 		nocache_headers();
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which competition the link is for.
+		$asked = isset( $_GET['c'] ) ? absint( $_GET['c'] ) : 0;
+		$user  = is_user_logged_in() ? wp_get_current_user() : null;
+		$post  = 'POST' === strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+		if ( $user && self::is_verified( $user->ID ) ) {
+			wp_safe_redirect( self::free_url() );
+			exit;
+		}
+
 		if ( 'free-verify' === $route ) {
-			if ( ! self::pending() ) {
+			if ( $user ) {
+				self::$verify_state['error'] = self::ensure_account_code( $user, $asked );
+			} elseif ( ! self::pending() ) {
 				wp_safe_redirect( self::url( 'join' ) );
 				exit;
+			}
+			if ( $post && isset( $_POST['saw_free_verify'] ) ) {
+				self::handle_verify_post();
 			}
 			return;
 		}
 
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
-		if ( 'POST' !== strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) || ! isset( $_POST['saw_free_join'] ) ) {
+		if ( $user ) {
+			wp_safe_redirect( self::url( 'verify', $asked ? array( 'c' => $asked ) : array() ) );
+			exit;
+		}
+
+		if ( ! $post || ! isset( $_POST['saw_free_join'] ) ) {
 			return;
 		}
 
@@ -406,6 +780,41 @@ class Nera_SAW_Free_Signup {
 			'values' => $input,
 			'errors' => self::field_errors( $sent ),
 		);
+	}
+
+	/**
+	 * The code form posted without script: the code, "Resend code" or "Change email".
+	 */
+	private static function handle_verify_post() {
+		$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+			self::$verify_state['error'] = new WP_Error( 'saw_expired', Nera_SAW_I18n::t( 'This page has expired. Reload it and try again.' ), array( 'status' => 403, 'field' => 'code' ) );
+			return;
+		}
+		$email = self::session_email();
+
+		if ( isset( $_POST['saw_free_change'] ) && ! is_user_logged_in() ) {
+			wp_safe_redirect( self::url( 'join' ) );
+			exit;
+		}
+		if ( isset( $_POST['saw_free_resend'] ) ) {
+			$sent = self::resend( $email );
+			if ( true === $sent ) {
+				self::$verify_state = array( 'error' => null, 'notice' => Nera_SAW_I18n::t( 'New code sent to {e}', array( 'e' => $email ) ) );
+			} else {
+				self::$verify_state['error'] = $sent;
+			}
+			return;
+		}
+
+		$code = isset( $_POST['code'] ) ? wp_unslash( $_POST['code'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- digits only are kept.
+		$code = is_array( $code ) ? implode( '', array_map( 'strval', $code ) ) : (string) $code;
+		$done = self::verify( $email, $code, array( 'consent' => ! empty( $_POST['consent'] ) ) );
+		if ( ! is_wp_error( $done ) ) {
+			wp_safe_redirect( self::free_url() );
+			exit;
+		}
+		self::$verify_state['error'] = $done;
 	}
 
 	/**
@@ -448,7 +857,7 @@ class Nera_SAW_Free_Signup {
 	public static function join_view() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which competition to show.
 		$asked   = isset( $_GET['c'] ) ? absint( $_GET['c'] ) : 0;
-		$posted  = self::$posted ? self::$posted : array( 'values' => array(), 'errors' => array() );
+		$posted  = self::$posted ? self::$posted : array( 'values' => self::pending_values(), 'errors' => array() );
 		$values  = $posted['values'];
 		$default = 'ru' === Nera_SAW_Language::current() ? 'RU' : 'GB';
 		$country = isset( $values['country'] ) ? strtoupper( (string) $values['country'] ) : $default;
@@ -472,13 +881,56 @@ class Nera_SAW_Free_Signup {
 	}
 
 	/**
+	 * The pending sign-up's form values ("Change email" comes back to them).
+	 *
+	 * @return array
+	 */
+	private static function pending_values() {
+		$pending = is_user_logged_in() ? null : self::pending();
+		$f       = $pending && ! empty( $pending['fields'] ) ? (array) $pending['fields'] : array();
+		if ( empty( $f['email'] ) ) {
+			return array();
+		}
+		$country = (string) ( $f['country'] ?? '' );
+		$dial    = isset( self::COUNTRIES[ $country ] ) ? '+' . self::COUNTRIES[ $country ] : '';
+		$phone   = (string) ( $f['phone'] ?? '' );
+		return array(
+			'email'     => (string) $f['email'],
+			'country'   => $country,
+			'phone'     => '' !== $dial && 0 === strpos( $phone, $dial ) ? substr( $phone, strlen( $dial ) ) : $phone,
+			'consent'   => ! empty( $f['consent_at'] ),
+			'marketing' => 'yes' === ( $f['marketing'] ?? '' ),
+		);
+	}
+
+	/**
 	 * What the verify screen shows.
 	 *
-	 * @return array email.
+	 * @return array email, logged_in, consent (show the 18+ and free rules tick),
+	 *               error, error_field ('code' or 'consent'), notice, rules_url,
+	 *               action, rest_verify, rest_resend, nonce.
 	 */
 	public static function verify_view() {
-		$pending = self::pending();
-		return array( 'email' => $pending ? (string) $pending['email'] : '' );
+		$email  = self::session_email();
+		$error  = self::$verify_state['error'];
+		$field  = '';
+		if ( $error instanceof WP_Error ) {
+			$field = array_key_first( self::field_errors( $error ) );
+			$field = 'consent' === $field ? 'consent' : 'code';
+		}
+		return array(
+			'email'       => $email,
+			'logged_in'   => is_user_logged_in(),
+			'consent'     => is_user_logged_in(),
+			'error'       => $error instanceof WP_Error ? $error->get_error_message() : '',
+			'error_field' => $field,
+			'notice'      => (string) self::$verify_state['notice'],
+			'rules_url'   => class_exists( 'Nera_SAW_Standalone_Pages' ) ? (string) Nera_SAW_Standalone_Pages::url( 'free-competition-rules' ) : '',
+			'action'      => self::url( 'verify' ),
+			'rest_verify' => rest_url( Nera_SAW_Rest::NS . '/free/verify' ),
+			'rest_resend' => rest_url( Nera_SAW_Rest::NS . '/free/resend' ),
+			'nonce'       => wp_create_nonce( 'wp_rest' ),
+		);
 	}
 
 	/* ---------------------------------------------------------------------
@@ -513,12 +965,55 @@ class Nera_SAW_Free_Signup {
 		$input = self::input_from( (array) $request->get_params() );
 		$sent  = self::send_code( $input );
 		if ( is_wp_error( $sent ) ) {
-			$data           = (array) $sent->get_error_data();
-			$data['fields'] = self::field_errors( $sent );
-			$sent->add_data( $data );
-			return $sent;
+			return self::rest_error( $sent );
 		}
 		self::remember( $input['email'] );
 		return rest_ensure_response( array( 'redirect' => self::url( 'verify' ) ) );
+	}
+
+	/**
+	 * POST free/verify: check the code (`code`, plus `consent` when asked for) for
+	 * this browser's sign-up or the logged-in account; logs in on success.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function rest_verify( $request ) {
+		$code = $request->get_param( 'code' );
+		$code = is_array( $code ) ? implode( '', array_map( 'strval', $code ) ) : (string) $code;
+		$done = self::verify( self::session_email(), $code, array( 'consent' => ! empty( $request->get_param( 'consent' ) ) ) );
+		if ( is_wp_error( $done ) ) {
+			return self::rest_error( $done );
+		}
+		return rest_ensure_response( array( 'redirect' => self::free_url() ) );
+	}
+
+	/**
+	 * POST free/resend: a new code for this browser's sign-up or the logged-in account.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function rest_resend( $request ) {
+		unset( $request );
+		$email = self::session_email();
+		$sent  = self::resend( $email );
+		if ( is_wp_error( $sent ) ) {
+			return self::rest_error( $sent );
+		}
+		return rest_ensure_response( array( 'message' => Nera_SAW_I18n::t( 'New code sent to {e}', array( 'e' => $email ) ) ) );
+	}
+
+	/**
+	 * An error with its field => message map, for the inline errors.
+	 *
+	 * @param WP_Error $error Error.
+	 * @return WP_Error
+	 */
+	private static function rest_error( WP_Error $error ) {
+		$data           = (array) $error->get_error_data();
+		$data['fields'] = self::field_errors( $error );
+		$error->add_data( $data );
+		return $error;
 	}
 }
