@@ -1960,7 +1960,7 @@ class Nera_SAW_Language {
 				"You're in the draw"                      => 'Вы участвуете в розыгрыше',
 				'%1$d tickets banked from %2$d correct answers.' => 'Начислено билетов: %1$d за %2$d правильных ответов.',
 				'No tickets this run'                     => 'В этом забеге билетов нет',
-				'None of the %d answers landed in time.'  => 'Ни один из %d ответов не уложился во время.',
+				'No tickets this run. No answer was correct before the clock ran out.' => 'Без билетов в этой попытке. Ни один ответ не был верным до истечения времени.',
 				'%1$d of %2$d correct, but not enough to bank a ticket.' => 'Правильных ответов: %1$d из %2$d, этого недостаточно для билета.',
 				'Score'                                     => 'Результат',
 				'%1$d of %2$d correct'                    => '%1$d из %2$d правильно',

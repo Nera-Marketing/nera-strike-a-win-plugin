@@ -393,7 +393,7 @@ class Nera_SAW_Frontend {
 				// only the Russian side needs the real one/few/many distinction.
 				'inTheDrawSubtitle'  => Nera_SAW_I18n::n_template( '{t} tickets banked from {c} correct answers.', '{t} tickets banked from {c} correct answers.' ),
 				'zeroTicketsTitle'   => Nera_SAW_I18n::t( 'No tickets this run' ),
-				'zeroCorrectSubtitle' => __( 'None of the %d answers landed in time.', 'nera-strikeawin' ),
+				'zeroCorrectSubtitle' => __( 'No tickets this run. No answer was correct before the clock ran out.', 'nera-strikeawin' ),
 				'zeroSomeCorrectSubtitle' => __( '%1$d of %2$d correct, but not enough to bank a ticket.', 'nera-strikeawin' ),
 				'scoreLabel'         => Nera_SAW_I18n::t( 'Score' ),
 				'scoreValue'         => Nera_SAW_I18n::t( '{c} of {total} correct' ),
@@ -609,7 +609,7 @@ class Nera_SAW_Frontend {
 
 		if ( '' === $cards_html ) {
 			return self::notice(
-				__( 'You have no runs to play yet. Buy an entry on a competition page, then come back here.', 'nera-strikeawin' )
+				Nera_SAW_I18n::t( 'No runs to play yet. Buy a run on a competition page and it appears here.' )
 			);
 		}
 
