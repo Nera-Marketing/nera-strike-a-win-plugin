@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Nera_SAW_Database {
 
-	const DB_VERSION = '0.9.0';
+	const DB_VERSION = '0.10.0';
 	const OPTION_KEY = 'nera_saw_db_version';
 
 	/**
@@ -197,6 +197,9 @@ CREATE TABLE {$run_grants} (
   reserved_per_run int(10) unsigned NOT NULL DEFAULT 0,
   config_snapshot longtext DEFAULT NULL,
   status varchar(16) NOT NULL DEFAULT 'active',
+  ip_hash varchar(64) NOT NULL DEFAULT '',
+  device_id varchar(64) NOT NULL DEFAULT '',
+  review varchar(16) NOT NULL DEFAULT '',
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY (id),
