@@ -28,6 +28,56 @@ class Nera_SAW_Free {
 	}
 
 	/**
+	 * Post meta for the live draw date, site time `Y-m-d H:i`; absent while not set.
+	 */
+	const META_LIVE_DRAW = '_saw_live_draw_date';
+
+	/**
+	 * The live draw date of a free competition as a timestamp, or 0 while not set.
+	 * The one reader of the field: every screen that shows the date goes through it.
+	 *
+	 * @param int $competition_id Product ID.
+	 * @return int
+	 */
+	public static function live_draw_date( $competition_id ) {
+		$raw = trim( (string) get_post_meta( (int) $competition_id, self::META_LIVE_DRAW, true ) );
+		if ( '' === $raw ) {
+			return 0;
+		}
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d H:i', $raw, wp_timezone() );
+		return $date ? (int) $date->getTimestamp() : 0;
+	}
+
+	/**
+	 * The live draw date in the section's date format, or '' while not set.
+	 * Callers add their own time zone label and "to be confirmed" text.
+	 *
+	 * @param int $competition_id Product ID.
+	 * @return string
+	 */
+	public static function live_draw_text( $competition_id ) {
+		$timestamp = self::live_draw_date( $competition_id );
+		return $timestamp ? Nera_SAW_Date::display( $timestamp ) : '';
+	}
+
+	/**
+	 * Store a live draw date from the admin field ("Y-m-d H:i" or the
+	 * datetime-local "Y-m-d\TH:i"); empty or unreadable clears it.
+	 *
+	 * @param int    $competition_id Product ID.
+	 * @param string $value          Submitted value, site time.
+	 */
+	public static function save_live_draw_date( $competition_id, $value ) {
+		$value = str_replace( 'T', ' ', trim( (string) $value ) );
+		$date  = '' === $value ? false : DateTimeImmutable::createFromFormat( '!Y-m-d H:i', substr( $value, 0, 16 ), wp_timezone() );
+		if ( $date ) {
+			update_post_meta( (int) $competition_id, self::META_LIVE_DRAW, $date->format( 'Y-m-d H:i' ) );
+		} else {
+			delete_post_meta( (int) $competition_id, self::META_LIVE_DRAW );
+		}
+	}
+
+	/**
 	 * Meta query clause for paid competitions only: no free flag, or a flag that is not 1.
 	 *
 	 * @return array

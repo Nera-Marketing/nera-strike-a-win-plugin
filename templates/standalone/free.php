@@ -35,6 +35,8 @@ Nera_SAW_Router::part( 'screen-head.php', array( 'saw_screen_title' => get_the_t
 				<?php if ( ! empty( $saw_free_spec['closes_timestamp'] ) && class_exists( 'Nera_SAW_Date' ) ) : ?>
 					<p><?php esc_html_e( 'Entries close', 'nera-strikeawin' ); ?> <b><?php echo esc_html( Nera_SAW_Date::display( (int) $saw_free_spec['closes_timestamp'] ) ); ?></b></p>
 				<?php endif; ?>
+				<?php $saw_free_live = Nera_SAW_Free::live_draw_text( $saw_free_id ); ?>
+				<p><?php esc_html_e( 'Live draw', 'nera-strikeawin' ); ?>: <b><?php echo '' !== $saw_free_live ? esc_html( $saw_free_live ) : esc_html__( 'Date to be confirmed', 'nera-strikeawin' ); ?></b></p>
 				<ol>
 					<li><?php esc_html_e( 'Sign up for free with your email and mobile number.', 'nera-strikeawin' ); ?></li>
 					<li><?php esc_html_e( 'Play the quiz: correct answers earn tickets.', 'nera-strikeawin' ); ?></li>

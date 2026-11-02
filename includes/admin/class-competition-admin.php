@@ -68,6 +68,11 @@ class Nera_SAW_Competition_Admin {
 				// Hidden invalid controls (e.g. min=1, value=0) block WooCommerce product save.
 				\$whole.find(':input').prop('disabled', !isWhole);
 			}
+			function syncFree(){
+				$('.saw-field-live-draw').toggle($('#saw_is_free').is(':checked'));
+			}
+			$(document).on('change', '#saw_is_free', syncFree);
+			$(function(){ syncFree(); });
 			$(document).on('change', '#saw_quiz_type', sync);
 			$(function(){ sync(); });
 
@@ -118,6 +123,12 @@ class Nera_SAW_Competition_Admin {
 					<label for="saw_is_free"><?php esc_html_e( 'Free competition', 'nera-strikeawin' ); ?></label>
 					<input type="checkbox" class="checkbox" name="saw_is_free" id="saw_is_free" value="1" <?php checked( Nera_SAW_Competition_Config::is_free( $product_id ), true ); ?> />
 					<span class="description"><?php esc_html_e( 'Entered by one free quiz per person, never bought: it cannot be added to the basket, is left out of the paid lists and has its own page (Free).', 'nera-strikeawin' ); ?></span>
+				</p>
+				<?php $saw_live_draw = Nera_SAW_Free::live_draw_date( $product_id ); ?>
+				<p class="form-field saw-field-live-draw">
+					<label for="saw_live_draw_date"><?php esc_html_e( 'Live draw date', 'nera-strikeawin' ); ?></label>
+					<input type="datetime-local" name="saw_live_draw_date" id="saw_live_draw_date" value="<?php echo esc_attr( $saw_live_draw ? wp_date( 'Y-m-d\\TH:i', $saw_live_draw ) : '' ); ?>" />
+					<span class="description"><?php esc_html_e( 'Free competitions only, in site time. Leave empty while the draw date is not set: the Free page then says it is to be confirmed.', 'nera-strikeawin' ); ?></span>
 				</p>
 				<p class="form-field">
 					<label for="saw_quiz_type"><?php esc_html_e( 'Quiz type', 'nera-strikeawin' ); ?></label>
@@ -499,6 +510,13 @@ class Nera_SAW_Competition_Admin {
 			update_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE, '1' );
 		} else {
 			delete_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE );
+		}
+
+		// The live draw date belongs to free competitions only; a paid draw follows the Lottery end date.
+		if ( empty( $_POST['saw_is_free'] ) ) {
+			delete_post_meta( $post_id, Nera_SAW_Free::META_LIVE_DRAW );
+		} elseif ( isset( $_POST['saw_live_draw_date'] ) ) {
+			Nera_SAW_Free::save_live_draw_date( $post_id, sanitize_text_field( wp_unslash( $_POST['saw_live_draw_date'] ) ) );
 		}
 
 		$existing    = Nera_SAW_Competition_Config::get( $post_id );

@@ -218,5 +218,7 @@
   "New code sent to {e}": "Новый код отправлен на {e}",
   "_plural_helper_js": "function ruPlural(n, forms) { const f = forms.split('|'); if (f.length === 1) return f[0]; const m10 = n % 10, m100 = n % 100; if (m10 === 1 && m100 !== 11) return f[0]; if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return f[1]; return f[2]; }",
   "_plural_helper_php": "function ru_plural( int $n, string $forms ): string { $f = explode( '|', $forms ); if ( count( $f ) === 1 ) return $f[0]; $m10 = $n % 10; $m100 = $n % 100; if ( $m10 === 1 && $m100 !== 11 ) return $f[0]; if ( $m10 >= 2 && $m10 <= 4 && ( $m100 < 12 || $m100 > 14 ) ) return $f[1]; return $f[2]; }",
-  "_date_format": "Dates in Russian: '29 октября 2026, 21:00'. Month names in the genitive: января, февраля, марта, апреля, мая, июня, июля, августа, сентября, октября, ноября, декабря. 24-hour clock, no am/pm."
+  "_date_format": "Dates in Russian: '29 октября 2026, 21:00'. Month names in the genitive: января, февраля, марта, апреля, мая, июня, июля, августа, сентября, октября, ноября, декабря. 24-hour clock, no am/pm.",
+  "Live draw": "Живой розыгрыш",
+  "Date to be confirmed": "Дата уточняется"
 }
