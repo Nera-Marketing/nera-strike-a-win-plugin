@@ -209,9 +209,13 @@ class Nera_SAW_Free {
 	 * Start a verified player's one free run on a free competition: create the free
 	 * grant (the briefing then offers its single run).
 	 *
-	 * Refused, with no grant, when the account already has a free grant for this
-	 * competition (any status), when another account with the same mobile has one,
-	 * or when the competition closes before a full run could finish.
+	 * An account whose free grant on this competition has not started its run yet
+	 * gets that same grant back: the grant is created on the first Start, so a
+	 * reload, Back or a second Start must lead to the run it already holds.
+	 *
+	 * Refused, with no grant, when the account's free grant here has been played,
+	 * when another account with the same mobile has one, or when the competition
+	 * closes before a full run could finish.
 	 *
 	 * @param int $user_id        User ID.
 	 * @param int $competition_id Free competition ID.
@@ -231,7 +235,12 @@ class Nera_SAW_Free {
 		if ( ! Nera_SAW_Competition_Config::is_competition( $competition_id ) || ! Nera_SAW_Competition_Config::is_free( $competition_id ) || 'publish' !== get_post_status( $competition_id ) ) {
 			return $fail( 'closed' );
 		}
-		if ( Nera_SAW_Run_Grants::free_grant( $user_id, $competition_id ) ) {
+		$existing = Nera_SAW_Run_Grants::free_grant( $user_id, $competition_id );
+		if ( $existing ) {
+			// Starting a run consumes the grant's single unit; until then it is unplayed.
+			if ( 'active' === $existing->status && (int) $existing->consumed < (int) $existing->qty ) {
+				return (int) $existing->id;
+			}
 			return $fail( 'used' );
 		}
 		$phone = (string) get_user_meta( $user_id, Nera_SAW_Free_Signup::META_PHONE, true );
