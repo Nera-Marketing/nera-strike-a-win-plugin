@@ -1113,6 +1113,18 @@ class Nera_SAW_Run {
 			);
 		}
 
+		if ( Nera_SAW_Run_Grants::is_free_run( $run ) ) {
+			/**
+			 * Fires once when a free run finalizes (this call claimed it).
+			 *
+			 * @param int    $run_id         Run ID.
+			 * @param int    $user_id        User ID.
+			 * @param int    $competition_id Free competition ID.
+			 * @param string $end_reason     completed|abandoned|expired.
+			 */
+			do_action( 'nera_saw_free_run_finalized', (int) $run_id, (int) $run->user_id, (int) $run->competition_id, (string) $end_reason );
+		}
+
 		return true;
 	}
 

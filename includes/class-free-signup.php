@@ -737,8 +737,9 @@ class Nera_SAW_Free_Signup {
 		$user  = is_user_logged_in() ? wp_get_current_user() : null;
 		$post  = 'POST' === strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
 
+		// A verified player on 'Start the free challenge' starts their free run.
 		if ( $user && self::is_verified( $user->ID ) ) {
-			wp_safe_redirect( self::free_url() );
+			wp_safe_redirect( 'free-join' === $route ? Nera_SAW_Free::start_url( $user->ID, $asked ) : self::free_url() );
 			exit;
 		}
 
