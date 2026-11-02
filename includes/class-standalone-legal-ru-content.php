@@ -362,12 +362,6 @@ class Nera_SAW_Standalone_Legal_RU_Content {
 				'body_ru'  => 'Полные детали приза всегда указаны. Заявленный приз (или справедливый денежный эквивалент) всегда вручается, никогда не уменьшается и не отменяется из-за низких продаж билетов.',
 			),
 			array(
-				'title'   => 'Free entry route',
-				'body'    => 'Every paid draw has a genuine free postal entry route with an equal chance of winning, shown prominently before purchase.',
-				'title_ru' => 'Бесплатный способ участия',
-				'body_ru'  => 'У каждого платного розыгрыша есть настоящий бесплатный способ участия по почте с равными шансами на выигрыш, явно указанный перед покупкой.',
-			),
-			array(
 				'title'   => 'Fair draws',
 				'body'    => 'Winners are selected by a verifiably random, auditable process, in accordance with the laws of chance.',
 				'title_ru' => 'Честные розыгрыши',
