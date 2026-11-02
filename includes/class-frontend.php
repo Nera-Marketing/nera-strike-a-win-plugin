@@ -227,6 +227,8 @@ class Nera_SAW_Frontend {
 			'name'  => '',
 			'value' => '',
 			'photo' => '',
+			// Known at page load, so the result screen draws the free layout from the start.
+			'is_free' => $competition_id && class_exists( 'Nera_SAW_Competition_Config' ) && Nera_SAW_Competition_Config::is_free( $competition_id ),
 			'tiers' => array(),
 		);
 		$quiz_spec = ( $competition_id && class_exists( 'Nera_SAW_Competition_Spec' ) ) ? Nera_SAW_Competition_Spec::get( $competition_id ) : null;
@@ -269,6 +271,9 @@ class Nera_SAW_Frontend {
 			'firstStageLabel'    => $first_stage_label,
 			'firstStageColor'    => $first_stage_color,
 			'competition'        => $quiz_competition,
+			// The free result's follow box (each link only when set) and its Back to home.
+			'social'             => Nera_SAW_Constants::social_urls(),
+			'homeUrl'            => esc_url_raw( class_exists( 'Nera_SAW_Router' ) && Nera_SAW_Mode::is_standalone() ? Nera_SAW_Router::url() : home_url( '/' ) ),
 			// "Back to competitions" on the results screen — the section's own list
 			// in standalone; the main shop page in mix, where there is no equivalent
 			// dedicated list. Never the empty string, so the button is never dead.
@@ -464,6 +469,23 @@ class Nera_SAW_Frontend {
 				'sharePlayFree'      => Nera_SAW_I18n::t( 'Play free at' ),
 				'shareAge'           => Nera_SAW_I18n::t( '18+ · Skill-based prize competitions' ),
 				'shareText'          => Nera_SAW_I18n::t( 'I scored {r}/{n} on [BRAND]. Can you beat my score?' ),
+				// Free competition result and its story card.
+				'shareFreeKicker'    => Nera_SAW_I18n::t( 'Free quiz' ),
+				'shareFreeFor'       => Nera_SAW_I18n::t( 'Free competition' ),
+				'freeScore'          => Nera_SAW_I18n::t( 'Your score' ),
+				'freeTickets'        => self::t_as( 'Tickets earned (free result)', 'Tickets earned' ),
+				'freeAdded'          => Nera_SAW_I18n::t( 'Added to your account' ),
+				'freeNone'           => Nera_SAW_I18n::t( 'No quiz tickets this time, so no draw entries were added.' ),
+				'freeDrawLine'       => Nera_SAW_I18n::t( 'Entered in the prize draw · Live draw: {d}' ),
+				'freeShareTitle'     => Nera_SAW_I18n::t( 'Think your friends can beat your score?' ),
+				'freeShareSub'       => Nera_SAW_I18n::t( 'Challenge them. Your score link invites them to play free.' ),
+				'freePreview'        => Nera_SAW_I18n::t( 'Preview your story' ),
+				'freePreviewSub'     => Nera_SAW_I18n::t( 'Full 9:16 card for Stories and chats' ),
+				'freeFollowTitle'    => Nera_SAW_I18n::t( 'More free prizes are coming.' ),
+				'freeFollowSub'      => Nera_SAW_I18n::t( 'Follow [BRAND] so you don’t miss the next free competition.' ),
+				'followInstagram'    => Nera_SAW_I18n::t( 'Follow on Instagram' ),
+				'followTelegram'     => Nera_SAW_I18n::t( 'Join our Telegram channel' ),
+				'backToHome'         => Nera_SAW_I18n::t( 'Back to home' ),
 			),
 		);
 

@@ -1772,6 +1772,11 @@ const competitionsListUrl = ( window.NeraSAW && window.NeraSAW.competitionsUrl )
 const competitionPageUrl = ( window.NeraSAW && window.NeraSAW.competitionPermalink ) || '';
 const myTicketsUrl = ( window.NeraSAW && window.NeraSAW.myTicketsUrl ) || '';
 const responsiblePlayUrl = ( window.NeraSAW && window.NeraSAW.responsiblePlayUrl ) || '';
+// Free competition: its own result layout (score, share, follow links, end links).
+const isFree = !! competition.is_free;
+const social = ( window.NeraSAW && window.NeraSAW.social ) || {};
+const homeUrl = ( window.NeraSAW && window.NeraSAW.homeUrl ) || '/';
+const freeDrawLine = computed( () => fmt( 'freeDrawLine', 'Entered in the prize draw · Live draw: {d}', drawDate.value || t( 'drawDateTbc', 'date to be confirmed' ) ) );
 const hasNextRun = computed( () => ( runsRemainingTier.value || 0 ) > 0 && nextRunNo.value > 0 );
 const playAgainUrl = computed( () => {
 	if ( ! competitionId.value || typeof window === 'undefined' ) {
@@ -1926,7 +1931,91 @@ onUnmounted( () => {
 			</div>
 		</div>
 
-		<div v-else-if="phase === 'end'" class="saw-results">
+		<div v-else-if="phase === 'end'" class="saw-results" :class="{ 'is-free': isFree }">
+			<template v-if="isFree">
+				<section class="saw-fres__win">
+					<p class="saw-fres__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
+					<div class="saw-fres__score" :aria-label="t('freeScore', 'Your score') + ': ' + correctCount + '/' + shareTotal"><b>{{ correctCount }}</b><span>/{{ shareTotal }}</span></div>
+					<p class="saw-fres__verdict">{{ resultsHeadline }}</p>
+					<div class="saw-fres__dots" aria-hidden="true">
+						<i v-for="r in slotResults" :key="r.slot_no" :class="{ 'is-ok': 'correct' === r.outcome }"></i>
+					</div>
+					<p v-if="summaryReady && ! hasTickets" class="saw-fres__none">{{ t('freeNone', 'No quiz tickets this time, so no draw entries were added.') }}</p>
+					<div v-else-if="hasTickets" class="saw-fres__tix">
+						<div class="saw-fres__tixl"><small>{{ t('freeTickets', 'Tickets earned') }}</small><b><span>+</span><span>{{ formatCount( shownTickets ) }}</span></b></div>
+						<div v-if="summaryReady" class="saw-fres__added"><span class="saw-fres__ck" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10" /></svg></span>{{ t('freeAdded', 'Added to your account') }}</div>
+					</div>
+					<p v-if="summaryReady" class="saw-fres__draw">{{ freeDrawLine }}</p>
+				</section>
+
+				<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
+					<span class="saw-spinner" aria-hidden="true"></span>
+					<span>{{ t('mintingTickets', 'Adding your tickets to the draw…') }}</span>
+				</div>
+				<div v-else-if="ticketsError" class="saw-mint-error">
+					<p>{{ ticketsError }}</p>
+					<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
+				</div>
+
+				<section v-if="summaryReady && runId" class="saw-fres__share">
+					<h2 class="saw-fres__h">{{ t('freeShareTitle', 'Think your friends can beat your score?') }}</h2>
+					<p class="saw-fres__sub">{{ t('freeShareSub', 'Challenge them. Your score link invites them to play free.') }}</p>
+					<span class="saw-fres__gowrap"><button type="button" class="saw-fres__go" ref="shareButtonRef" aria-haspopup="dialog" @click="openShareSheet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('shareMyScore', 'Share my score') }}</button></span>
+					<button type="button" class="saw-fres__prev" aria-haspopup="dialog" @click="openShareSheet">
+						<span class="saw-fres__thumb" aria-hidden="true">
+							<span class="saw-sharesheet__card">
+								<div class="saw-sharesheet__glow" aria-hidden="true"></div>
+								<span class="saw-sharesheet__amp" aria-hidden="true">&amp;</span>
+								<div class="saw-sharesheet__in" aria-hidden="true">
+									<div class="saw-sharesheet__top">
+										<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
+										<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
+										<span class="saw-sharesheet__kicker">{{ isFree ? t('shareFreeKicker', 'Free quiz') : t('shareKicker', 'Prize quiz') }}</span>
+									</div>
+									<div class="saw-sharesheet__mid">
+										<small class="saw-sharesheet__label">{{ t('shareMy', 'My score') }}</small>
+										<div class="saw-sharesheet__score">{{ correctCount }}<span>/{{ shareTotal }}</span></div>
+										<div class="saw-sharesheet__bars">
+											<i v-for="r in slotResults" :key="r.slot_no" class="saw-sharesheet__bar" :class="{ 'is-correct': 'correct' === r.outcome }"></i>
+										</div>
+										<div class="saw-sharesheet__tix"><b>+{{ formatCount( finalSpins ) }}</b> {{ shareTixWord }}</div>
+									</div>
+									<div class="saw-sharesheet__prize">
+										<div class="saw-sharesheet__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
+										<div>
+											<small>{{ isFree ? t('shareFreeFor', 'Free competition') : t('sharePlayingFor', 'Playing for') }}</small>
+											<b>{{ competition.name }}</b>
+											<span v-if="! isFree && competition.value">{{ competition.value }}</span>
+										</div>
+									</div>
+									<div class="saw-sharesheet__ch"><template v-for="( line, i ) in shareChallenge" :key="i"><br v-if="i">{{ line }}</template></div>
+									<div class="saw-sharesheet__foot">
+										<div><span>{{ t('sharePlayFree', 'Play free at') }}</span><b>{{ shareHost }}</b></div>
+										<em>{{ t('shareAge', '18+ · Skill-based prize competitions') }}</em>
+									</div>
+								</div>
+							</span>
+						</span>
+						<span class="saw-fres__ptx"><b>{{ t('freePreview', 'Preview your story') }}</b><small>{{ t('freePreviewSub', 'Full 9:16 card for Stories and chats') }}</small></span>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+					</button>
+				</section>
+
+				<section v-if="social.instagram || social.telegram" class="saw-fres__follow">
+					<h2 class="saw-fres__h">{{ t('freeFollowTitle', 'More free prizes are coming.') }}</h2>
+					<p class="saw-fres__sub">{{ t('freeFollowSub', 'Follow us so you don’t miss the next free competition.') }}</p>
+					<div class="saw-fres__fbtns">
+						<a v-if="social.instagram" class="saw-fres__fbtn" :href="social.instagram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /></svg>{{ t('followInstagram', 'Follow on Instagram') }}</a>
+						<a v-if="social.telegram" class="saw-fres__fbtn" :href="social.telegram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 3.5L2.5 10.8l6.2 2.3 2.4 6.4 3.4-4.2 5.3 3.9z" /></svg>{{ t('followTelegram', 'Join our Telegram channel') }}</a>
+					</div>
+				</section>
+
+				<div class="saw-fres__end">
+					<a class="saw-fres__link" :href="myTicketsUrl || competitionsListUrl">{{ t('myTickets', 'My tickets') }}</a>
+					<a class="saw-fres__link" :href="homeUrl">{{ t('backToHome', 'Back to home') }}</a>
+				</div>
+			</template>
+			<template v-else>
 			<p class="saw-results__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
 			<p class="saw-results__headline">{{ resultsHeadline }}</p>
 			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}</p>
@@ -2020,6 +2109,7 @@ onUnmounted( () => {
 					:href="competitionPageUrl || competitionUrl"
 				>{{ t('backToCompetition', 'Back to the competition') }}</a>
 			</div>
+			</template>
 		</div>
 	</div>
 
@@ -2085,7 +2175,7 @@ onUnmounted( () => {
 							<div class="saw-sharesheet__top">
 								<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
 								<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
-								<span class="saw-sharesheet__kicker">{{ t('shareKicker', 'Prize quiz') }}</span>
+								<span class="saw-sharesheet__kicker">{{ isFree ? t('shareFreeKicker', 'Free quiz') : t('shareKicker', 'Prize quiz') }}</span>
 							</div>
 							<div class="saw-sharesheet__mid">
 								<small class="saw-sharesheet__label">{{ t('shareMy', 'My score') }}</small>
@@ -2098,9 +2188,9 @@ onUnmounted( () => {
 							<div class="saw-sharesheet__prize">
 								<div class="saw-sharesheet__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
 								<div>
-									<small>{{ t('sharePlayingFor', 'Playing for') }}</small>
+									<small>{{ isFree ? t('shareFreeFor', 'Free competition') : t('sharePlayingFor', 'Playing for') }}</small>
 									<b>{{ competition.name }}</b>
-									<span v-if="competition.value">{{ competition.value }}</span>
+									<span v-if="! isFree && competition.value">{{ competition.value }}</span>
 								</div>
 							</div>
 							<div class="saw-sharesheet__ch"><template v-for="( line, i ) in shareChallenge" :key="i"><br v-if="i">{{ line }}</template></div>
@@ -2566,6 +2656,40 @@ onUnmounted( () => {
 .saw-results__secondary { border: 1.5px solid currentColor; color: var(--saw-text); }
 .saw-results__secondary.is-primary { border-width: 2px; }
 .saw-results__back { align-self: center; min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 14px; color: var(--saw-text-muted); text-decoration: underline; }
+/* Free competition result: neutral layout only; the theme gives it its look. */
+.saw-fres__win { padding: 20px 16px 16px; border-radius: 18px; border: 1px solid var(--saw-surface); }
+.saw-fres__kicker { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.saw-fres__score { margin-top: 8px; display: flex; justify-content: center; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+.saw-fres__score b { font-size: 64px; line-height: .9; font-weight: 900; }
+.saw-fres__score span { font-size: 24px; font-weight: 900; color: var(--saw-text-muted); }
+.saw-fres__verdict { margin: 6px 0 0; font-size: 17px; font-weight: 800; }
+.saw-fres__dots { margin: 12px auto 0; max-width: 300px; display: grid; grid-template-columns: repeat( 10, 1fr ); gap: 5px; }
+.saw-fres__dots i { height: 7px; border-radius: 99px; background: var(--saw-surface); }
+.saw-fres__dots i.is-ok { background: var(--saw-brand); }
+.saw-fres__tix { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--saw-surface); text-align: left; }
+.saw-fres__tixl small, .saw-fres__tixl b { display: block; }
+.saw-fres__tixl small { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.saw-fres__tixl b { margin-top: 2px; font-size: 34px; line-height: 1; font-weight: 900; color: var(--saw-brand); }
+.saw-fres__added { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; }
+.saw-fres__ck { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--saw-ok); color: #fff; }
+.saw-fres__none { margin: 14px 0 0; font-size: 13px; font-weight: 700; }
+.saw-fres__draw { margin: 10px 0 0; font-size: 12px; color: var(--saw-text-muted); }
+.saw-fres__share, .saw-fres__follow { margin-top: 16px; }
+.saw-fres__h { margin: 0; font-size: 20px; line-height: 1.2; font-weight: 800; }
+.saw-fres__sub { margin: 6px auto 12px; max-width: 440px; font-size: 13px; color: var(--saw-text-muted); }
+.saw-fres__gowrap { display: block; }
+.saw-fres__go, .saw-fres__fbtn { box-sizing: border-box; width: 100%; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: 999px; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
+.saw-fres__go { border: 0; background: var(--saw-brand); color: #fff; }
+.saw-fres__prev { box-sizing: border-box; margin-top: 10px; width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border-radius: 16px; border: 1px solid var(--saw-surface); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.saw-fres__thumb { flex: none; width: 44px; pointer-events: none; }
+.saw-fres__thumb .saw-sharesheet__card { display: block; width: 44px; border-radius: 7px; }
+.saw-fres__ptx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.saw-fres__ptx small { color: var(--saw-text-muted); }
+.saw-fres__fbtns { margin-top: 12px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media ( min-width: 600px ) { .saw-fres__fbtns { grid-template-columns: 1fr 1fr; } }
+.saw-fres__fbtn { border: 1.5px solid currentColor; color: var(--saw-text); }
+.saw-fres__end { margin-top: 16px; display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; }
+.saw-fres__link { min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 14px; color: var(--saw-text-muted); text-decoration: underline; }
 
 @media (max-width: 480px) {
 	.saw-langcard { padding: 32px 20px; }

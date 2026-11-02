@@ -30,7 +30,7 @@ class Nera_SAW_My_Tickets {
 	 *         competition_id: int, name: string, image: string, url: string,
 	 *         tickets: int, played: int, to_play: int, in_progress: int,
 	 *         tiers: array<string, int>, tier_label: string,
-	 *         closes: string, closes_ts: int, drawn: bool
+	 *         closes: string, closes_ts: int, drawn: bool, is_free: bool, live_draw: string
 	 *     }>
 	 * } `total` is tickets in undrawn draws; `live_count` the undrawn competitions holding them.
 	 */
@@ -122,6 +122,7 @@ class Nera_SAW_My_Tickets {
 			$end_gmt = (string) get_post_meta( $cid, '_lty_end_date_gmt', true );
 			$end     = (string) get_post_meta( $cid, '_lty_end_date', true );
 			$image   = get_the_post_thumbnail_url( $cid, 'woocommerce_thumbnail' );
+			$is_free = class_exists( 'Nera_SAW_Competition_Config' ) && Nera_SAW_Competition_Config::is_free( $cid );
 
 			$out['competitions'][] = array(
 				'competition_id' => $cid,
@@ -137,6 +138,10 @@ class Nera_SAW_My_Tickets {
 				'closes'         => '' !== $end ? substr( $end, 0, 16 ) : '',
 				'closes_ts'      => '' !== $end_gmt ? (int) strtotime( $end_gmt . ' UTC' ) : 0,
 				'drawn'          => 'lty_lottery_finished' === get_post_meta( $cid, 'lty_lottery_status', true ),
+				// Free competition: its tickets come from order-less free runs, and its
+				// live draw date is its own field ('' while not set).
+				'is_free'        => $is_free,
+				'live_draw'      => $is_free && class_exists( 'Nera_SAW_Free' ) ? Nera_SAW_Free::live_draw_text( $cid ) : '',
 			);
 		}
 

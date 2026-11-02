@@ -162,6 +162,8 @@ class Nera_SAW_Settings_Admin {
 				// Unticking every box posts nothing: that is an empty list, not the default.
 				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
 				'share_link_days'                  => $share_link_days,
+				'social_instagram_url'             => isset( $_POST['social_instagram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_instagram_url'] ) ) ) : '',
+				'social_telegram_url'              => isset( $_POST['social_telegram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_telegram_url'] ) ) ) : '',
 				'tiers'              => $tiers,
 			)
 		);
@@ -401,6 +403,23 @@ class Nera_SAW_Settings_Admin {
 			'<label class="saw-field"><span>%1$s</span><input type="text" name="brand_name" value="%2$s" maxlength="80"></label>',
 			esc_html__( 'Name', 'nera-strikeawin' ),
 			esc_attr( Nera_SAW_Brand::name() )
+		);
+		echo '</div>';
+
+		// --- Follow links card ---------------------------------------------
+		$social = Nera_SAW_Constants::social_urls();
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Follow links', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'Shown on the free quiz result and in My tickets. Leave a field empty to hide its button.', 'nera-strikeawin' ) . '</p>';
+		printf(
+			'<label class="saw-field"><span>%1$s</span><input type="url" name="social_instagram_url" value="%2$s" placeholder="https://"></label>',
+			esc_html__( 'Instagram URL', 'nera-strikeawin' ),
+			esc_attr( $social['instagram'] )
+		);
+		printf(
+			'<label class="saw-field"><span>%1$s</span><input type="url" name="social_telegram_url" value="%2$s" placeholder="https://"></label>',
+			esc_html__( 'Telegram URL', 'nera-strikeawin' ),
+			esc_attr( $social['telegram'] )
 		);
 		echo '</div>';
 

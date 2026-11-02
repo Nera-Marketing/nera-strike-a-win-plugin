@@ -162,6 +162,20 @@ class Nera_SAW_Constants {
 	}
 
 	/**
+	 * Follow links for the free result and My tickets: Instagram and Telegram,
+	 * '' when not set.
+	 *
+	 * @return array{instagram: string, telegram: string}
+	 */
+	public static function social_urls() {
+		$settings = self::settings();
+		return array(
+			'instagram' => esc_url_raw( (string) ( $settings['social_instagram_url'] ?? '' ) ),
+			'telegram'  => esc_url_raw( (string) ( $settings['social_telegram_url'] ?? '' ) ),
+		);
+	}
+
+	/**
 	 * Default global Settings (timer working bounds + global tier set).
 	 *
 	 * @return array
@@ -200,6 +214,9 @@ class Nera_SAW_Constants {
 			'result_display'                   => array( 'draw_line' ),
 			// Days a shared result link stays live (Nera_SAW_Share::days()); the draw ends it sooner.
 			'share_link_days'                  => 30,
+			// Follow links on the free result and My tickets (site-wide; empty hides the button).
+			'social_instagram_url'             => '',
+			'social_telegram_url'              => '',
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),

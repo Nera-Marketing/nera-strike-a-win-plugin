@@ -220,5 +220,21 @@
   "_plural_helper_php": "function ru_plural( int $n, string $forms ): string { $f = explode( '|', $forms ); if ( count( $f ) === 1 ) return $f[0]; $m10 = $n % 10; $m100 = $n % 100; if ( $m10 === 1 && $m100 !== 11 ) return $f[0]; if ( $m10 >= 2 && $m10 <= 4 && ( $m100 < 12 || $m100 > 14 ) ) return $f[1]; return $f[2]; }",
   "_date_format": "Dates in Russian: '29 октября 2026, 21:00'. Month names in the genitive: января, февраля, марта, апреля, мая, июня, июля, августа, сентября, октября, ноября, декабря. 24-hour clock, no am/pm.",
   "Live draw": "Живой розыгрыш",
-  "Date to be confirmed": "Дата уточняется"
+  "Date to be confirmed": "Дата уточняется",
+  "Free quiz": "Бесплатный квиз",
+  "Free competition": "Бесплатный конкурс",
+  "Your score": "Ваш результат",
+  "Tickets earned (free result)": "Заработано билетов",
+  "Added to your account": "Зачислено на ваш аккаунт",
+  "No quiz tickets this time, so no draw entries were added.": "В этот раз без билетов за квиз, поэтому участий в розыгрыше не добавлено.",
+  "Entered in the prize draw · Live draw: {d}": "Участвуют в розыгрыше · Эфир: {d}",
+  "Think your friends can beat your score?": "Думаете, друзья справятся лучше?",
+  "Challenge them. Your score link invites them to play free.": "Бросьте им вызов. Ссылка на результат приглашает их сыграть бесплатно.",
+  "Preview your story": "Посмотреть сторис",
+  "Full 9:16 card for Stories and chats": "Карточка 9:16 для сторис и чатов",
+  "More free prizes are coming.": "Скоро новые бесплатные призы.",
+  "Follow [BRAND] so you don’t miss the next free competition.": "Подпишитесь на [BRAND], чтобы не пропустить следующий бесплатный конкурс.",
+  "Follow on Instagram": "Instagram",
+  "Join our Telegram channel": "Telegram-канал",
+  "Back to home": "На главную"
 }

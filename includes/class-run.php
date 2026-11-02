@@ -1187,6 +1187,7 @@ class Nera_SAW_Run {
 				$tier_label = (string) $tier['label'];
 			}
 		}
+		$is_free = class_exists( 'Nera_SAW_Free' ) && Nera_SAW_Run_Grants::is_free_run( $run );
 
 		return array(
 			'run_id'                => (int) $run_id,
@@ -1205,9 +1206,14 @@ class Nera_SAW_Run {
 			// The results screen's "Draw: <date>" line. Reused from the standalone
 			// result-overlay clone rather than re-implemented — one place reads the
 			// LFW product's end date, in both modes.
-			'draw_date'             => class_exists( 'Nera_SAW_Standalone_Result_Screen' )
-				? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
-				: '',
+			// A free run's draw line reads the competition's own live draw date,
+			// '' while it is not set (the app shows "to be confirmed").
+			'draw_date'             => $is_free
+				? Nera_SAW_Free::live_draw_text( (int) $run->competition_id )
+				: ( class_exists( 'Nera_SAW_Standalone_Result_Screen' )
+					? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
+					: '' ),
+			'is_free'               => $is_free,
 		) + self::purchase_position( $run ) + self::next_run_position( (int) $user_id, $run );
 	}
 
