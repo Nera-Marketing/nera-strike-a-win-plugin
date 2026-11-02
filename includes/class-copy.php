@@ -60,7 +60,7 @@ class Nera_SAW_Copy {
 	}
 
 	const MIGRATION_OPTION = 'nera_saw_copy_migrated';
-	const MIGRATION_LEVEL  = 2;
+	const MIGRATION_LEVEL  = 3;
 
 	/**
 	 * Fields saved before the copy sheet keep their old wording over the new default.
@@ -68,9 +68,42 @@ class Nera_SAW_Copy {
 	 * (or just carries a dash), so an editor's own wording is never touched.
 	 */
 	public static function migrate() {
-		if ( (int) get_option( self::MIGRATION_OPTION, 0 ) >= self::MIGRATION_LEVEL ) {
+		$level = (int) get_option( self::MIGRATION_OPTION, 0 );
+		if ( $level >= self::MIGRATION_LEVEL ) {
 			return;
 		}
+		if ( $level < 2 ) {
+			self::migrate_copy_sheet();
+		}
+		if ( $level < 3 ) {
+			self::migrate_single_consent();
+		}
+		update_option( self::MIGRATION_OPTION, self::MIGRATION_LEVEL );
+	}
+
+	/**
+	 * The two consent ticks became one, covering age, the terms and the rules. A label
+	 * still reading the old default (age and terms only) takes the new default; a label
+	 * an editor wrote stays as it is.
+	 *
+	 * The new label is the untranslated source string of the field default, not
+	 * default_for(): that one goes through gettext, and this runs once on whatever
+	 * request comes first, which may be a Russian one. Stored values are English.
+	 */
+	private static function migrate_single_consent() {
+		$old = 'I am over 18 and agree to the terms and conditions.';
+		$new = 'I am 18 or over and accept the terms and conditions and the competition rules.';
+		if ( get_option( 'options_saw_pp_consent_age', null ) === $old ) {
+			update_option( 'options_saw_pp_consent_age', $new );
+		}
+		global $wpdb;
+		$wpdb->update( $wpdb->postmeta, array( 'meta_value' => $new ), array( 'meta_key' => 'saw_pp_consent_age', 'meta_value' => $old ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+	}
+
+	/**
+	 * Level 2: the copy sheet's wording, dashes and "lottery" out of stored text.
+	 */
+	private static function migrate_copy_sheet() {
 
 		$exact = array(
 			'options_saw_logo_text'   => array( 'Strike <em>A</em> Win' => '[BRAND]' ),
@@ -149,7 +182,5 @@ class Nera_SAW_Copy {
 
 		// The seeded demo description is no longer shown to players.
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = '', post_excerpt = '' WHERE post_type = 'product' AND post_content = %s", 'A demo competition used for testing Strike A Win.' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-
-		update_option( self::MIGRATION_OPTION, self::MIGRATION_LEVEL );
 	}
 }

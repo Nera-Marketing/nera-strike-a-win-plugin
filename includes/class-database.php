@@ -14,6 +14,7 @@
  *  - run_slots        : per-slot drip/timer/answer audit + fail-rate raw data
  *  - spin_pool        : per-competition available/reserved/confirmed counters
  *  - reservations     : the no-oversell reservation ledger (ADR 0001)
+ *  - shares           : public result links (token -> frozen score/tickets, expiry)
  *
  * @package Nera_Strikeawin
  */
@@ -25,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Nera_SAW_Database {
 
-	const DB_VERSION = '0.7.0';
+	const DB_VERSION = '0.9.0';
 	const OPTION_KEY = 'nera_saw_db_version';
 
 	/**
@@ -66,6 +67,7 @@ class Nera_SAW_Database {
 		$reservations  = self::table( 'reservations' );
 		$run_grants    = self::table( 'run_grants' );
 		$log           = self::table( 'log' );
+		$shares        = self::table( 'shares' );
 
 		$sql = "
 CREATE TABLE {$questions} (
@@ -189,6 +191,7 @@ CREATE TABLE {$run_grants} (
   order_id bigint(20) unsigned NOT NULL DEFAULT 0,
   order_item_id bigint(20) unsigned NOT NULL DEFAULT 0,
   tier_key varchar(32) NOT NULL DEFAULT '',
+  source varchar(16) NOT NULL DEFAULT 'order',
   qty int(10) unsigned NOT NULL DEFAULT 0,
   consumed int(10) unsigned NOT NULL DEFAULT 0,
   reserved_per_run int(10) unsigned NOT NULL DEFAULT 0,
@@ -197,7 +200,7 @@ CREATE TABLE {$run_grants} (
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY order_item (order_id, order_item_id),
+  UNIQUE KEY grant_once (source, order_id, order_item_id, user_id, competition_id),
   KEY balance_idx (user_id, competition_id, tier_key, status),
   KEY competition_id (competition_id)
 ) {$charset_collate};
@@ -222,9 +225,38 @@ CREATE TABLE {$log} (
   KEY competition_id (competition_id),
   KEY run_id (run_id)
 ) {$charset_collate};
+
+CREATE TABLE {$shares} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  token varchar(32) NOT NULL,
+  run_id bigint(20) unsigned NOT NULL,
+  user_id bigint(20) unsigned NOT NULL,
+  competition_id bigint(20) unsigned NOT NULL,
+  score int(10) unsigned NOT NULL DEFAULT 0,
+  questions int(10) unsigned NOT NULL DEFAULT 0,
+  tickets int(10) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  expires_at datetime NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY token (token),
+  KEY run_id (run_id)
+) {$charset_collate};
 ";
 
 		dbDelta( $sql );
+
+		// dbDelta adds indexes but never drops one. The grant key used to be
+		// (order_id, order_item_id), which allows only one order-less grant on the
+		// whole site; grant_once replaces it.
+		if ( $wpdb->get_var( "SHOW INDEX FROM {$run_grants} WHERE Key_name = 'order_item'" ) ) {
+			$wpdb->query( "ALTER TABLE {$run_grants} DROP INDEX order_item" );
+		}
+
+		// New routes may come with a new version (the share link did): rewrite rules
+		// are only rebuilt on request, so ask for it here.
+		if ( class_exists( 'Nera_SAW_Router' ) ) {
+			Nera_SAW_Router::request_flush();
+		}
 
 		update_option( self::OPTION_KEY, self::DB_VERSION );
 	}

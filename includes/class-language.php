@@ -433,6 +433,7 @@ class Nera_SAW_Language {
 		if ( null === $ru ) {
 			$ru = array(
 				'My Wallet'      => 'Мой кошелёк',
+				'Pay with wallet.' => 'Оплатить из кошелька.',
 				'Total Balance'  => 'Баланс',
 				'Wallet topup'   => 'Пополнить кошелёк',
 				'Transactions'   => 'Операции',
@@ -787,6 +788,11 @@ class Nera_SAW_Language {
 				// 'woocommerce'-domain map reached "Place order"/"Billing
 				// address"/etc. already, but never these.
 				'Country / Region'                      => 'Страна',
+				// Order review heading and the two countries the section sells to
+				// (values from WooCommerce's own ru_RU pack).
+				'Product'                               => 'Товар',
+				'United Kingdom (UK)'                   => 'Великобритания',
+				'Ireland'                               => 'Ирландия',
 				'Street address'                        => 'Адрес',
 				// NOT "Apartment, suite, unit, etc." (no "(optional)") — the
 				// theme's own nera_customize_default_address_fields() (inc/
@@ -1843,12 +1849,14 @@ class Nera_SAW_Language {
 				'Timer'                                    => 'Таймер',
 				'%d seconds per question'                 => '%d секунд на вопрос',
 				'I am over 18 and agree to the terms and conditions.' => 'Мне есть 18 лет, и я принимаю правила и условия.',
+				'I am 18 or over and accept the terms and conditions and the competition rules.' => 'Мне есть 18 лет, и я принимаю условия и правила конкурса.',
 				'Each run is one quiz. Correct answers earn tickets in the draw.' => 'Каждый забег, это одна викторина. Правильные ответы приносят билеты в розыгрыше.',
 				'Each run is one quiz against the clock. Every correct answer earns tickets in this draw.' => 'Каждый забег, это одна викторина на время. Каждый правильный ответ приносит билеты в этом розыгрыше.',
 				'Tap an answer to lock it in. There is no second tap, so choose with care.' => 'Нажмите на ответ, чтобы зафиксировать его. Второго нажатия нет, поэтому выбирайте внимательно.',
 				'Every correct answer earns tickets in this draw. One order can include several runs, and each run adds its tickets to the same entry.' => 'Каждый правильный ответ приносит билеты в этом розыгрыше. В один заказ можно включить несколько забегов, и билеты каждого забега попадают в одно и то же участие.',
 				'Refreshing, using the back button, or leaving mid-run will ask you to confirm. The countdown keeps running on the server, so time you spend away still counts.' => 'При обновлении страницы, нажатии «Назад» или выходе посреди забега вас попросят подтвердить действие. Обратный отсчёт идёт на сервере, поэтому время вне страницы тоже засчитывается.',
 				'Tick both boxes to continue'             => 'Отметьте оба поля, чтобы продолжить',
+				'Tick the box to continue'                => 'Отметьте поле, чтобы продолжить',
 				'End run and see my results'               => 'Завершить забег и посмотреть результаты',
 				'If you close this window the run ends. Tickets you have already won are kept.' => 'Если вы закроете это окно, забег завершится. Уже выигранные билеты сохранятся.',
 				'End this run?'                            => 'Завершить этот забег?',

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { api, breadcrumb } from './api.js';
+import { toBlob } from 'html-to-image';
 
 const props = defineProps( {
 	competitionId: { type: Number, required: true },
@@ -141,7 +142,10 @@ function feedbackHoldSeconds() {
 	return Number.isFinite( n ) && n > 0 ? n : FEEDBACK_SECONDS_FALLBACK;
 }
 
-const phase = ref( 'loading' ); // language | loading | stage-break | question | reveal | end | error
+// Manual Next button during the reveal (admin setting, off by default).
+const showNextButton = !! ( window.NeraSAW && window.NeraSAW.revealNextButton === true );
+
+const phase = ref( 'loading' ); // language | loading | question | reveal | end | error
 const errorMsg = ref( '' );
 const canRetry = ref( false ); // error screen: offer a "Try again" for the failed step.
 
@@ -167,33 +171,27 @@ const chosenLanguage = ref( '' );
  * ------------------------------------------------------------------------- */
 const stageNo = ref( 1 );
 const stageCount = ref( 1 );
-// The stage-break screen's subtitle — the server's own combined, plural-aware
-// "Stage {n} of {total} · {band} · {k} ticket(s) per correct answer" sentence
-// (Nera_SAW_Competition_Config::stage_label(), client finding #47), set from
-// `next.stage_label` wherever `next.reward_label` was read before.
-const stageBreakLabel = ref( '' );
+// The quiz bar: the competition (name, prize photo, market value, tiers),
+// localised once per page load in class-frontend.php's enqueue_app().
+const competition = ( window.NeraSAW && window.NeraSAW.competition ) || {};
+// The run's tier key: the Start/Resume state's tier_key once it lands (a
+// resumed run or "End run" may arrive without a tier prop).
+const tierKey = ref( props.tier || '' );
 
-// The stage chip in the header is the SHORT label -- "Stage 2 of 4 · Medium" -- on
-// every screen, as in the design. It used to read the server's combined sentence
-// off the slot once one had loaded ("... · 2 tickets per correct answer"), so the
-// chip changed length between the stage-break screen (no slot yet: short) and the
-// question screens (long), and repeated what "Worth N tickets" already says. The
-// reward clause stays where it belongs, on the stage-break sub-line
-// (stageBreakLabel) and the Worth chip.
-const stagePillLabel = computed( () =>
-	fmt( 'stageOf', 'Stage %1$d of %2$d · %3$s', stageNo.value, stageCount.value, slot.level_label )
-);
+// "Quiz n of N · Premium ×10": n is this run's place among the runs the same
+// purchase bought for this tier, N how many it bought (also "Quiz 1 of 1").
+// The multiplier is only shown above 1.
+const quizOfLabel = computed( () => {
+	const tiers = competition.tiers && 'object' === typeof competition.tiers ? competition.tiers : {};
+	const tier = tiers[ tierKey.value ] || null;
+	const label = tier ? tier.label : tierKey.value;
+	const mult = tier ? Number( tier.multiplier ) || 1 : 1;
+	const head = fmt( 'quizOf', 'Quiz {n} of {total}', runIndex.value, runTotal.value );
+	return label ? head + ' · ' + label + ( mult > 1 ? ' ×' + mult : '' ) : head;
+} );
 
-// "Run X of N" (client finding #36 / requirements.md's own "Run 1 of 3"):
-// blank — not "Run 1 of 1" — when only one run was bought, per
-// requirements.md's own "when several runs were bought" qualifier.
-const runOfTotalLabel = computed( () =>
-	runTotal.value > 1 ? fmt( 'runOfTotal', 'Run {n} of {total}', runIndex.value, runTotal.value ) : ''
-);
-
-// Pre-run header preview: lets the .saw-stagebar header (normally driven by the
-// current slot, once a run exists) also render on the language-choice screen,
-// matching the reference design's screen 24. Localised server-side from the
+// Pre-run stage count, seeded before the language-choice screen
+// (reference design screen 24). Localised server-side from the
 // competition's config with no run started — see class-frontend.php's
 // enqueue_app(); blank/default in random-mode competitions, where "stage 1"
 // isn't a deterministic concept before the run's slots are actually drawn. (The
@@ -205,12 +203,6 @@ const runOfTotalLabel = computed( () =>
 		stageCount.value = preRunStageCount;
 	}
 }() );
-// Which stage the break screen has already been shown for, so a retry or a
-// resume that re-fetches the same slot does not show it a second time.
-let stageBreakShownFor = 0;
-// The slot payload fetched while the break screen is up, applied once the
-// player continues past it.
-let pendingSlotData = null;
 
 const runId = ref( 0 );
 const competitionId = ref( 0 );
@@ -248,12 +240,17 @@ const runsRemainingTier = ref( null );
 const tierLabel = ref( '' );
 const slotResults = ref( [] ); // [{ slot_no, outcome, spins_awarded }] — the results chip row.
 const drawDate = ref( '' );
+const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
+const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
+const nextRunTotal = ref( 0 );
+const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
+const shownTickets = ref( 0 ); // the tickets-earned figure as it counts up.
 
 const slot = reactive( {
 	slot_no: 0,
 	level: '',
 	// Pre-seeded from the server's pre-run stage preview (see seedPreRunStageCount
-	// above) so the language screen's .saw-stagebar shows real stage-1 info before
+	// above) so the language screen has real stage-1 info before
 	// any slot has loaded; serve_slot()'s real values overwrite these the moment
 	// the run actually starts.
 	level_label: ( window.NeraSAW && window.NeraSAW.firstStageLabel ) || '',
@@ -264,7 +261,7 @@ const slot = reactive( {
 	seconds_left: 0,
 	reward: 0, // tickets this question is worth if answered correctly.
 	// Server-combined "Stage n of total · band · reward" sentence — empty
-	// until a real slot loads; see stagePillLabel's own fallback for why.
+	// until a real slot loads.
 	stage_label: '',
 } );
 
@@ -276,6 +273,9 @@ const lastResult = reactive( { correct: false, timed_out: false, spins_awarded: 
 // before it arms that slot's clock, so switching screens never has to wait on
 // a fetch for content the client already holds.
 const slotContentCache = new Map();
+// The ladder chips: every slot's reward (already times the tier multiplier) and
+// its obfuscated key, in slot order. Reactive copy of the cache, which is not.
+const ladderSlots = ref( [] );
 function cacheSlotContent( slots ) {
 	if ( ! Array.isArray( slots ) ) {
 		return;
@@ -285,10 +285,46 @@ function cacheSlotContent( slots ) {
 			slotContentCache.set( entry.slot_no, entry );
 		}
 	}
+	ladderSlots.value = [ ...slotContentCache.values() ]
+		.sort( ( a, b ) => a.slot_no - b.slot_no )
+		.map( ( e ) => ( { slot_no: e.slot_no, reward: Number( e.reward ) || 0, key: e.answer_key } ) );
 }
+
+// How many answers experimentalAnswers holds; a plain array is not reactive, so
+// every change to it sets this too.
+const answeredCount = ref( 0 );
+
+// One chip per question: answered right (is-ok), answered wrong or timed out
+// (is-no), the current one (is-cur), later ones plain. Built from the answers
+// themselves, so a resumed run (answers restored, no per-question results)
+// shows the same chips as one played straight through.
+const ladderChips = computed( () => {
+	const chosen = new Map( experimentalAnswers.slice( 0, answeredCount.value ).map( ( a ) => [ a.slot_no, a.chosen_index ] ) );
+	return ladderSlots.value.map( ( s ) => {
+		let state = '';
+		if ( chosen.has( s.slot_no ) ) {
+			const pick = chosen.get( s.slot_no );
+			state = -1 !== pick && pick === ( s.key ^ obfuscationSeed.value ) ? 'is-ok' : 'is-no';
+		} else if ( s.slot_no === slot.slot_no ) {
+			state = 'is-cur';
+		}
+		return { no: s.slot_no, reward: s.reward, state };
+	} );
+} );
+
+// The progress line under the quiz bar: answered / total.
+const progressPct = computed( () =>
+	totalSlots.value ? Math.min( 100, ( answeredCount.value / totalSlots.value ) * 100 ) : 0
+);
 
 let ticker = null;
 let holdTicker = null;
+// The countdown ring's arc is redrawn every frame between the whole-second
+// ticks, so it empties smoothly; ringAnchor is when the last tick landed.
+const ringArc = ref( null );
+const RING_LENGTH = 163.4; // 2 * PI * r(26)
+let ringFrame = 0;
+let ringAnchor = 0;
 let holdAdvance = null; // closure that advances past the reveal (button or timeout).
 // Reactive: the template's disabled states (options, Submit) depend on it, so a
 // plain let would only repaint by luck, whenever some other ref happened to change.
@@ -441,6 +477,11 @@ function onVisibilityChange() {
 	// whole point of not polling.
 }
 
+// The quiz bar's ×: the same Leave dialog; leaving ends the run and shows the results.
+function onQuizBarLeave() {
+	requestLeavePrompt( toEnd );
+}
+
 function requestLeavePrompt( proceed ) {
 	if ( leavePromptInFlight || leaveDialogOpen.value ) {
 		return leavePromptPromise || Promise.resolve( false );
@@ -462,10 +503,31 @@ function getNavApi() {
 const leaveDialogOpen = ref( false );
 const stayButtonRef = ref( null );
 
-const timerPct = computed( () => {
+function drawRing() {
+	const el = ringArc.value;
+	if ( ! el ) {
+		return;
+	}
 	const total = slot.timer_seconds || 1;
-	return Math.max( 0, Math.min( 100, ( slot.seconds_left / total ) * 100 ) );
-} );
+	const into = ticker ? Math.min( 1, ( performance.now() - ringAnchor ) / 1000 ) : 0;
+	const left = Math.max( 0, slot.seconds_left - into );
+	const share = Math.min( 1, left / total );
+	el.setAttribute( 'stroke-dashoffset', ( RING_LENGTH * ( 1 - share ) ).toFixed( 2 ) );
+}
+
+function ringLoop() {
+	drawRing();
+	ringFrame = requestAnimationFrame( ringLoop );
+}
+
+// Draws the arc where it stands (frozen on an answer, empty on a timeout).
+function stopRing() {
+	if ( ringFrame ) {
+		cancelAnimationFrame( ringFrame );
+		ringFrame = 0;
+	}
+	drawRing();
+}
 
 const timerUrgent = computed( () => {
 	if ( phase.value !== 'question' ) {
@@ -474,13 +536,6 @@ const timerUrgent = computed( () => {
 	const left = slot.seconds_left;
 	return left > 0 && left <= timerWarnThreshold();
 } );
-
-// The slot's difficulty colour, exposed as a custom property so the question text
-// and the head-bar level name pick it up from one place. Absent (unparseable
-// ladder colour) leaves the property unset and the CSS falls back to normal text.
-const levelStyle = computed( () =>
-	slot.level_text_color ? { '--saw-level': slot.level_text_color } : {}
-);
 
 const finalSpins = computed( () =>
 	spinsFinal.value !== null && spinsFinal.value !== undefined ? spinsFinal.value : spinsSoFar.value
@@ -513,42 +568,152 @@ const runsRemainingLine = computed( () => {
  * not a re-derivation from slotResults, so the two can never disagree.
  * ------------------------------------------------------------------------- */
 const correctCount = computed( () => slotResults.value.filter( ( r ) => 'correct' === r.outcome ).length );
-// Client finding #38: zero-ticket runs are not all the same story — every
-// slot timing out reads differently from every slot being answered wrong
-// (or a mix of the two), so resultsSubtitle below picks between three
-// zero-ticket lines, not one, instead of always saying "landed in time".
-const allTimedOut = computed( () => slotResults.value.length > 0 && slotResults.value.every( ( r ) => 'timeout' === r.outcome ) );
 const hasTickets = computed( () => finalSpins.value > 0 );
 
-const resultsTitle = computed( () => hasTickets.value ? t( 'inTheDrawTitle', "You're in the draw" ) : t( 'zeroTicketsTitle', 'No tickets this run' ) );
-
-const resultsSubtitle = computed( () => {
-	if ( hasTickets.value ) {
-		return fmt( 'inTheDrawSubtitle', '{t} tickets banked from {c} correct answers.|{t} tickets banked from {c} correct answers.', finalSpins.value, correctCount.value );
+// The headline under the kicker, by how much of the run was right (the scale is
+// out of ten whatever the run's length; only a full run is "perfect").
+const resultsHeadline = computed( () => {
+	const total = totalSlots.value || slotResults.value.length;
+	const right = correctCount.value;
+	if ( right < 1 ) {
+		return t( 'resultHeadNone', 'No correct answers this time.' );
 	}
-	if ( correctCount.value > 0 ) {
-		return fmt( 'zeroSomeCorrectSubtitle', '%1$d of %2$d correct, but not enough to bank a ticket.', correctCount.value, totalSlots.value );
+	if ( total > 0 && right >= total ) {
+		return t( 'resultHeadPerfect', 'Perfect score!' );
 	}
-	if ( allTimedOut.value ) {
-		return fmt( 'zeroCorrectSubtitle', 'None of the %d answers landed in time.', totalSlots.value );
+	const tenth = total > 0 ? Math.min( 9, Math.round( right / total * 10 ) ) : 0;
+	if ( tenth >= 7 ) {
+		return t( 'resultHeadHigh', 'Great score!' );
 	}
-	return fmt( 'zeroWrongSubtitle', 'None of the {n} answers were correct.', totalSlots.value );
+	if ( tenth >= 4 ) {
+		return t( 'resultHeadMid', 'Nice work.' );
+	}
+	return t( 'resultHeadLow', 'Challenge done.' );
 } );
 
-// One chip per slot: "+N" (correct), "0" (wrong), "–" (timeout) — matches the
-// vocabulary Nera_SAW_Run::slot_results() already scores in, so there is nothing
-// to re-derive here beyond the label.
+// One chip per question with what it was worth on this tier: right ones filled,
+// wrong or missed ones struck.
 const resultChips = computed( () =>
-	slotResults.value.map( ( r ) => {
-		if ( 'correct' === r.outcome ) {
-			return { key: r.slot_no, text: `+${ r.spins_awarded }`, kind: 'correct' };
-		}
-		if ( 'wrong' === r.outcome ) {
-			return { key: r.slot_no, text: '0', kind: 'wrong' };
-		}
-		return { key: r.slot_no, text: '–', kind: 'timeout' };
-	} )
+	slotResults.value.map( ( r ) => ( {
+		key: r.slot_no,
+		text: String( r.reward ?? r.spins_awarded ?? 0 ),
+		kind: 'correct' === r.outcome ? 'ok' : 'no',
+	} ) )
 );
+
+// Optional blocks the admin switched on for this competition.
+const resultDisplay = Array.isArray( window.NeraSAW && window.NeraSAW.resultDisplay ) ? window.NeraSAW.resultDisplay : [ 'draw_line' ];
+const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
+
+const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
+const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
+
+const prefersReducedMotion = () =>
+	typeof window !== 'undefined' && window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
+
+/* --- Ticket fly ------------------------------------------------------------
+ * On a correct answer a "+n" pill rises from the picked answer and flies into
+ * the Tickets counter. The counter keeps the old total while it flies, then
+ * shows the new one and pops (is-landed). Without the Web Animations API or
+ * with reduced motion the counter updates and pops at once.
+ * ------------------------------------------------------------------------- */
+const appEl = ref( null );
+const tixHeld = ref( null );
+const tixLanded = ref( false );
+let flyEl = null;
+let flyAnim = null;
+let landTimer = 0;
+const TICKET_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M10 6v12" stroke-dasharray="2 2"/></svg>';
+
+function landTickets() {
+	tixHeld.value = null;
+	tixLanded.value = true;
+	clearTimeout( landTimer );
+	landTimer = setTimeout( () => {
+		tixLanded.value = false;
+	}, 350 );
+}
+
+// Drops a pill still in flight (slot change, run end, unmount) without landing it.
+function removeTicketFly() {
+	if ( flyAnim ) {
+		flyAnim.onfinish = null;
+		flyAnim.cancel();
+		flyAnim = null;
+	}
+	if ( flyEl ) {
+		flyEl.remove();
+		flyEl = null;
+	}
+	tixHeld.value = null;
+}
+
+function flyTicket( option, before, gain ) {
+	removeTicketFly();
+	const root = appEl.value;
+	const pos = Array.isArray( slot.answers ) ? slot.answers.findIndex( ( a ) => a.index === option ) : -1;
+	const from = root && pos > -1 ? root.querySelectorAll( '.saw-answer' )[ pos ] : null;
+	const to = root ? root.querySelector( '.saw-qmeta__tix b' ) : null;
+	if ( ! from || ! to || typeof from.animate !== 'function' || prefersReducedMotion() ) {
+		landTickets();
+		return;
+	}
+	tixHeld.value = before;
+	const a = from.getBoundingClientRect();
+	const b = to.getBoundingClientRect();
+	const x0 = a.left + a.width / 2;
+	const y0 = a.top + a.height / 2;
+	const dx = b.left + b.width / 2 - x0;
+	const dy = b.top + b.height / 2 - y0;
+	const el = document.createElement( 'div' );
+	el.className = 'saw-tkfly';
+	el.setAttribute( 'aria-hidden', 'true' );
+	el.innerHTML = TICKET_ICON + '<b>+' + Number( gain ) + '</b>';
+	el.style.left = x0 + 'px';
+	el.style.top = y0 + 'px';
+	document.body.appendChild( el );
+	flyEl = el;
+	const done = () => {
+		flyAnim = null;
+		removeTicketFly();
+		landTickets();
+	};
+	try {
+		flyAnim = el.animate(
+			[
+				{ transform: 'translate(-50%,-50%) scale(.85)', opacity: 0 },
+				{ transform: 'translate(-50%,-90%) scale(1.08)', opacity: 1, offset: 0.28 },
+				{ transform: 'translate(calc(-50% + ' + dx + 'px),calc(-50% + ' + dy + 'px)) scale(.55)', opacity: 0.85 },
+			],
+			{ duration: 620, easing: 'cubic-bezier(.3,.7,.3,1)' }
+		);
+		flyAnim.onfinish = done;
+	} catch ( e ) {
+		done();
+	}
+}
+
+// Tickets earned counts up from 0 over about a second; at once with reduced motion.
+let countFrame = 0;
+let countTarget = null;
+function countUpTickets( to ) {
+	cancelAnimationFrame( countFrame );
+	countTarget = to || 0;
+	if ( ! to || prefersReducedMotion() ) {
+		shownTickets.value = to || 0;
+		return;
+	}
+	const from = performance.now();
+	const step = ( now ) => {
+		const p = Math.min( 1, ( now - from ) / 1000 );
+		shownTickets.value = Math.round( to * ( 1 - Math.pow( 1 - p, 3 ) ) );
+		if ( p < 1 ) {
+			countFrame = requestAnimationFrame( step );
+		}
+	};
+	shownTickets.value = 0;
+	countFrame = requestAnimationFrame( step );
+}
 
 const visibleTicketNumbers = computed( () =>
 	showAllTicketNumbers.value ? ticketNumbers.value : ticketNumbers.value.slice( 0, 6 )
@@ -570,6 +735,7 @@ function shouldBlockLeave() {
 }
 
 function clearTicker() {
+	stopRing();
 	if ( ticker ) {
 		clearInterval( ticker );
 		ticker = null;
@@ -662,6 +828,19 @@ const revealAnnouncement = computed( () => {
 	return answer
 		? t( 'revealWrong', 'Wrong. The correct answer was: %s' ).replace( '%s', answer )
 		: t( 'revealWrongBare', 'Wrong. No tickets.' );
+} );
+
+// The line under the question card once an answer is scored.
+const feedbackLine = computed( () => {
+	if ( phase.value !== 'reveal' ) {
+		return '';
+	}
+	if ( lastResult.correct ) {
+		return fmt( 'feedbackRight', 'Right: +{k} ticket|Right: +{k} tickets', lastResult.spins_awarded );
+	}
+	return lastResult.timed_out
+		? t( 'feedbackTimeout', 'Time’s up: 0 tickets' )
+		: t( 'feedbackWrong', 'Wrong: 0 tickets' );
 } );
 
 // Green on the correct option; red only on a pick the server actually scored. A
@@ -922,6 +1101,265 @@ function onLeaveDialogKeydown( e ) {
 	}
 }
 
+// Share my score: a sheet with a 9:16 story card of this run and the run's
+// public link. The link is fetched on the first open and kept; a failed fetch
+// is not kept, so reopening tries again.
+const shareCardData = ( window.NeraSAW && window.NeraSAW.shareCard ) || {};
+const shareBrand = shareCardData.brand || 'Strike & Win';
+const shareHost = window.location.host;
+const shareOpen = ref( false );
+const shareUrl = ref( '' );
+const shareLoading = ref( false );
+const shareError = ref( false );
+const shareNote = ref( '' );
+const shareButtonRef = ref( null );
+const shareGoRef = ref( null );
+const shareCloseRef = ref( null );
+const shareCardRef = ref( null );
+let shareRequest = null;
+let shareImage = null;
+const SHARE_IMAGE_NAME = 'strike-and-win-score.png';
+
+const shareTotal = computed( () => totalSlots.value || slotResults.value.length );
+const shareText = computed( () => fmt(
+	'shareText',
+	'I scored {r}/{n} on Strike & Win. Can you beat my score?',
+	correctCount.value,
+	{ r: correctCount.value, n: shareTotal.value }
+) );
+const shareTixWord = computed( () => fmt( 'shareTixEarned', 'ticket earned|tickets earned', finalSpins.value ) );
+const shareChallenge = computed( () => t( 'shareChallenge', 'Can you beat\nmy score?' ).split( '\n' ) );
+const shareCardLabel = computed( () => t( 'shareMy', 'My score' ) + ': ' + correctCount.value + '/' + shareTotal.value + ', ' + ticketsWord( finalSpins.value ) );
+
+function loadShareLink() {
+	if ( shareUrl.value || shareRequest || ! runId.value ) {
+		return shareRequest || Promise.resolve();
+	}
+	shareError.value = false;
+	shareLoading.value = true;
+	shareRequest = api.shareRun( runId.value )
+		.then( ( r ) => {
+			if ( r && r.url ) {
+				shareUrl.value = r.url;
+			} else {
+				shareError.value = true;
+			}
+		} )
+		.catch( () => {
+			shareError.value = true;
+		} )
+		.finally( () => {
+			shareLoading.value = false;
+			shareRequest = null;
+		} );
+	return shareRequest;
+}
+
+function onShareKeydown( e ) {
+	if ( e.key === 'Escape' ) {
+		e.preventDefault();
+		closeShareSheet();
+	}
+}
+
+function openShareSheet() {
+	shareNote.value = '';
+	shareOpen.value = true;
+	document.addEventListener( 'keydown', onShareKeydown );
+	nextTick( () => ( shareGoRef.value || shareCloseRef.value )?.focus() );
+	loadShareLink().then( () => {
+		if ( shareOpen.value && shareUrl.value ) {
+			nextTick( () => shareGoRef.value?.focus() );
+		}
+	} );
+	// Made while the sheet is open, so Share can hand it over straight away:
+	// share menus refuse a call that comes too long after the tap.
+	nextTick( makeShareImage );
+}
+
+// The story card as a 1080 x 1920 PNG, drawn from the card in the sheet.
+// The card never changes after the run, so one image is kept. Any failure
+// (a font or photo that can't be embedded, an old browser) resolves to null
+// and Share falls back to text and link.
+function makeShareImage() {
+	if ( shareImage ) {
+		return shareImage;
+	}
+	const card = shareCardRef.value;
+	if ( ! card ) {
+		return Promise.resolve( null );
+	}
+	const photo = card.querySelector( '.saw-sharesheet__photo img' );
+	const photoReady = photo && ! photo.complete
+		? new Promise( ( done ) => {
+			photo.addEventListener( 'load', done, { once: true } );
+			photo.addEventListener( 'error', done, { once: true } );
+		} )
+		: Promise.resolve();
+	const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+	shareImage = Promise.all( [ photoReady, fontsReady ] )
+		.then( () => shareFontCss().catch( () => '' ) )
+		.then( ( fontEmbedCSS ) => toBlob( card, { pixelRatio: 1, canvasWidth: 1080, canvasHeight: 1920, fontEmbedCSS } ) )
+		.then( ( blob ) => blob || null )
+		.catch( () => null );
+	shareImage.then( ( blob ) => {
+		if ( ! blob ) {
+			shareImage = null;
+		}
+	} );
+	return shareImage;
+}
+
+// The @font-face rules of the fonts this page has actually loaded, with their
+// files inlined, for the card image. Built here rather than by html-to-image,
+// which logs an error for every cross-origin stylesheet (hosted web fonts) it
+// can't read, and inlines every subset of a family instead of the ones in use.
+const fontKey = ( family, range, style ) => [
+	String( family || '' ).replace( /["']/g, '' ).trim().toLowerCase(),
+	String( range || 'U+0-10FFFF' ).toUpperCase().replace( /\s/g, '' ).replace( /[0-9A-F?]+/g, ( h ) => h.replace( /^0+(?=.)/, '' ) ),
+	String( style || 'normal' ).trim().toLowerCase(),
+].join( '|' );
+
+function toDataUrl( url ) {
+	return fetch( url )
+		.then( ( r ) => ( r.ok ? r.blob() : Promise.reject( new Error( String( r.status ) ) ) ) )
+		.then( ( blob ) => new Promise( ( done, fail ) => {
+			const reader = new FileReader();
+			reader.onload = () => done( reader.result );
+			reader.onerror = fail;
+			reader.readAsDataURL( blob );
+		} ) );
+}
+
+async function shareFontCss() {
+	const loaded = new Set();
+	document.fonts.forEach( ( f ) => {
+		if ( 'loaded' === f.status ) {
+			loaded.add( fontKey( f.family, f.unicodeRange, f.style ) );
+		}
+	} );
+	const sheets = await Promise.all( Array.from( document.styleSheets ).map( ( sheet ) => {
+		const base = sheet.href || document.baseURI;
+		try {
+			return { base, text: Array.from( sheet.cssRules ).map( ( r ) => r.cssText ).join( '\n' ) };
+		} catch ( e ) {
+			return sheet.href
+				? fetch( sheet.href ).then( ( r ) => ( r.ok ? r.text() : '' ) ).catch( () => '' ).then( ( text ) => ( { base, text } ) )
+				: { base, text: '' };
+		}
+	} ) );
+	const pick = ( rule, prop ) => ( rule.match( new RegExp( '(?:^|[;{\\s])' + prop + '\\s*:\\s*([^;}]+)', 'i' ) ) || [] )[ 1 ];
+	const rules = [];
+	sheets.forEach( ( { base, text } ) => {
+		( text.match( /@font-face\s*\{[^}]*\}/gi ) || [] ).forEach( ( rule ) => {
+			if ( loaded.has( fontKey( pick( rule, 'font-family' ), pick( rule, 'unicode-range' ), pick( rule, 'font-style' ) ) ) ) {
+				rules.push( { base, rule } );
+			}
+		} );
+	} );
+	const css = await Promise.all( rules.map( async ( { base, rule } ) => {
+		const urls = rule.match( /url\(\s*(['"]?)[^'")]+\1\s*\)/g ) || [];
+		let out = rule;
+		for ( const u of urls ) {
+			const raw = u.replace( /^url\(\s*['"]?|['"]?\s*\)$/g, '' );
+			if ( raw.startsWith( 'data:' ) ) {
+				continue;
+			}
+			const data = await toDataUrl( new URL( raw, base ).href ).catch( () => null );
+			if ( data ) {
+				out = out.replace( u, 'url("' + data + '")' );
+			}
+		}
+		return out;
+	} ) );
+	return css.join( '\n' );
+}
+
+function downloadBlob( blob, name ) {
+	const href = URL.createObjectURL( blob );
+	const link = document.createElement( 'a' );
+	link.href = href;
+	link.download = name;
+	link.style.display = 'none';
+	document.body.appendChild( link );
+	link.click();
+	link.remove();
+	setTimeout( () => URL.revokeObjectURL( href ), 30000 );
+}
+
+function closeShareSheet() {
+	shareOpen.value = false;
+	document.removeEventListener( 'keydown', onShareKeydown );
+	nextTick( () => shareButtonRef.value?.focus() );
+}
+
+// Copy through a selected textarea inside the sheet, for pages without the
+// clipboard API (plain http). Focus goes back where it was.
+function copyBySelection( text ) {
+	const back = document.activeElement;
+	const area = document.createElement( 'textarea' );
+	area.value = text;
+	area.setAttribute( 'readonly', '' );
+	area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+	( document.querySelector( '.saw-sharesheet__panel' ) || document.body ).appendChild( area );
+	area.select();
+	let ok = false;
+	try {
+		ok = document.execCommand( 'copy' );
+	} catch ( e ) {
+		ok = false;
+	}
+	area.remove();
+	back?.focus?.();
+	return ok;
+}
+
+function copyText( text ) {
+	const done = () => {
+		shareNote.value = t( 'shareCopied', 'Copied to clipboard' );
+	};
+	const fallback = () => {
+		if ( copyBySelection( text ) ) {
+			done();
+		} else {
+			shareNote.value = t( 'shareCopyFail', 'Copy this: {x}' ).replace( '{x}', text );
+		}
+	};
+	if ( navigator.clipboard && typeof navigator.clipboard.writeText === 'function' ) {
+		navigator.clipboard.writeText( text ).then( done, fallback );
+		return;
+	}
+	fallback();
+}
+
+// Share: the story card image with the text and link through the phone's share
+// menu; text and link only where files can't be shared; with no share menu the
+// image is downloaded and the text and link are copied. A cancelled menu is silent.
+async function shareGo() {
+	const text = shareText.value;
+	const url = shareUrl.value;
+	const blob = await makeShareImage();
+	if ( typeof navigator.share === 'function' ) {
+		const file = blob ? new File( [ blob ], SHARE_IMAGE_NAME, { type: 'image/png' } ) : null;
+		const withFile = file && typeof navigator.canShare === 'function' && navigator.canShare( { files: [ file ] } );
+		try {
+			await navigator.share( withFile ? { files: [ file ], title: shareBrand, text, url } : { title: shareBrand, text, url } );
+			return;
+		} catch ( e ) {
+			if ( e && e.name === 'AbortError' ) {
+				return;
+			}
+		}
+	} else if ( blob ) {
+		downloadBlob( blob, SHARE_IMAGE_NAME );
+	}
+	copyText( text + ' ' + url );
+}
+
+function shareCopy() {
+	copyText( shareUrl.value );
+}
+
 async function proceedLeave( action ) {
 	leaveBypass = true;
 	quizSessionActive = false;
@@ -1022,7 +1460,7 @@ watch( phase, ( p ) => {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
-	const takeover = p === 'loading' || p === 'language' || p === 'stage-break' || p === 'question' || p === 'reveal' || p === 'end';
+	const takeover = p === 'loading' || p === 'language' || p === 'question' || p === 'reveal' || p === 'end';
 	document.body.classList.toggle( 'saw-quiz-takeover', takeover );
 }, { immediate: true } );
 
@@ -1036,6 +1474,9 @@ function applyState( state ) {
 	}
 	if ( state.run_total ) {
 		runTotal.value = state.run_total;
+	}
+	if ( state.tier_key ) {
+		tierKey.value = state.tier_key;
 	}
 	if ( state.spins_final !== null && state.spins_final !== undefined ) {
 		spinsFinal.value = state.spins_final;
@@ -1056,51 +1497,6 @@ function applyState( state ) {
 // single string comparison.
 const Nera_SAW_QUIZ_LADDER = 'ladder';
 
-/**
- * Show the stage-break screen for the state's next slot, if one is due, WITHOUT
- * fetching that slot yet.
- *
- * Order matters here: serve_slot() stamps the clock on first fetch, so deciding
- * "does this need a break screen" has to happen from state()'s next_stage
- * look-ahead (a read of the already-drawn run_slots row) rather than from
- * getSlot()'s response — fetching early just to check would start the next
- * question's timer behind the very screen meant to give the player a breath
- * before it.
- *
- * @param {object} state Whatever start()/submit()/resume returned.
- * @return {boolean} true if the break screen is now showing (caller stops here).
- */
-function maybeShowStageBreak( state ) {
-	const next = state && state.next_stage;
-	if (
-		! next ||
-		! state.next_slot ||
-		Nera_SAW_QUIZ_LADDER !== next.quiz_method ||
-		! next.is_first_of_stage ||
-		stageBreakShownFor === next.stage_no
-	) {
-		return false;
-	}
-
-	stageBreakShownFor = next.stage_no;
-	pendingSlotData = state.next_slot;
-	stageNo.value = next.stage_no;
-	stageCount.value = next.stage_count;
-	slot.level_label = next.level_label;
-	slot.level_text_color = next.level_text_color;
-	stageBreakLabel.value = next.stage_label;
-	phase.value = 'stage-break';
-	return true;
-}
-
-function continueFromStageBreak() {
-	const slotNo = pendingSlotData;
-	pendingSlotData = null;
-	if ( slotNo ) {
-		loadSlot( slotNo );
-	}
-}
-
 async function start() {
 	retryAction = start;
 	try {
@@ -1118,6 +1514,7 @@ async function start() {
 			experimentalAnswers.splice( 0, experimentalAnswers.length );
 			breadcrumb.save( props.competitionId, runId.value );
 		}
+		answeredCount.value = experimentalAnswers.length;
 		if ( state.status === 'finalized' ) {
 			quizSessionActive = false;
 			return toEnd();
@@ -1133,9 +1530,6 @@ async function start() {
 			// again: it was never recorded. Questions already answered stay answered.
 			const nextSlot = Math.max( 1, Number( resumeFrom.next_slot ) || ( resumeFrom.answers.length + 1 ) );
 			return advanceAfterAnswer( buildExperimentalAdvanceState( nextSlot ) );
-		}
-		if ( maybeShowStageBreak( state ) ) {
-			return;
 		}
 		await loadSlot( state.next_slot || 1 );
 	} catch ( e ) {
@@ -1189,10 +1583,7 @@ async function loadSlot( slotNo ) {
 	slot.slot_no = slotNo;
 	slot.timer_seconds = timerSeconds.value;
 	slot.seconds_left = timerSeconds.value;
-	// The head-bar's "Stage N of M" reads these on every slot, not only the
-	// first of a stage — maybeShowStageBreak() sets them for the transition,
-	// but a plain loadSlot() (stage 1, or the second+ question within a stage)
-	// never goes through there and must not be left showing a stale stage.
+	// The slot's stage, read on every slot so it never shows a stale one.
 	stageNo.value = ( cached && cached.stage_no ) || stageNo.value;
 	stageCount.value = ( cached && cached.stage_count ) || stageCount.value;
 
@@ -1203,6 +1594,7 @@ async function loadSlot( slotNo ) {
 	revealCorrectIndex.value = -1;
 	revealSecondsLeft.value = 0;
 	revealIsFinal.value = false;
+	removeTicketFly();
 
 	phase.value = 'question';
 	startCountdown();
@@ -1210,8 +1602,10 @@ async function loadSlot( slotNo ) {
 
 function startCountdown() {
 	clearTicker();
+	ringAnchor = performance.now();
 	ticker = setInterval( () => {
 		slot.seconds_left -= 1;
+		ringAnchor = performance.now();
 		if ( slot.seconds_left <= 0 ) {
 			clearTicker();
 			if ( ! locked.value ) {
@@ -1219,6 +1613,7 @@ function startCountdown() {
 			}
 		}
 	}, 1000 );
+	ringLoop();
 }
 
 // Reference design screen 26: no separate Submit step — picking an option answers
@@ -1236,12 +1631,13 @@ function selectOption( index ) {
 function advanceAfterAnswer( state ) {
 	if ( state.status === 'finalized' || ! state.next_slot ) {
 		toEnd();
-	} else if ( ! maybeShowStageBreak( state ) ) {
+	} else {
+		// No break between levels: the next question follows straight on.
 		loadSlot( state.next_slot );
 	}
 }
 
-// EXPERIMENTAL: same shape advanceAfterAnswer()/maybeShowStageBreak() expect
+// EXPERIMENTAL: same shape advanceAfterAnswer() expects
 // from the server's per-answer response, built instead from the slot content
 // Start/Resume already cached — nothing here is fetched.
 function buildExperimentalAdvanceState( nextSlotNo ) {
@@ -1290,8 +1686,10 @@ async function submit( option ) {
 	const chosenIndex = ( '' === option ) ? -1 : option;
 	const isCorrect = ( -1 !== chosenIndex && chosenIndex === correctIndex );
 	const awarded = isCorrect ? ( slot.reward || 0 ) : 0;
+	const spinsBefore = spinsSoFar.value || 0;
 
 	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
+	answeredCount.value = experimentalAnswers.length;
 	spinsSoFar.value = ( spinsSoFar.value || 0 ) + awarded;
 	// Kept in this browser (no request) so Continue your run can restore it.
 	breadcrumb.save( props.competitionId, runId.value, {
@@ -1315,6 +1713,9 @@ async function submit( option ) {
 	revealIsFinal.value = ( 'finalized' === state.status || ! state.next_slot );
 	phase.value = 'reveal';
 	startHold( state );
+	if ( awarded > 0 && -1 !== chosenIndex ) {
+		flyTicket( chosenIndex, spinsBefore, awarded );
+	}
 }
 
 async function fetchRunComplete() {
@@ -1323,6 +1724,7 @@ async function fetchRunComplete() {
 	}
 	ticketsLoading.value = true;
 	ticketsError.value = '';
+	summaryReady.value = false;
 	try {
 		// EXPERIMENTAL: one call carrying every locally-accumulated answer,
 		// instead of a separate /answer per question plus this /complete call.
@@ -1338,6 +1740,14 @@ async function fetchRunComplete() {
 		tierLabel.value = summary.tier_label || summary.tier_key || '';
 		slotResults.value = Array.isArray( summary.slot_results ) ? summary.slot_results : [];
 		drawDate.value = summary.draw_date || '';
+		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
+		nextRunNo.value = Number( summary.next_run_no ) || 0;
+		nextRunTotal.value = Number( summary.next_run_total ) || 0;
+		summaryReady.value = true;
+		// The count started from the run's own tally; only a different confirmed total restarts it.
+		if ( countTarget !== finalSpins.value ) {
+			countUpTickets( finalSpins.value );
+		}
 	} catch ( e ) {
 		ticketsError.value = e && e.message ? e.message : t( 'ticketsMintError', 'We could not add your tickets right now.' );
 	} finally {
@@ -1347,15 +1757,22 @@ async function fetchRunComplete() {
 
 async function toEnd() {
 	clearTicker();
+	removeTicketFly();
 	quizSessionActive = false;
 	breadcrumb.clear( props.competitionId );
 	releaseNavigationGuard();
+	// Counts up from the run's own tally while the tickets are minted.
+	countUpTickets( finalSpins.value );
 	phase.value = 'end';
 	await fetchRunComplete();
 }
 
 const competitionUrl = computed( () => ( competitionId.value ? `/?p=${ competitionId.value }` : '#' ) );
 const competitionsListUrl = ( window.NeraSAW && window.NeraSAW.competitionsUrl ) || '';
+const competitionPageUrl = ( window.NeraSAW && window.NeraSAW.competitionPermalink ) || '';
+const myTicketsUrl = ( window.NeraSAW && window.NeraSAW.myTicketsUrl ) || '';
+const responsiblePlayUrl = ( window.NeraSAW && window.NeraSAW.responsiblePlayUrl ) || '';
+const hasNextRun = computed( () => ( runsRemainingTier.value || 0 ) > 0 && nextRunNo.value > 0 );
 const playAgainUrl = computed( () => {
 	if ( ! competitionId.value || typeof window === 'undefined' ) {
 		return '#';
@@ -1388,6 +1805,8 @@ onMounted( () => {
 } );
 onUnmounted( () => {
 	clearTicker();
+	removeTicketFly();
+	clearTimeout( landTimer );
 	releaseNavigationGuard();
 	if ( typeof document !== 'undefined' ) {
 		document.body.classList.remove( 'saw-quiz-dialog-open' );
@@ -1397,7 +1816,7 @@ onUnmounted( () => {
 </script>
 
 <template>
-	<div class="saw-app">
+	<div ref="appEl" class="saw-app">
 		<div v-if="phase === 'loading'" class="saw-loading">{{ t('loading', 'Loading your entry…') }}</div>
 
 		<div v-else-if="phase === 'error'" class="saw-notice saw-error">
@@ -1414,32 +1833,24 @@ onUnmounted( () => {
 		</div>
 
 		<div
-			v-else-if="phase === 'language' || phase === 'stage-break' || phase === 'question' || phase === 'reveal'"
+			v-else-if="phase === 'language' || phase === 'question' || phase === 'reveal'"
 			class="saw-play"
 		>
-			<div class="saw-stagebar" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">
-				<div class="saw-stagebar__row">
-					<div class="saw-stagebar__pills">
-						<span class="saw-stagebar__pill">{{ stagePillLabel }}</span>
-						<span v-if="runOfTotalLabel" class="saw-stagebar__run">{{ runOfTotalLabel }}</span>
-					</div>
-					<span class="saw-stagebar__tickets">
-						<span class="saw-stagebar__ticketslabel">{{ t('ticketsLabel', 'Tickets') }}</span>
-						<span class="saw-stagebar__ticketsvalue">{{ spinsSoFar }}</span>
-					</span>
-				</div>
-				<!-- No slot has loaded yet on the language screen, so totalSlots/slot.slot_no
-				     aren't known — the progress dots would just be an empty bar; skip them
-				     there rather than render something meaningless. -->
-				<div v-if="phase !== 'language'" class="saw-stagebar__dots">
-					<span
-						v-for="n in totalSlots"
-						:key="n"
-						class="saw-stagebar__dot"
-						:class="{ 'is-filled': n <= slot.slot_no }"
-					></span>
+			<!-- The quiz bar: competition, "Quiz n of N · tier" and leave. The language
+			     card comes before the run exists, so it shows the name alone. -->
+			<div class="saw-qbar">
+				<div class="saw-qbar__wrap">
+					<div class="saw-qbar__t">{{ competition.name }}<span v-if="phase !== 'language'">{{ quizOfLabel }}</span></div>
+					<button
+						v-if="phase !== 'language'"
+						type="button"
+						class="saw-qbar__x"
+						:aria-label="t('leaveLabel', 'Leave')"
+						@click="onQuizBarLeave"
+					><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 				</div>
 			</div>
+			<div v-if="phase !== 'language'" class="saw-qprog" aria-hidden="true"><i :style="{ width: progressPct + '%' }"></i></div>
 
 			<div v-if="phase === 'language'" class="saw-langcard">
 				<h2 class="saw-langcard__title">{{ t('quizLanguageTitle', 'Quiz language') }}</h2>
@@ -1455,145 +1866,159 @@ onUnmounted( () => {
 				</div>
 			</div>
 
-			<div v-else-if="phase === 'stage-break'" class="saw-stagebreak">
-				<div class="saw-stagebreak__badge" :style="{ background: slot.level_text_color || 'var(--saw-brand)' }">{{ stageNo }}</div>
-				<h2 class="saw-stagebreak__title">{{ t('stageBreakHeadline_' + stageNo, slot.level_label) }}</h2>
-				<p class="saw-stagebreak__sub">{{ stageBreakLabel }}</p>
-				<button type="button" class="saw-stagebreak__continue" @click="continueFromStageBreak">
-					{{ t('continueLabel', 'Continue') }}
-				</button>
-			</div>
+			<div v-else class="saw-qmain" :class="{ 'is-revealing': phase === 'reveal' }">
+				<div class="saw-qlad" aria-hidden="true"><i v-for="c in ladderChips" :key="c.no" :class="c.state">{{ c.reward }}</i></div>
 
-			<div v-else class="saw-qbody" :class="{ 'is-revealing': phase === 'reveal' }" :style="levelStyle">
-				<div class="saw-qbody__head">
-					<div>
-						<p class="saw-qbody__count">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}</p>
-						<span class="saw-qbody__worth">{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span>
+				<div class="saw-qmeta">
+					<div class="saw-qmeta__level">{{ fmt('questionOf', 'Question {n} of {total}', slot.slot_no, totalSlots) }}<template v-if="slot.level_label"> · {{ slot.level_label }}</template><span>{{ fmt('worthTicket', 'Worth {k} ticket|Worth {k} tickets', slot.reward) }}</span></div>
+					<div class="saw-qmeta__tix" :class="{ 'is-landed': tixLanded }"><small>{{ t('ticketsLabel', 'Tickets') }}</small><b>{{ tixHeld !== null ? tixHeld : spinsSoFar }}</b></div>
+				</div>
+
+				<div v-if="competition.name" class="saw-qprize" aria-hidden="true">
+					<div class="saw-qprize__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
+					<div><small>{{ t('playingFor', 'Playing for') }}</small><b v-if="competition.value">{{ competition.value }}</b><span>{{ competition.name }}</span></div>
+				</div>
+
+				<div class="saw-qcard">
+					<div class="saw-qtop">
+						<h1 class="saw-question">{{ slot.question }}</h1>
+						<div
+							class="saw-qtimer"
+							:class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }"
+						>
+							<svg viewBox="0 0 62 62" width="62" height="62" aria-hidden="true">
+								<circle class="saw-qtimer__track" cx="31" cy="31" r="26"></circle>
+								<circle ref="ringArc" class="saw-qtimer__fill" cx="31" cy="31" r="26" stroke-dashoffset="0" transform="rotate(-90 31 31)"></circle>
+							</svg>
+							<span class="saw-qtimer__num">{{ Math.max(0, slot.seconds_left) }}</span>
+						</div>
 					</div>
-					<div
-						class="saw-qtimer"
-						:class="{ 'is-urgent': timerUrgent, 'is-spent': phase === 'reveal' }"
-						:style="{ '--saw-qtimer-pct': timerPct }"
-					>
-						<svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
-							<circle class="saw-qtimer__track" cx="22" cy="22" r="19"></circle>
-							<circle class="saw-qtimer__fill" cx="22" cy="22" r="19"></circle>
-						</svg>
-						<span class="saw-qtimer__num">{{ Math.max(0, slot.seconds_left) }}</span>
+					<p class="saw-sr-only" role="status" aria-live="polite">{{ revealAnnouncement }}</p>
+
+					<div class="saw-answers">
+						<button
+							v-for="(a, i) in slot.answers"
+							:key="a.index"
+							type="button"
+							class="saw-answer"
+							:class="optionClass(a)"
+							:disabled="locked || submitting"
+							:aria-pressed="selectedAnswer === a.index"
+							@click="selectOption(a.index)"
+						><em aria-hidden="true">{{ 'ABCDEFGHIJ'.charAt(i) }}</em>{{ a.text }}</button>
 					</div>
 				</div>
 
-				<h1 class="saw-question">{{ slot.question }}</h1>
-				<p class="saw-sr-only" role="status" aria-live="polite">{{ revealAnnouncement }}</p>
-
-				<div class="saw-answers">
-					<button
-						v-for="a in slot.answers"
-						:key="a.index"
-						type="button"
-						class="saw-answer"
-						:class="optionClass(a)"
-						:disabled="locked || submitting"
-						:aria-pressed="selectedAnswer === a.index"
-						@click="selectOption(a.index)"
-					>{{ a.text }}</button>
-				</div>
-
-				<div v-if="phase === 'reveal'" class="saw-banked" :class="{ 'is-zero': !lastResult.correct }">
-					{{ lastResult.correct
-						? fmt('bankedLine', '+{k} banked. {t} tickets total.', lastResult.spins_awarded, spinsSoFar)
-						: ( lastResult.timed_out
-							? fmt('timeUpLine', "Time's up. {t} tickets total.", spinsSoFar)
-							: fmt('wrongLine', 'Not this time. {t} tickets total.', spinsSoFar) )
-					}}
-					<button
-						type="button"
-						class="saw-banked__next"
-						:disabled="advancing"
-						@click="endHold"
-					>{{ revealIsFinal
-						? t('seeResults', 'See my results') + ' (' + Math.max(0, revealSecondsLeft) + ')'
-						: fmt('nextQuestion', 'Next question ({s})', Math.max(0, revealSecondsLeft)) }}</button>
-				</div>
+				<div
+					class="saw-qfb"
+					:class="{ 'is-good': phase === 'reveal' && lastResult.correct, 'is-bad': phase === 'reveal' && !lastResult.correct }"
+					aria-hidden="true"
+				>{{ feedbackLine }}</div>
+				<button
+					v-if="phase === 'reveal' && showNextButton"
+					type="button"
+					class="saw-banked__next"
+					:disabled="advancing"
+					@click="endHold"
+				>{{ revealIsFinal
+					? t('seeResults', 'See my results') + ' (' + Math.max(0, revealSecondsLeft) + ')'
+					: fmt('nextQuestion', 'Next question ({s})', Math.max(0, revealSecondsLeft)) }}</button>
 			</div>
 		</div>
 
 		<div v-else-if="phase === 'end'" class="saw-results">
-			<p class="saw-results__eyebrow">{{ t('runComplete', 'Run complete') }}</p>
-			<h1 class="saw-results__title">{{ resultsTitle }}</h1>
-			<p class="saw-results__subtitle">{{ resultsSubtitle }}</p>
+			<p class="saw-results__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
+			<p class="saw-results__headline">{{ resultsHeadline }}</p>
+			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}</p>
 
-			<div class="saw-results__card">
-				<div class="saw-results__row">
-					<span class="saw-results__label">{{ t('scoreLabel', 'Score') }}</span>
-					<span class="saw-results__value">{{ fmt('scoreValue', '{c} of {total} correct', correctCount, totalSlots) }}</span>
+			<div class="saw-results__stats">
+				<div class="saw-results__stat">
+					<small>{{ t('scoreLabel', 'Score') }}</small>
+					<b>{{ correctCount }}<i>/{{ totalSlots || slotResults.length }}</i></b>
+					<span>{{ t('correctAnswers', 'correct answers') }}</span>
 				</div>
-				<div class="saw-results__row">
-					<span class="saw-results__label">{{ t('ticketsEarnedLabel', 'Tickets earned') }}</span>
-					<span class="saw-results__value saw-results__value--big" :class="{ 'is-zero': !hasTickets }">{{ finalSpins }}</span>
+				<div class="saw-results__stat saw-results__stat--tickets" :class="{ 'is-zero': !hasTickets }">
+					<small>{{ t('ticketsEarnedLabel', 'Tickets earned') }}</small>
+					<b>{{ hasTickets ? '+' + formatCount( shownTickets ) : '0' }}</b>
+					<span>{{ hasTickets ? t('inThisDraw', 'in this draw') : '—' }}</span>
 				</div>
+			</div>
 
-				<div class="saw-results__chips">
-					<span
-						v-for="c in resultChips"
-						:key="c.key"
-						class="saw-chip"
-						:class="'is-' + c.kind"
-					>{{ c.text }}</span>
-				</div>
+			<div v-if="resultChips.length" class="saw-qlad saw-results__chips" aria-hidden="true">
+				<i v-for="c in resultChips" :key="c.key" :class="'is-' + c.kind">{{ c.text }}</i>
+			</div>
 
-				<template v-if="hasTickets">
-					<div class="saw-results__divider"></div>
-					<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
-					<div class="saw-results__numbers">
-						<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
-						<button
-							v-if="extraTicketCount > 0"
-							type="button"
-							class="saw-numchip saw-numchip--more"
-							:aria-expanded="showAllTicketNumbers"
-							@click="toggleAllTicketNumbers"
-						>{{ showAllTicketNumbers ? t('showLess', 'Show less') : fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
-					</div>
-					<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.") }}</p>
-					<div class="saw-results__divider"></div>
-					<p class="saw-results__fineprint">
-						<template v-if="drawDate">{{ fmt('drawDatePrefix', 'Draw: %s', drawDate) }}. </template>{{ t('drawInfoWithEntry', "Random draw, independently witnessed. You'll be notified either way.") }}
-					</p>
-				</template>
+			<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
+				<span class="saw-spinner" aria-hidden="true"></span>
+				<span>{{ t('mintingTickets', 'Adding your tickets to the draw…') }}</span>
+			</div>
+			<div v-else-if="ticketsError" class="saw-mint-error">
+				<p>{{ ticketsError }}</p>
+				<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
+			</div>
+			<template v-else>
+				<div v-if="hasTickets" class="saw-results__draw">
+					<div>{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div>
+				</div>
+				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div></div>
+			</template>
+
+			<p v-if="summaryReady && showBlock('draw_line')" class="saw-results__drawline">{{ fmt('resultDrawLine', 'Your tickets are entered in this prize draw · Live draw: {d}', drawDate || t('drawDateTbc', 'date to be confirmed')) }}</p>
+
+			<div v-if="showBlock('entry_numbers') && hasTickets && ticketNumbers.length" class="saw-results__entries">
+				<p class="saw-results__label">{{ t('yourEntryNumbers', 'Your entry numbers') }}</p>
+				<div class="saw-results__numbers">
+					<span v-for="num in visibleTicketNumbers" :key="num" class="saw-numchip">{{ num }}</span>
+					<button
+						v-if="extraTicketCount > 0"
+						type="button"
+						class="saw-numchip saw-numchip--more"
+						:aria-expanded="showAllTicketNumbers"
+						@click="toggleAllTicketNumbers"
+					>{{ showAllTicketNumbers ? t('showLess', 'Show less') : fmt('moreNumbers', '+{n} more', extraTicketCount) }}</button>
+				</div>
+				<p class="saw-results__note">{{ t('numbersPoolNote', "Numbers are issued in order as tickets are earned. The draw itself is random and independently witnessed.") }}</p>
+			</div>
+
+			<div v-if="showBlock('fine_print')" class="saw-results__fine">
+				<p v-if="hasTickets" class="saw-results__fineprint">
+					<template v-if="drawDate">{{ fmt('drawDatePrefix', 'Draw: %s', drawDate) }}. </template>{{ t('drawInfoWithEntry', "Random draw, independently witnessed. You'll be notified either way.") }}
+				</p>
 				<template v-else>
-					<div class="saw-results__divider"></div>
 					<p class="saw-results__fineprint">{{ t('noEntryNote', 'No tickets were earned, so there is no entry in this draw, and no refund is due.') }}</p>
 					<p v-if="drawDate" class="saw-results__fineprint saw-results__fineprint--muted">{{ fmt('drawClosesPrefix', 'The draw closes %s.', drawDate) }}</p>
 				</template>
-
-				<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
-					<span class="saw-spinner" aria-hidden="true"></span>
-					<span>{{ t('mintingTickets', 'Adding your tickets to the draw…') }}</span>
-				</div>
-				<div v-else-if="ticketsError" class="saw-mint-error">
-					<p>{{ ticketsError }}</p>
-					<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
-				</div>
-
-				<p v-if="runsRemainingLine" class="saw-runs-left">{{ runsRemainingLine }}</p>
 			</div>
 
-			<!-- Client finding #39: the primary action is always the next thing a
-			     player would do — continue playing while runs remain, buy once
-			     they don't — regardless of this run's own ticket outcome. The
-			     earlier zero-tickets de-emphasis (a quiet "play again" + bare-link
-			     "back") contradicted that and is gone; playAgainUrl lands back on
-			     the hub either way, which already shows the right one of
-			     play/buy for the player's current balance. -->
-			<div class="saw-results__actions">
-				<a class="saw-results__primary" :href="playAgainUrl">
-					{{ runsRemainingTotal > 0 ? t('playAnotherRun', 'Play your next run') : t('buyAnotherRun', 'Buy another run') }}
-				</a>
+			<p v-if="showBlock('runs_left') && runsRemainingLine" class="saw-runs-left">{{ runsRemainingLine }}</p>
+
+			<div v-if="summaryReady" class="saw-results__actions">
+				<span v-if="hasNextRun" class="saw-results__ctawrap">
+					<a class="saw-results__primary" :href="playAgainUrl">{{ fmt('playQuizOf', 'Play quiz {i} of {n}', nextRunNo, nextRunTotal) }}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></a>
+				</span>
 				<a
 					class="saw-results__secondary"
-					:href="competitionsListUrl || competitionUrl"
-				>{{ t('backToCompetitions', 'Back to competitions') }}</a>
+					:class="{ 'is-primary': !hasNextRun }"
+					:href="myTicketsUrl || competitionsListUrl"
+				>{{ t('myTickets', 'My tickets') }}</a>
+				<button
+					v-if="runId"
+					type="button"
+					class="saw-results__share saw-share-btn"
+					ref="shareButtonRef"
+					aria-haspopup="dialog"
+					@click="openShareSheet"
+				><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('shareMyScore', 'Share my score') }}</button>
+				<a
+					v-if="! hasTickets && responsiblePlayUrl"
+					class="saw-results__back"
+					:href="responsiblePlayUrl"
+				>{{ t('responsiblePlay', 'Responsible play') }}</a>
+				<a
+					v-else
+					class="saw-results__back"
+					:href="competitionPageUrl || competitionUrl"
+				>{{ t('backToCompetition', 'Back to the competition') }}</a>
 			</div>
 		</div>
 	</div>
@@ -1631,6 +2056,69 @@ onUnmounted( () => {
 						{{ t('leaveQuiz', 'Leave anyway') }}
 					</button>
 				</div>
+			</div>
+		</div>
+	</Teleport>
+
+	<Teleport to="body">
+		<div
+			v-if="shareOpen"
+			class="saw-sharesheet"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="saw-sharesheet-title"
+		>
+			<button type="button" class="saw-sharesheet__backdrop" tabindex="-1" :aria-label="t('shareClose', 'Close')" @click="closeShareSheet"></button>
+			<div class="saw-sharesheet__panel">
+				<div class="saw-sharesheet__head">
+					<div>
+						<h2 id="saw-sharesheet-title" class="saw-sharesheet__title">{{ t('shareMyScore', 'Share my score') }}</h2>
+						<span class="saw-sharesheet__sub">{{ t('shareStory', 'Story format · 9:16') }}</span>
+					</div>
+					<button type="button" class="saw-sharesheet__close" ref="shareCloseRef" :aria-label="t('shareClose', 'Close')" @click="closeShareSheet"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+				</div>
+				<div class="saw-sharesheet__prev">
+					<div class="saw-sharesheet__card" ref="shareCardRef" role="img" :aria-label="shareCardLabel">
+						<div class="saw-sharesheet__glow" aria-hidden="true"></div>
+						<span class="saw-sharesheet__amp" aria-hidden="true">&amp;</span>
+						<div class="saw-sharesheet__in" aria-hidden="true">
+							<div class="saw-sharesheet__top">
+								<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
+								<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
+								<span class="saw-sharesheet__kicker">{{ t('shareKicker', 'Prize quiz') }}</span>
+							</div>
+							<div class="saw-sharesheet__mid">
+								<small class="saw-sharesheet__label">{{ t('shareMy', 'My score') }}</small>
+								<div class="saw-sharesheet__score">{{ correctCount }}<span>/{{ shareTotal }}</span></div>
+								<div class="saw-sharesheet__bars">
+									<i v-for="r in slotResults" :key="r.slot_no" class="saw-sharesheet__bar" :class="{ 'is-correct': 'correct' === r.outcome }"></i>
+								</div>
+								<div class="saw-sharesheet__tix"><b>+{{ formatCount( finalSpins ) }}</b> {{ shareTixWord }}</div>
+							</div>
+							<div class="saw-sharesheet__prize">
+								<div class="saw-sharesheet__photo"><img v-if="competition.photo" :src="competition.photo" alt=""></div>
+								<div>
+									<small>{{ t('sharePlayingFor', 'Playing for') }}</small>
+									<b>{{ competition.name }}</b>
+									<span v-if="competition.value">{{ competition.value }}</span>
+								</div>
+							</div>
+							<div class="saw-sharesheet__ch"><template v-for="( line, i ) in shareChallenge" :key="i"><br v-if="i">{{ line }}</template></div>
+							<div class="saw-sharesheet__foot">
+								<div><span>{{ t('sharePlayFree', 'Play free at') }}</span><b>{{ shareHost }}</b></div>
+								<em>{{ t('shareAge', '18+ · Skill-based prize competitions') }}</em>
+							</div>
+						</div>
+					</div>
+				</div>
+				<p v-if="shareError" class="saw-sharesheet__error" role="alert">{{ t('shareError', "We couldn't make your link. Close this and try again.") }}</p>
+				<div v-else-if="shareUrl" class="saw-sharesheet__acts">
+					<span class="saw-sharesheet__gowrap">
+						<button type="button" class="saw-sharesheet__go" ref="shareGoRef" @click="shareGo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('shareGo', 'Share') }}</button>
+					</span>
+					<button type="button" class="saw-sharesheet__copy" @click="shareCopy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>{{ t('shareCopy', 'Copy link') }}</button>
+				</div>
+				<p v-if="shareLoading || shareNote" class="saw-sharesheet__status" role="status">{{ shareLoading ? t('shareMaking', 'Making your link…') : shareNote }}</p>
 			</div>
 		</div>
 	</Teleport>
@@ -1877,26 +2365,18 @@ onUnmounted( () => {
 
 /* =====================================================================
  * Reference design (strikeawin-elements.pages.dev, screens 24–29): the
- * language pick, the stage-shelled question/reveal, the stage-break, and the
- * two results layouts. Everything below is new; the rules above this point
+ * language pick, the question/reveal, and the two results layouts. Everything below is new; the rules above this point
  * belong to the pre-reference default skin and are left in place rather than
  * pruned, since nothing here still uses their class names.
  * ===================================================================== */
 
-/* A single white-card shell. The language pick now shares the same
-   .saw-play-wrapped stage-bar header as the stage-break/question/reveal
-   screens (reference design screen 24), so .saw-langcard is always nested
-   inside .saw-play and only needs its own inner padding below — the shell
-   itself (sizing, background, radius, shadow) lives on .saw-play alone so it
-   isn't doubled up. */
+/* The run's screen: the quiz bar across the top, a progress line under it,
+   then one centred column (ladder, meta, prize, question card, feedback). The
+   language pick shares the bar. Neutral layout only; a theme adds the look. */
 .saw-play {
 	width: 100%;
-	max-width: 560px;
-	margin: 0 auto;
-	background: var(--saw-card, #fffaf4);
-	border-radius: 20px;
-	box-shadow: 0 20px 50px -24px color-mix(in srgb, var(--saw-brand) 35%, transparent);
-	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
 
 /* ---- quiz language (screen 24) ------------------------------------- */
@@ -1914,70 +2394,85 @@ onUnmounted( () => {
 	.saw-langcard__btn:hover { border-color: var(--saw-brand); box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--saw-brand) 30%, transparent); }
 }
 
-/* ---- the stage bar, shared by stage-break and question/reveal (25/26/27) --
-   Background colour comes straight off slot.level_text_color: a value already
-   corrected to sit safely under white text (Nera_SAW_Constants::level_text_color()
-   darkens a level's colour until it passes contrast against white) — the same
-   arithmetic works unchanged whichever of the two colours plays "background". */
-.saw-stagebar { padding: 18px 22px 14px; color: var(--saw-on-dark, #fff); }
-.saw-stagebar__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.saw-stagebar__pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.saw-stagebar__pill {
-	display: inline-block; padding: 5px 12px; border-radius: 999px;
-	background: rgba(0, 0, 0, .18); font-size: 13px; font-weight: 700;
+/* ---- quiz bar and progress line --------------------------------------- */
+.saw-qbar { border-bottom: 1px solid var(--saw-surface); }
+.saw-qbar__wrap {
+	box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+	gap: 12px; min-height: 60px; padding: 0 16px;
 }
-/* "Run X of N" (client finding #36) -- a quieter sibling pill next to the
-   stage pill, not competing with it for attention. */
-.saw-stagebar__run {
-	display: inline-block; padding: 5px 12px; border-radius: 999px;
-	background: rgba(0, 0, 0, .1); font-size: 12px; font-weight: 600; opacity: .9;
+.saw-qbar__t { min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.3; }
+.saw-qbar__t span { display: block; font-weight: 600; color: var(--saw-text-muted); }
+.saw-qbar__x {
+	flex: none; width: 44px; height: 44px; padding: 0; border-radius: 50%;
+	border: 1px solid var(--saw-surface); background: transparent; color: inherit;
+	display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.saw-stagebar__tickets { text-align: right; }
-.saw-stagebar__ticketslabel { display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
-.saw-stagebar__ticketsvalue { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; }
-.saw-stagebar__dots { display: flex; gap: 5px; }
-.saw-stagebar__dot { flex: 1 1 0; height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .3); }
-.saw-stagebar__dot.is-filled { background: rgba(255, 255, 255, .95); }
-
-/* ---- stage break (screen 25) ---------------------------------------- */
-.saw-stagebreak { padding: 60px 32px; text-align: center; }
-.saw-stagebreak__badge {
-	width: 64px; height: 64px; margin: 0 auto 22px; border-radius: 50%;
-	display: grid; place-items: center; color: var(--saw-on-dark, #fff);
-	font-size: 26px; font-weight: 800;
-}
-.saw-stagebreak__title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: var(--saw-text); }
-.saw-stagebreak__sub { margin: 0 0 26px; color: var(--saw-text-muted); font-size: 14px; }
-.saw-stagebreak__continue {
-	padding: 12px 30px; border: 0; border-radius: 12px;
-	background: var(--saw-brand); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-	.saw-stagebreak__continue:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); }
-}
+.saw-qprog { position: sticky; top: 0; z-index: 5; height: 4px; background: var(--saw-surface); }
+.saw-qprog > i { display: block; height: 100%; background: var(--saw-brand); }
 
 /* ---- question / reveal (26 / 27) ------------------------------------ */
-.saw-qbody { padding: 22px 24px 26px; }
-.saw-qbody__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
-.saw-qbody__count { margin: 0 0 6px; font-size: 13px; color: var(--saw-text-muted); }
-.saw-qbody__worth {
-	display: inline-block; padding: 4px 12px; border-radius: 999px;
-	border: 1.5px solid var(--saw-level, var(--saw-brand)); color: var(--saw-level, var(--saw-brand));
-	font-size: 12px; font-weight: 700;
+.saw-qmain {
+	box-sizing: border-box; width: 100%; max-width: 680px; margin: 0 auto;
+	padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 16px;
 }
 
-/* The circular per-question countdown, replacing the old horizontal bar to
-   match the reference. A ring drawn twice — a faint full track, and a solid
-   arc whose length is set by --saw-qtimer-pct via stroke-dasharray, animated
-   the same way the old bar animated its width. */
-.saw-qtimer { position: relative; width: 44px; height: 44px; flex: 0 0 auto; }
-.saw-qtimer svg { transform: rotate(-90deg); }
-.saw-qtimer__track { fill: none; stroke: var(--saw-surface); stroke-width: 4; }
+/* The ladder: one chip per question with its tickets. */
+.saw-qlad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.saw-qlad > i {
+	height: 32px; border-radius: 8px; border: 1.5px solid var(--saw-surface);
+	display: flex; align-items: center; justify-content: center;
+	font-size: 12px; font-style: normal; font-weight: 800; color: var(--saw-text-muted);
+}
+.saw-qlad > i.is-cur { border-color: var(--saw-brand); color: var(--saw-text); }
+.saw-qlad > i.is-ok { background: var(--saw-brand); border-color: var(--saw-brand); color: #fff; }
+.saw-qlad > i.is-no { text-decoration: line-through; }
+
+.saw-qmeta { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.saw-qmeta__level { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qmeta__level span { display: block; margin-top: 5px; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--saw-text); }
+.saw-qmeta__tix { text-align: right; }
+.saw-qmeta__tix small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qmeta__tix b { display: block; margin-top: 4px; font-size: 28px; line-height: 1; transition: transform .3s; }
+.saw-qmeta__tix.is-landed b { transform: scale(1.18); }
+/* Neutral look; the theme sets colours and type. */
+.saw-tkfly {
+	position: fixed; z-index: 200; pointer-events: none;
+	display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px;
+	background: #fff; color: #111; border: 1px solid rgba(0, 0, 0, .15); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, .5);
+	font-size: 15px; font-weight: 800; line-height: 1; white-space: nowrap;
+	transform: translate(-50%, -50%);
+}
+.saw-tkfly svg { width: 16px; height: 16px; flex: none; }
+@media (prefers-reduced-motion: reduce) {
+	.saw-qmeta__tix.is-landed b { transform: none; }
+}
+
+.saw-qprize {
+	display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+	border-radius: 18px; border: 1px solid var(--saw-surface);
+}
+.saw-qprize__photo { flex: none; width: 52px; height: 72px; display: flex; align-items: center; justify-content: center; }
+.saw-qprize__photo img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.saw-qprize small,
+.saw-qprize b,
+.saw-qprize span { display: block; }
+.saw-qprize small { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-qprize b { margin-top: 5px; font-size: 20px; }
+.saw-qprize span { margin-top: 3px; font-size: 13px; color: var(--saw-text-muted); }
+
+.saw-qcard { padding: 22px 18px; border-radius: 20px; border: 1.5px solid var(--saw-surface); background: #fff; }
+.saw-qtop { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.saw-qtop .saw-question { margin: 0; min-width: 0; font-size: 22px; line-height: 1.25; font-weight: 800; color: var(--saw-text); }
+
+/* The per-question countdown ring: a faint full track and an arc that starts
+   at 12 o'clock and empties; the script sets the arc's dash offset every frame. */
+.saw-qtimer { position: relative; width: 62px; height: 62px; flex: 0 0 auto; }
+.saw-qtimer svg { display: block; }
+.saw-qtimer__track { fill: none; stroke: var(--saw-surface); stroke-width: 5; }
 .saw-qtimer__fill {
-	fill: none; stroke: var(--saw-level, var(--saw-brand)); stroke-width: 4; stroke-linecap: round;
-	stroke-dasharray: 119.4; /* 2 * PI * r(19) */
-	stroke-dashoffset: calc(119.4 - (119.4 * var(--saw-qtimer-pct, 100) / 100));
-	transition: stroke-dashoffset 1s linear, stroke .25s ease;
+	fill: none; stroke: var(--saw-level, var(--saw-brand)); stroke-width: 5; stroke-linecap: round;
+	stroke-dasharray: 163.4;
+	transition: stroke .3s ease;
 }
 .saw-qtimer.is-urgent .saw-qtimer__fill { stroke: var(--saw-danger); }
 .saw-qtimer.is-spent .saw-qtimer__fill { stroke: var(--saw-text-muted); }
@@ -1986,13 +2481,11 @@ onUnmounted( () => {
 	font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--saw-text);
 }
 
-.saw-play .saw-question { margin: 0 0 18px; font-size: 21px; line-height: 1.35; font-weight: 700; color: var(--saw-text); }
-
 /* Single column, click-to-answer: no separate Submit step (see selectOption()
    in the script) — picking an option is answering it. */
-.saw-answers { display: flex; flex-direction: column; gap: 12px; }
+.saw-answers { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .saw-answer {
-	display: block; width: 100%; text-align: left; padding: 16px 18px;
+	display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; text-align: left; padding: 8px 18px;
 	background: var(--saw-tint, #fcf4ec); border: 1.5px solid var(--saw-control, var(--saw-surface));
 	border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--saw-text); cursor: pointer;
 	transition: border-color .12s, background .12s, box-shadow .12s, opacity .12s;
@@ -2007,90 +2500,154 @@ onUnmounted( () => {
 .saw-answer.is-selected { border-color: var(--saw-brand); box-shadow: 0 0 0 1px var(--saw-brand); }
 .saw-answer.is-correct { background: var(--saw-ok); border-color: var(--saw-ok); color: #fff; }
 .saw-answer.is-wrong { background: var(--saw-danger); border-color: var(--saw-danger); color: #fff; opacity: 1; }
-.saw-play .is-revealing .saw-answer:not(.is-correct):not(.is-wrong) { opacity: .55; }
-
-/* The reveal's outcome line — replaces the old Submit/Next button chrome. The
-   whole banner doubles as the "next question" control (click anywhere on it),
-   with the countdown that was in .saw-next-count now printed inline. */
-.saw-banked {
-	margin-top: 14px; padding: 14px 16px; border-radius: 12px;
-	background: color-mix(in srgb, var(--saw-ok) 12%, #fff); color: var(--saw-ok);
-	font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+.saw-answer em {
+	flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--saw-surface);
+	display: inline-flex; align-items: center; justify-content: center;
+	font-size: 13px; font-style: normal; font-weight: 800; color: var(--saw-text-muted);
 }
-.saw-banked.is-zero { background: var(--saw-tint, #fcf4ec); color: var(--saw-text-muted); }
+.saw-answer.is-correct em,
+.saw-answer.is-wrong em { border-color: currentColor; color: inherit; }
+.saw-qmain.is-revealing .saw-answer:not(.is-correct):not(.is-wrong) { opacity: .55; }
+
+/* The reveal's outcome line, then the Next button. Empty but kept in place
+   while a question shows, so the reveal does not move the page. */
+.saw-qfb {
+	min-height: 22px; align-self: center; text-align: center; padding: 7px 16px;
+	border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1.4;
+}
+.saw-qfb.is-good { color: var(--saw-ok); background: var(--saw-ok-soft); }
+.saw-qfb.is-bad { color: var(--saw-danger); background: var(--saw-danger-soft); }
 .saw-banked__next {
+	align-self: center; min-height: 44px; padding: 0 8px;
 	border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800;
 	text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap;
 }
 .saw-banked__next:disabled { opacity: .5; cursor: default; }
 
-/* ---- results (28 / 29) ----------------------------------------------- */
-.saw-results { width: 100%; max-width: 560px; margin: 0 auto; text-align: center; }
-.saw-results__eyebrow { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--saw-text-muted); }
-.saw-results__title { margin: 0 0 8px; font-size: 26px; font-weight: 800; color: var(--saw-text); }
-.saw-results__subtitle { margin: 0 0 22px; color: var(--saw-text-muted); font-size: 15px; }
-
-.saw-results__card {
-	text-align: left; padding: 22px 24px; margin-bottom: 18px;
-	background: var(--saw-card, #fffaf4); border-radius: 18px;
-	box-shadow: 0 16px 40px -22px color-mix(in srgb, var(--saw-brand) 30%, transparent);
-}
-.saw-results__row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-.saw-results__label { font-size: 13px; color: var(--saw-text-muted); }
-.saw-results__value { font-size: 15px; font-weight: 800; color: var(--saw-text); }
-.saw-results__value--big { font-size: 26px; color: var(--saw-ok); }
-.saw-results__value--big.is-zero { color: var(--saw-text); }
-
-.saw-results__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
-.saw-chip {
-	min-width: 34px; padding: 5px 8px; border-radius: 8px; text-align: center;
-	font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
-}
-.saw-chip.is-correct { background: color-mix(in srgb, var(--saw-ok) 14%, #fff); color: var(--saw-ok); }
-.saw-chip.is-wrong { background: color-mix(in srgb, var(--saw-danger) 12%, #fff); color: var(--saw-danger); }
-.saw-chip.is-timeout { background: var(--saw-tint, #fcf4ec); color: var(--saw-text-muted); }
-
-.saw-results__divider { height: 1px; background: var(--saw-rule, var(--saw-surface)); margin: 16px 0; }
+/* ---- results ------------------------------------------------------------ */
+/* Neutral layout only: the theme decides the look. */
+.saw-results { box-sizing: border-box; width: 100%; max-width: 620px; margin: 0 auto; padding: 24px 20px; text-align: center; }
+.saw-results__kicker { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-results__headline { margin: 4px 0 0; font-size: 16px; font-weight: 800; color: var(--saw-text); }
+.saw-results__name { margin: 4px 0 0; font-size: 15px; font-weight: 800; color: var(--saw-text); }
+.saw-results__stats { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.saw-results__stat { display: flex; flex-direction: column; gap: 3px; padding: 14px 12px; border-radius: 18px; border: 1px solid var(--saw-surface); }
+.saw-results__stat small { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--saw-text-muted); }
+.saw-results__stat b { font-size: 40px; line-height: 1; font-weight: 900; color: var(--saw-text); font-variant-numeric: tabular-nums; }
+.saw-results__stat b i { font-style: normal; font-size: .5em; color: var(--saw-text-muted); margin-left: 2px; }
+.saw-results__stat span { font-size: 12.5px; color: var(--saw-text-muted); }
+.saw-results__stat--tickets b { color: var(--saw-brand); }
+.saw-results__stat--tickets.is-zero b { color: var(--saw-text-muted); }
+.saw-results__chips { margin: 18px auto 0; max-width: 380px; }
+.saw-results .saw-minting, .saw-results .saw-mint-error { margin: 18px 0 0; }
+.saw-results__draw { margin-top: 18px; padding: 14px; border-radius: 16px; border: 1px solid var(--saw-surface); font-size: 14px; line-height: 1.5; }
+.saw-results__draw b { font-size: 16px; }
+.saw-results__drawsub { margin-top: 6px; }
+.saw-results__drawline { margin: 12px 0 0; font-size: 13px; color: var(--saw-text-muted); }
+.saw-results__entries, .saw-results__fine { margin-top: 16px; text-align: left; }
+.saw-results__label { margin: 0; font-size: 13px; color: var(--saw-text-muted); }
 .saw-results__numbers { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 8px; }
-.saw-numchip {
-	padding: 6px 12px; border-radius: 999px; background: var(--saw-tint, #fcf4ec);
-	border: 1px solid var(--saw-control, var(--saw-surface)); font-size: 13px; font-weight: 700; color: var(--saw-text);
-}
-.saw-numchip--more {
-	color: var(--saw-brand); border-color: transparent; background: transparent;
-	font: inherit; cursor: pointer;
-}
+.saw-numchip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--saw-surface); font-size: 13px; font-weight: 700; color: var(--saw-text); }
+.saw-numchip--more { color: var(--saw-brand); border-color: transparent; background: transparent; font: inherit; cursor: pointer; }
 .saw-results__note { margin: 0; font-size: 12px; color: var(--saw-text-muted); }
 .saw-results__fineprint { margin: 0; font-size: 13px; line-height: 1.6; color: var(--saw-text); }
 .saw-results__fineprint--muted { color: var(--saw-text-muted); margin-top: 4px; }
+.saw-results .saw-runs-left { margin: 12px 0 0; }
 
-.saw-results__actions { display: flex; flex-direction: column; gap: 10px; }
-.saw-results__primary {
-	display: block; padding: 15px; border-radius: 12px; text-align: center;
-	background: var(--saw-brand); color: #fff; font-weight: 700; font-size: 15px; text-decoration: none;
-}
-@media (hover: hover) and (pointer: fine) {
-	.saw-results__primary:hover { background: color-mix(in srgb, var(--saw-brand) 90%, #000); color: #fff; }
-}
+.saw-results__actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+.saw-results__ctawrap { display: block; }
+.saw-results__primary,
 .saw-results__secondary {
-	display: block; padding: 15px; border-radius: 12px; text-align: center;
-	background: #fff; color: var(--saw-text); font-weight: 700; font-size: 15px; text-decoration: none;
-	border: 1.5px solid var(--saw-surface);
+	box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+	min-height: 52px; padding: 0 24px; border-radius: 12px; text-align: center;
+	font-weight: 800; font-size: 15px; text-decoration: none;
 }
-@media (hover: hover) and (pointer: fine) {
-	.saw-results__secondary:hover { border-color: var(--saw-brand); color: var(--saw-brand); }
-}
+.saw-results__primary { background: var(--saw-brand); color: #fff; }
+.saw-results__secondary { border: 1.5px solid currentColor; color: var(--saw-text); }
+.saw-results__secondary.is-primary { border-width: 2px; }
+.saw-results__back { align-self: center; min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 14px; color: var(--saw-text-muted); text-decoration: underline; }
 
 @media (max-width: 480px) {
 	.saw-langcard { padding: 32px 20px; }
 	.saw-langcard__options { flex-direction: column; }
-	.saw-qbody { padding: 18px 16px 20px; }
-	.saw-results__card { padding: 18px; }
 }
 </style>
 
 <style>
 body.saw-quiz-dialog-open { overflow: hidden; }
+/* Share my score: neutral layout only; a theme supplies the look. */
+.saw-results__share {
+	box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	min-height: 46px; padding: 0 16px; border-radius: 999px;
+	border: 1px solid #d0d5dd; background: #fff; color: #0d0d1b;
+	font: inherit; font-weight: 700; cursor: pointer;
+}
+.saw-sharesheet {
+	position: fixed; inset: 0; z-index: 100050;
+	display: flex; align-items: center; justify-content: center; padding: 12px;
+}
+.saw-sharesheet__backdrop {
+	position: absolute; inset: 0; margin: 0; padding: 0; border: 0;
+	background: rgba(13, 13, 27, 0.55); cursor: default;
+}
+.saw-sharesheet__panel {
+	position: relative; box-sizing: border-box; width: calc(100% - 24px); max-width: 420px;
+	max-height: calc(100dvh - 24px); overflow: auto;
+	padding: 16px 16px 18px; border-radius: 20px; background: #fff; color: #0d0d1b;
+}
+@media (min-width: 700px) { .saw-sharesheet__panel { max-width: 440px; } }
+.saw-sharesheet__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.saw-sharesheet__title { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; }
+.saw-sharesheet__sub { font-size: 12.5px; line-height: 1.3; }
+.saw-sharesheet__close {
+	position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center;
+	width: 44px; height: 44px; padding: 0; border-radius: 50%;
+	border: 1px solid #d0d5dd; background: #fff; color: inherit; cursor: pointer;
+}
+.saw-sharesheet__prev { margin-top: 12px; display: flex; justify-content: center; }
+.saw-sharesheet__card {
+	position: relative; box-sizing: border-box; container-type: inline-size;
+	width: min(100%, calc((100dvh - 250px) * 9 / 16), 300px); aspect-ratio: 9 / 16;
+	border-radius: 22px; overflow: hidden; background: #1f2433; color: #fff;
+}
+.saw-sharesheet__glow { position: absolute; inset: auto -20% 38% auto; width: 80%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; }
+.saw-sharesheet__amp { position: absolute; right: -14cqw; top: 6cqw; font-size: 118cqw; line-height: 1; opacity: 0.06; transform: rotate(-7deg); pointer-events: none; user-select: none; }
+.saw-sharesheet__in { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 7cqw 7cqw 6cqw; }
+.saw-sharesheet__top { display: flex; justify-content: space-between; align-items: center; gap: 3cqw; }
+.saw-sharesheet__logo { display: block; max-width: 45%; height: auto; max-height: 9cqw; font-size: 4.6cqw; font-weight: 900; line-height: 1; }
+.saw-sharesheet__kicker { font-size: 2.7cqw; font-weight: 800; line-height: 1; text-transform: uppercase; padding: 1.6cqw 2.8cqw; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.3); }
+.saw-sharesheet__mid { margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
+.saw-sharesheet__label { font-size: 3.2cqw; font-weight: 800; text-transform: uppercase; }
+.saw-sharesheet__score { margin-top: 2.4cqw; font-size: 40cqw; font-weight: 900; line-height: 0.86; }
+.saw-sharesheet__score span { font-size: 0.36em; margin-left: 1cqw; }
+.saw-sharesheet__bars { margin-top: 5cqw; width: 100%; display: grid; grid-template-columns: repeat(10, 1fr); gap: 1.4cqw; }
+.saw-sharesheet__bar { height: 2.6cqw; border-radius: 99px; background: rgba(255, 255, 255, 0.2); }
+.saw-sharesheet__bar.is-correct { background: #fff; }
+.saw-sharesheet__tix { margin-top: 4.4cqw; font-size: 4.2cqw; line-height: 1.2; }
+.saw-sharesheet__prize { margin-top: 6cqw; display: flex; align-items: center; gap: 3.4cqw; padding: 3.2cqw; border-radius: 5cqw; border: 1px solid rgba(255, 255, 255, 0.2); }
+.saw-sharesheet__photo { flex: none; width: 13cqw; height: 13cqw; }
+.saw-sharesheet__photo img { width: 100%; height: 100%; object-fit: contain; }
+.saw-sharesheet__prize small, .saw-sharesheet__prize b, .saw-sharesheet__prize span { display: block; }
+.saw-sharesheet__prize small { font-size: 2.5cqw; text-transform: uppercase; }
+.saw-sharesheet__prize b { margin-top: 0.6cqw; font-size: 4.2cqw; line-height: 1.15; }
+.saw-sharesheet__prize span { margin-top: 0.4cqw; font-size: 3.2cqw; }
+.saw-sharesheet__ch { margin-top: 7cqw; font-size: 7.4cqw; font-weight: 900; line-height: 1.02; text-transform: uppercase; }
+.saw-sharesheet__foot { margin-top: 6cqw; padding-top: 4cqw; border-top: 1px solid rgba(255, 255, 255, 0.2); display: flex; justify-content: space-between; align-items: flex-end; gap: 3cqw; }
+.saw-sharesheet__foot span, .saw-sharesheet__foot b { display: block; }
+.saw-sharesheet__foot span { font-size: 2.9cqw; }
+.saw-sharesheet__foot b { margin-top: 0.6cqw; font-size: 4.6cqw; line-height: 1; }
+.saw-sharesheet__foot em { font-size: 2.4cqw; font-style: normal; text-align: right; max-width: 40%; }
+.saw-sharesheet__error, .saw-sharesheet__status { margin: 14px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.saw-sharesheet__error { padding: 12px 14px; border-radius: 12px; border: 1px solid #dc2626; }
+.saw-sharesheet__acts { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+.saw-sharesheet__gowrap { display: block; }
+.saw-sharesheet__go, .saw-sharesheet__copy {
+	box-sizing: border-box; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	min-height: 46px; padding: 0 16px; border-radius: 999px;
+	border: 1px solid #d0d5dd; background: #fff; color: #0d0d1b;
+	font: inherit; font-weight: 700; cursor: pointer;
+}
+.saw-sharesheet__go { border-color: #0d0d1b; background: #0d0d1b; color: #fff; }
 body.saw-quiz-takeover .saw-hero,
 body.saw-quiz-takeover .saw-spec,
 body.saw-quiz-takeover .saw-result-teaser,

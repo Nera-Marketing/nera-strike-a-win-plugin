@@ -116,9 +116,10 @@ class Nera_SAW_Competition_Spec {
 			'market_value'     => isset( $config['market_value'] ) && '' !== $config['market_value'] ? (float) $config['market_value'] : 0.0,
 			'cash_alternative' => isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : '',
 			'stock'            => self::stock( $competition_id ),
-			'timer'            => self::timer( $config ),
+			'timer'            => self::timer(),
 			'quiz'             => self::quiz( $config, $competition_id ),
 			'tiers'            => self::tiers( $config, $competition_id ),
+			'is_free'          => Nera_SAW_Competition_Config::is_free( $competition_id ),
 		);
 
 		$spec = array_merge( $spec, self::dates( $competition_id ) );
@@ -234,14 +235,11 @@ class Nera_SAW_Competition_Spec {
 	/**
 	 * Timer: seconds per question, and when the countdown turns red.
 	 *
-	 * @param array $config Competition config.
 	 * @return array
 	 */
-	private static function timer( array $config ) {
+	private static function timer() {
 		return array(
-			'seconds'   => (int) Nera_SAW_Constants::clamp_timer(
-				isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-			),
+			'seconds'   => (int) Nera_SAW_Constants::timer_seconds(),
 			'red_below' => (int) Nera_SAW_Constants::timer_warn_seconds(),
 		);
 	}
@@ -327,7 +325,8 @@ class Nera_SAW_Competition_Spec {
 
 			$out[] = array(
 				'key'         => $key,
-				'label'       => (string) $tier['label'],
+				// Shared English tier names ("Standard", "Premium") shown in the visitor's language.
+				'label'       => Nera_SAW_I18n::t( (string) $tier['label'] ),
 				'price'       => (float) $tier['price'],
 				'multiplier'  => (int) $tier['multiplier'],
 				'status'      => isset( $status['status'] ) ? (string) $status['status'] : 'green',

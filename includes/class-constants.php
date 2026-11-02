@@ -29,6 +29,7 @@ class Nera_SAW_Constants {
 	 * ------------------------------------------------------------------- */
 	const TIMER_MIN_SECONDS = 5;  // Default working min (seeds settings).
 	const TIMER_MAX_SECONDS = 12; // Default working max (seeds settings).
+	const TIMER_DEFAULT_SECONDS = 12; // Default global per-question timer (seeds settings).
 
 	/**
 	 * @deprecated No longer used as a fence; retained so older references do not fatals.
@@ -180,7 +181,11 @@ class Nera_SAW_Constants {
 			'timer_min'          => self::TIMER_MIN_SECONDS,
 			'timer_max'          => self::TIMER_MAX_SECONDS,
 			'timer_warn_seconds' => 3,
+			// Per-question timer every competition uses (read via timer_seconds()).
+			'timer_seconds'      => self::TIMER_DEFAULT_SECONDS,
 			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
+			// Manual "Next question" button during the answer reveal. Off: the hold runs out by itself.
+			'reveal_next_button' => false,
 			// The site's name as players see it (Nera_SAW_Brand). One place, not typed into templates.
 			'brand_name'         => 'Strike And Win',
 			// Wallet top-up limits (Nera_SAW_Wallet). Provisional until the client
@@ -191,6 +196,10 @@ class Nera_SAW_Constants {
 			// provider is agreed -- and whether the coupon prompt does.
 			'checkout_gateways'                => array( 'wallet' ),
 			'checkout_show_coupon'             => false,
+			// Optional blocks on the quiz results screen (keys of result_blocks()).
+			'result_display'                   => array( 'draw_line' ),
+			// Days a shared result link stays live (Nera_SAW_Share::days()); the draw ends it sooner.
+			'share_link_days'                  => 30,
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),
@@ -262,6 +271,61 @@ class Nera_SAW_Constants {
 	}
 
 	/**
+	 * Optional blocks of the quiz results screen, key => admin label.
+	 *
+	 * @return array
+	 */
+	public static function result_blocks() {
+		return array(
+			'draw_line'     => __( 'Draw line: "Your tickets are entered in this prize draw" with the live draw date', 'nera-strikeawin' ),
+			'entry_numbers' => __( 'Entry numbers: the ticket numbers this run earned, with the numbering note', 'nera-strikeawin' ),
+			'fine_print'    => __( 'Fine print: the draw date and how the draw works', 'nera-strikeawin' ),
+			'runs_left'     => __( 'Runs left: how many runs the player still has on this competition', 'nera-strikeawin' ),
+		);
+	}
+
+	/**
+	 * Keep only known result block keys, in their canonical order.
+	 *
+	 * @param mixed $value Posted or stored list.
+	 * @return string[]
+	 */
+	public static function sanitize_result_display( $value ) {
+		$keys = is_array( $value ) ? array_map( 'strval', $value ) : array();
+		return array_values( array_intersect( array_keys( self::result_blocks() ), $keys ) );
+	}
+
+	/**
+	 * Which optional blocks the results screen shows: the global list, or the
+	 * competition's own list when it has one.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global).
+	 * @return string[]
+	 */
+	public static function result_display( $competition_id = 0 ) {
+		$s      = self::settings();
+		$global = self::sanitize_result_display( isset( $s['result_display'] ) ? $s['result_display'] : array() );
+		$value  = $global;
+
+		$competition_id = (int) $competition_id;
+		if ( $competition_id > 0 ) {
+			$config = Nera_SAW_Competition_Config::get( $competition_id );
+			if ( isset( $config['result_display'] ) && is_array( $config['result_display'] ) ) {
+				$value = self::sanitize_result_display( $config['result_display'] );
+			}
+		}
+
+		/**
+		 * Filter the results screen's optional blocks.
+		 *
+		 * @param string[] $value          Block keys.
+		 * @param int      $competition_id Competition product ID (0 = global).
+		 * @param string[] $global         The global list, before any override.
+		 */
+		return self::sanitize_result_display( apply_filters( 'nera_saw_result_display', $value, $competition_id, $global ) );
+	}
+
+	/**
 	 * Global settings (option-backed, merged over defaults).
 	 *
 	 * @return array
@@ -315,6 +379,24 @@ class Nera_SAW_Constants {
 		$s = self::settings();
 		$v = isset( $s['feedback_seconds'] ) ? (int) $s['feedback_seconds'] : self::FEEDBACK_SECONDS_DEFAULT;
 		return max( self::FEEDBACK_SECONDS_MIN, min( self::FEEDBACK_SECONDS_MAX, $v ) );
+	}
+
+	/**
+	 * Whether the player sees a Next button during the answer reveal (global
+	 * setting, off by default). Off: the reveal hold always runs its full length.
+	 *
+	 * @return bool
+	 */
+	public static function reveal_next_button() {
+		$s = self::settings();
+		$v = ! empty( $s['reveal_next_button'] );
+
+		/**
+		 * Filter whether the reveal shows a Next button.
+		 *
+		 * @param bool $v Value from Settings.
+		 */
+		return (bool) apply_filters( 'nera_saw_reveal_next_button', $v );
 	}
 
 	/**
@@ -521,6 +603,24 @@ class Nera_SAW_Constants {
 		$seconds = max( self::timer_min(), $seconds );
 		$seconds = min( self::timer_max(), $seconds );
 		return $seconds;
+	}
+
+	/**
+	 * The per-question timer every competition uses (Settings), clamped to the
+	 * working window. Site-wide only: competitions have no timer of their own.
+	 *
+	 * @return int Seconds.
+	 */
+	public static function timer_seconds() {
+		$s = self::settings();
+		$v = isset( $s['timer_seconds'] ) && is_numeric( $s['timer_seconds'] ) ? (int) $s['timer_seconds'] : self::TIMER_DEFAULT_SECONDS;
+
+		/**
+		 * Filter the per-question timer (seconds, clamped afterwards).
+		 *
+		 * @param int $v Seconds from Settings.
+		 */
+		return self::clamp_timer( apply_filters( 'nera_saw_timer_seconds', $v ) );
 	}
 
 	/**

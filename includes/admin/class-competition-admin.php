@@ -68,6 +68,11 @@ class Nera_SAW_Competition_Admin {
 				// Hidden invalid controls (e.g. min=1, value=0) block WooCommerce product save.
 				\$whole.find(':input').prop('disabled', !isWhole);
 			}
+			function syncFree(){
+				$('.saw-field-live-draw').toggle($('#saw_is_free').is(':checked'));
+			}
+			$(document).on('change', '#saw_is_free', syncFree);
+			$(function(){ syncFree(); });
 			$(document).on('change', '#saw_quiz_type', sync);
 			$(function(){ sync(); });
 
@@ -115,16 +120,22 @@ class Nera_SAW_Competition_Admin {
 					<span class="description"><?php esc_html_e( 'Players earn this competition\'s LFW tickets only by answering quiz questions correctly (Section 9). Ticket stock and draw date come from the Lottery product settings.', 'nera-strikeawin' ); ?></span>
 				</p>
 				<p class="form-field">
+					<label for="saw_is_free"><?php esc_html_e( 'Free competition', 'nera-strikeawin' ); ?></label>
+					<input type="checkbox" class="checkbox" name="saw_is_free" id="saw_is_free" value="1" <?php checked( Nera_SAW_Competition_Config::is_free( $product_id ), true ); ?> />
+					<span class="description"><?php esc_html_e( 'Entered by one free quiz per person, never bought: it cannot be added to the basket, is left out of the paid lists and has its own page (Free).', 'nera-strikeawin' ); ?></span>
+				</p>
+				<?php $saw_live_draw = Nera_SAW_Free::live_draw_date( $product_id ); ?>
+				<p class="form-field saw-field-live-draw">
+					<label for="saw_live_draw_date"><?php esc_html_e( 'Live draw date', 'nera-strikeawin' ); ?></label>
+					<input type="datetime-local" name="saw_live_draw_date" id="saw_live_draw_date" value="<?php echo esc_attr( $saw_live_draw ? wp_date( 'Y-m-d\\TH:i', $saw_live_draw ) : '' ); ?>" />
+					<span class="description"><?php esc_html_e( 'Free competitions only, in site time. Leave empty while the draw date is not set: the Free page then says it is to be confirmed.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<p class="form-field">
 					<label for="saw_quiz_type"><?php esc_html_e( 'Quiz type', 'nera-strikeawin' ); ?></label>
 					<select id="saw_quiz_type" name="saw_quiz_type" class="select short" style="width:180px">
 						<option value="per_question" <?php selected( $config['quiz_type'], 'per_question' ); ?>><?php esc_html_e( 'Timeout per question', 'nera-strikeawin' ); ?></option>
 						<?php /* Type 2 (whole-quiz period) is built but withheld from live use pending Lewis sign-off. */ ?>
 					</select>
-				</p>
-				<p class="form-field saw-field-per-question">
-					<label for="saw_timer"><?php esc_html_e( 'Per-question timer (s)', 'nera-strikeawin' ); ?></label>
-					<input type="number" name="saw_timer" id="saw_timer" class="short" style="width:90px" min="<?php echo (int) Nera_SAW_Constants::timer_min(); ?>" max="<?php echo (int) Nera_SAW_Constants::timer_max(); ?>" value="<?php echo (int) $config['timer_seconds']; ?>" />
-					<span class="description"><?php echo esc_html( sprintf( __( 'Allowed window %1$d–%2$ds (set in Strike And Win → Settings).', 'nera-strikeawin' ), Nera_SAW_Constants::timer_min(), Nera_SAW_Constants::timer_max() ) ); ?></span>
 				</p>
 				<p class="form-field saw-field-whole-period" style="display:none">
 					<label for="saw_total_time"><?php esc_html_e( 'Total time (minutes)', 'nera-strikeawin' ); ?></label>
@@ -215,6 +226,41 @@ class Nera_SAW_Competition_Admin {
 						<?php endforeach; ?>
 					</select>
 					<span class="description"><?php esc_html_e( 'Ladder runs the levels in stages, easy to hard, and the competition page shows a stage for each. Random mixes them across the run, so there are no stages to show — only how many questions come from each level.', 'nera-strikeawin' ); ?></span>
+				</p>
+				<?php
+				// Result screen blocks: inherit the global list, or this
+				// competition's own (which may be none ticked).
+				$saw_result_own    = isset( $config['result_display'] ) && is_array( $config['result_display'] );
+				$saw_result_global = Nera_SAW_Constants::result_display();
+				$saw_result_blocks = Nera_SAW_Constants::result_blocks();
+				$saw_result_list   = $saw_result_own ? $config['result_display'] : $saw_result_global;
+				$saw_result_names  = $saw_result_global;
+				?>
+				<fieldset class="form-field saw-result-display">
+					<legend><?php esc_html_e( 'Result screen', 'nera-strikeawin' ); ?></legend>
+					<label style="display:block;margin:0 0 4px"><input type="radio" name="saw_result_display_mode" value="inherit" <?php checked( ! $saw_result_own ); ?> />
+						<?php
+						/* translators: %s: comma-separated block keys of the global setting, or "none". */
+						echo esc_html( sprintf( __( 'Inherit global (%s)', 'nera-strikeawin' ), $saw_result_names ? implode( ', ', $saw_result_names ) : __( 'none', 'nera-strikeawin' ) ) );
+						?>
+					</label>
+					<label style="display:block;margin:0 0 4px"><input type="radio" name="saw_result_display_mode" value="own" <?php checked( $saw_result_own ); ?> /> <?php esc_html_e( 'Use this competition\'s own choice:', 'nera-strikeawin' ); ?></label>
+					<?php foreach ( $saw_result_blocks as $saw_block => $saw_block_label ) : ?>
+						<label style="display:block;margin:0 0 4px 24px"><input type="checkbox" name="saw_result_display[]" value="<?php echo esc_attr( $saw_block ); ?>" <?php checked( in_array( $saw_block, $saw_result_list, true ) ); ?> /> <?php echo esc_html( $saw_block_label ); ?></label>
+					<?php endforeach; ?>
+					<span class="description"><?php esc_html_e( 'Optional blocks on the screen a player sees after a run. The boxes apply only with this competition\'s own choice.', 'nera-strikeawin' ); ?></span>
+				</fieldset>
+				<p class="form-field">
+					<label for="saw_share_link_days"><?php esc_html_e( 'Share link days', 'nera-strikeawin' ); ?></label>
+					<input type="number" min="1" step="1" name="saw_share_link_days" id="saw_share_link_days" class="short" style="width:120px"
+						value="<?php echo esc_attr( isset( $config['share_link_days'] ) ? $config['share_link_days'] : '' ); ?>"
+						placeholder="<?php echo esc_attr( (string) Nera_SAW_Share::days() ); ?>" />
+					<span class="description">
+						<?php
+						/* translators: %d: the global number of days. */
+						echo esc_html( sprintf( __( 'How long a shared result link works. Leave empty to inherit the global setting (%d days). The draw ends every link sooner.', 'nera-strikeawin' ), (int) Nera_SAW_Share::days() ) );
+						?>
+					</span>
 				</p>
 			</div>
 
@@ -454,9 +500,23 @@ class Nera_SAW_Competition_Admin {
 
 		// If our field wasn't present at all (non-lottery product), do nothing.
 		if ( ! isset( $_POST['saw_quiz_type'] ) && ! isset( $_POST['saw_quiz_enabled'] ) && ! isset( $_POST['saw_dist'] )
-			&& ! isset( $_POST['saw_draw_closed'] ) && ! isset( $_POST['saw_prize'] )
+			&& ! isset( $_POST['saw_draw_closed'] ) && ! isset( $_POST['saw_prize'] ) && ! isset( $_POST['saw_is_free'] )
 		) {
 			return;
+		}
+
+		// Free or paid: independent of the quiz switch below, so it is saved either way.
+		if ( ! empty( $_POST['saw_is_free'] ) ) {
+			update_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE, '1' );
+		} else {
+			delete_post_meta( $post_id, Nera_SAW_Competition_Config::META_IS_FREE );
+		}
+
+		// The live draw date belongs to free competitions only; a paid draw follows the Lottery end date.
+		if ( empty( $_POST['saw_is_free'] ) ) {
+			delete_post_meta( $post_id, Nera_SAW_Free::META_LIVE_DRAW );
+		} elseif ( isset( $_POST['saw_live_draw_date'] ) ) {
+			Nera_SAW_Free::save_live_draw_date( $post_id, sanitize_text_field( wp_unslash( $_POST['saw_live_draw_date'] ) ) );
 		}
 
 		$existing    = Nera_SAW_Competition_Config::get( $post_id );
@@ -514,7 +574,10 @@ class Nera_SAW_Competition_Admin {
 			'quiz_method'    => Nera_SAW_Mode::sanitize_quiz_method_override(
 				isset( $_POST['saw_quiz_method'] ) ? wp_unslash( $_POST['saw_quiz_method'] ) : Nera_SAW_Mode::INHERIT
 			),
-			'timer_seconds'  => isset( $_POST['saw_timer'] ) ? (int) $_POST['saw_timer'] : Nera_SAW_Constants::timer_max(),
+			'result_display' => ( isset( $_POST['saw_result_display_mode'] ) && 'own' === $_POST['saw_result_display_mode'] )
+				? Nera_SAW_Constants::sanitize_result_display( isset( $_POST['saw_result_display'] ) ? (array) wp_unslash( $_POST['saw_result_display'] ) : array() )
+				: '',
+			'share_link_days' => isset( $_POST['saw_share_link_days'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_share_link_days'] ) ) : '',
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
 			'level_rewards'  => $rewards,

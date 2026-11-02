@@ -461,7 +461,7 @@ class Nera_SAW_Standalone_Fields {
 			'saw_pp_consent_age'   => array(
 				'key'     => 'field_nera_saw_pp_consent_age',
 				'scope'   => 'before-you-pay',
-				'default' => __( 'I am over 18 and agree to the terms and conditions.', 'nera-strikeawin' ),
+				'default' => __( 'I am 18 or over and accept the terms and conditions and the competition rules.', 'nera-strikeawin' ),
 				'seed'    => true,
 				'fill'    => 'empty',
 			),
@@ -1309,19 +1309,11 @@ class Nera_SAW_Standalone_Fields {
 					),
 					array(
 						'key'          => 'field_nera_saw_pp_consent_age',
-						'label'        => __( 'First checkbox', 'nera-strikeawin' ),
+						'label'        => __( 'Consent checkbox', 'nera-strikeawin' ),
 						'name'         => 'saw_pp_consent_age',
 						'type'         => 'text',
 						'placeholder'  => self::default_for( 'saw_pp_consent_age' ),
-						'instructions' => __( 'Both boxes are required by the browser itself, so the button cannot be used until they are ticked. Clearing the text does not remove the box.', 'nera-strikeawin' ),
-					),
-					array(
-						'key'          => 'field_nera_saw_pp_consent_rules',
-						'label'        => __( 'Second checkbox', 'nera-strikeawin' ),
-						'name'         => 'saw_pp_consent_rules',
-						'type'         => 'text',
-						'placeholder'  => self::default_for( 'saw_pp_consent_rules' ),
-						'instructions' => __( 'Basic HTML is allowed, so the word “rules” can be a link to your terms.', 'nera-strikeawin' ),
+						'instructions' => __( 'One box covering age, the terms and the competition rules. It must be ticked before the button can be used, and the checkout checks it again. Clearing the text does not remove the box. Basic HTML is allowed, so the word “rules” can be a link to your terms.', 'nera-strikeawin' ),
 					),
 					array(
 						'key'   => 'field_nera_saw_pp_button_tab',

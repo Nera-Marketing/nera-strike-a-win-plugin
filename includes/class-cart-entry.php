@@ -354,7 +354,7 @@ class Nera_SAW_Cart_Entry {
 		return sprintf(
 			/* translators: 1: tier label, 2: formatted price. Result e.g. "Gold - £5.00 / run". */
 			__( '%1$s to %2$s / run', 'nera-strikeawin' ),
-			(string) $tier['label'],
+			Nera_SAW_I18n::t( (string) $tier['label'] ),
 			$price_text
 		);
 	}
@@ -371,7 +371,7 @@ class Nera_SAW_Cart_Entry {
 			? wc_price( $price )
 			: esc_html( number_format_i18n( $price, 2 ) );
 
-		return esc_html( (string) $tier['label'] ) . ' - ' . $price_html . esc_html__( ' / run', 'nera-strikeawin' );
+		return esc_html( Nera_SAW_I18n::t( (string) $tier['label'] ) ) . ' - ' . $price_html . esc_html__( ' / run', 'nera-strikeawin' );
 	}
 
 	/**

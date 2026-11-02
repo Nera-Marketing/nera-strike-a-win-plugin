@@ -88,6 +88,12 @@ class Nera_SAW_Ticket_Award {
 		if ( $count < 1 ) {
 			return array();
 		}
+		// A free run has no order: its tickets are minted straight onto the competition.
+		if ( (int) $order_id < 1 ) {
+			return null !== Nera_SAW_Run_Grants::free_grant( (int) $user_id, (int) $competition_id )
+				? self::award_free( (int) $competition_id, (int) $user_id, $count )
+				: array();
+		}
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			return array();
@@ -214,6 +220,86 @@ class Nera_SAW_Ticket_Award {
 		do_action( 'nera_saw_tickets_awarded', $order_id, $competition_id, $user_id, $picked );
 
 		self::sync_order_line_tickets( (int) $order_id, (int) $competition_id );
+
+		return array_map( 'strval', $picked );
+	}
+
+	/**
+	 * Mint a free run's tickets: no order and no order line, so the tickets are
+	 * created directly as confirmed (`lty_ticket_buyer`) LTY tickets on the
+	 * competition, with LTY's own ticket meta and `lty_order_id` 0. They count,
+	 * list and draw like any other ticket of that competition; the run's slots keep
+	 * the numbers. No LTY confirmation email fires (it needs an order).
+	 *
+	 * @param int $competition_id Free competition ID.
+	 * @param int $user_id        User ID.
+	 * @param int $count          Earned ticket count.
+	 * @return string[] Minted ticket numbers (empty on failure).
+	 */
+	private static function award_free( $competition_id, $user_id, $count ) {
+		$product = wc_get_product( $competition_id );
+		$user    = get_user_by( 'id', $user_id );
+		if ( ! $user || ! $product || ! function_exists( 'lty_is_lottery_product' ) || ! lty_is_lottery_product( $product ) || ! function_exists( 'lty_create_new_lottery_ticket' ) ) {
+			return array();
+		}
+
+		$lock_token = self::acquire_mint_lock( $competition_id );
+		if ( false === $lock_token ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf( 'Ticket mint lock busy for competition #%d — proceeding unlocked.', (int) $competition_id ),
+				array( 'competition_id' => (int) $competition_id, 'order_id' => 0, 'user_id' => (int) $user_id )
+			);
+		}
+
+		$picked = array();
+		try {
+			$picked = self::pick_numbers( $product, $count );
+			foreach ( $picked as $number ) {
+				lty_create_new_lottery_ticket(
+					array(
+						'lty_user_id'       => (int) $user->ID,
+						'lty_product_id'    => (int) $product->get_id(),
+						'lty_amount'        => 0,
+						'lty_user_name'     => $user->user_login,
+						'lty_user_email'    => $user->user_email,
+						'lty_currency'      => get_woocommerce_currency(),
+						'lty_order_id'      => 0,
+						'lty_answer'        => '',
+						'lty_answers'       => array(),
+						'lty_valid_answer'  => 'no',
+						'lty_ip_address'    => '',
+						'lty_list_count'    => $product->get_lty_list_count(),
+						'lty_ticket_number' => (string) $number,
+					),
+					array(
+						'post_parent' => $product->get_lottery_id(),
+						'post_status' => 'lty_ticket_buyer',
+					)
+				);
+			}
+			if ( $picked ) {
+				// LTY's confirm raises this counter per ticket and its delete lowers it.
+				$product->update_post_meta( 'lty_ticket_count', (int) $product->get_lty_ticket_count() + count( $picked ) );
+			}
+		} finally {
+			if ( false !== $lock_token ) {
+				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
+			}
+		}
+
+		if ( empty( $picked ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[nera-strikeawin] Ticket award: no available numbers for #' . (int) $competition_id );
+			}
+			return array();
+		}
+		if ( class_exists( 'LTY_Transient_Handler' ) ) {
+			LTY_Transient_Handler::delete_all_transients( $competition_id, $user_id );
+		}
+
+		/** This action is documented in award(). */
+		do_action( 'nera_saw_tickets_awarded', 0, $competition_id, $user_id, $picked );
 
 		return array_map( 'strval', $picked );
 	}

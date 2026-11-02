@@ -92,9 +92,13 @@ class Nera_SAW_Settings_Admin {
 			$timer_max = $timer_min;
 		}
 		$timer_warn = max( 1, min( $timer_max, $timer_warn ) );
+		$timer_seconds = isset( $_POST['timer_seconds'] ) && is_numeric( $_POST['timer_seconds'] ) ? (int) $_POST['timer_seconds'] : Nera_SAW_Constants::TIMER_DEFAULT_SECONDS;
+		$timer_seconds = max( $timer_min, min( $timer_max, $timer_seconds ) );
 
 		$feedback_seconds = isset( $_POST['feedback_seconds'] ) ? (int) $_POST['feedback_seconds'] : Nera_SAW_Constants::FEEDBACK_SECONDS_DEFAULT;
 		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
+		// An unticked checkbox posts nothing: that is off.
+		$reveal_next_button = ! empty( $_POST['reveal_next_button'] );
 
 		$brand_name = isset( $_POST['brand_name'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['brand_name'] ) ) ) : '';
 		if ( '' === $brand_name ) {
@@ -111,6 +115,10 @@ class Nera_SAW_Settings_Admin {
 			$checkout_gateways = array( 'wallet' );
 		}
 		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
+
+		// Whole days, at least one; blank or nonsense falls back to the default.
+		$share_link_days = isset( $_POST['share_link_days'] ) ? (int) $_POST['share_link_days'] : Nera_SAW_Share::DEFAULT_DAYS;
+		$share_link_days = $share_link_days >= 1 ? $share_link_days : Nera_SAW_Share::DEFAULT_DAYS;
 
 		$tiers = array();
 		foreach ( (array) ( $_POST['tier'] ?? array() ) as $row ) {
@@ -143,12 +151,17 @@ class Nera_SAW_Settings_Admin {
 				'timer_min'          => $timer_min,
 				'timer_max'          => $timer_max,
 				'timer_warn_seconds' => $timer_warn,
+				'timer_seconds'      => $timer_seconds,
 				'feedback_seconds'   => $feedback_seconds,
+				'reveal_next_button' => $reveal_next_button,
 				'brand_name'                       => $brand_name,
 				'wallet_topup_max_per_transaction' => $wallet_per_txn,
 				'wallet_topup_max_per_day'         => $wallet_per_day,
 				'checkout_gateways'                => $checkout_gateways,
 				'checkout_show_coupon'             => $checkout_coupon,
+				// Unticking every box posts nothing: that is an empty list, not the default.
+				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
+				'share_link_days'                  => $share_link_days,
 				'tiers'              => $tiers,
 			)
 		);
@@ -350,9 +363,16 @@ class Nera_SAW_Settings_Admin {
 
 		// --- Timer bounds card ---------------------------------------------
 		echo '<div class="saw-card">';
-		echo '<h2 class="saw-card__head">' . esc_html__( 'Per-question timer bounds', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'The window each competition\'s per-question timer may be set within. Minimum is at least 1 second; maximum must be greater than or equal to the minimum.', 'nera-strikeawin' ) . '</p>';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Per-question timer', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'The time a player has for each question. Every competition uses it. It is kept within the window below: minimum is at least 1 second; maximum must be greater than or equal to the minimum.', 'nera-strikeawin' ) . '</p>';
 		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="timer_seconds" min="%d" max="%d" value="%d"></label>',
+			esc_html__( 'Seconds per question', 'nera-strikeawin' ),
+			(int) Nera_SAW_Constants::timer_min(),
+			(int) Nera_SAW_Constants::timer_max(),
+			(int) Nera_SAW_Constants::timer_seconds()
+		);
 		printf(
 			'<label class="saw-field"><span>%s</span><input type="number" name="timer_min" min="1" value="%d"></label>',
 			esc_html__( 'Minimum (s)', 'nera-strikeawin' ),
@@ -437,7 +457,12 @@ class Nera_SAW_Settings_Admin {
 		// --- Answer reveal card --------------------------------------------
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Answer reveal', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated. The player can skip the wait with the Next button.', 'nera-strikeawin' ) . '</p>';
+		$reveal_next = Nera_SAW_Constants::reveal_next_button();
+		echo '<p class="saw-muted">' . esc_html__( 'After a player submits an answer, the question is held on screen with the correct option highlighted green, a wrong pick red, and the ticket total updated.', 'nera-strikeawin' ) . ' '
+			. ( $reveal_next
+				? esc_html__( 'The player can skip the wait with the Next button.', 'nera-strikeawin' )
+				: esc_html__( 'The next question follows by itself when the hold ends.', 'nera-strikeawin' ) )
+			. '</p>';
 		// The on/off switch lives with the other feature flags on the demo page; this
 		// card owns only the duration. If the reveal is not appearing, that switch is
 		// the first thing to check.
@@ -458,7 +483,40 @@ class Nera_SAW_Settings_Admin {
 			(int) Nera_SAW_Constants::feedback_seconds()
 		);
 		echo '</div>';
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="reveal_next_button" value="1"%1$s> <span>%2$s</span></label>',
+			checked( $reveal_next, true, false ),
+			esc_html__( 'Show the Next button during the answer reveal', 'nera-strikeawin' )
+		);
 		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
+		echo '</div>';
+
+		// --- Share link card -----------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Shared result links', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'A player can share a link to a finished run\'s result. The link stops working after this many days, or once the competition is drawn, whichever comes first. Each competition can set its own number on its Strike And Win tab.', 'nera-strikeawin' ) . '</p>';
+		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="share_link_days" min="1" step="1" value="%d"></label>',
+			esc_html__( 'Link lives for (days)', 'nera-strikeawin' ),
+			(int) Nera_SAW_Share::days()
+		);
+		echo '</div>';
+		echo '</div>';
+
+		// --- Result screen card --------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Result screen', 'nera-strikeawin' ) . '</h2>';
+		echo '<p class="saw-muted">' . esc_html__( 'Optional blocks on the screen a player sees after a run. The score, tickets earned, the per-question bar, the draw box and the actions always show. Each competition can use its own choice on its Strike And Win tab.', 'nera-strikeawin' ) . '</p>';
+		$result_on = Nera_SAW_Constants::result_display();
+		foreach ( Nera_SAW_Constants::result_blocks() as $block => $block_label ) {
+			printf(
+				'<label class="saw-field saw-field--check"><input type="checkbox" name="result_display[]" value="%1$s"%2$s> <span>%3$s</span></label>',
+				esc_attr( $block ),
+				checked( in_array( $block, $result_on, true ), true, false ),
+				esc_html( $block_label )
+			);
+		}
 		echo '</div>';
 
 		// --- Global tiers card ---------------------------------------------

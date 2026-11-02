@@ -47,6 +47,13 @@ class Nera_SAW_Router {
 	const OPTION_FLUSH = 'nera_saw_flush_rules';
 
 	/**
+	 * Bumped when add_rules() gains a rule, so sites flush once without a visit to
+	 * Permalinks (see maybe_flush_rules()).
+	 */
+	const REWRITE_VERSION_OPTION = 'nera_saw_router_rewrite_version';
+	const REWRITE_VERSION        = 1;
+
+	/**
 	 * Default prefix: none. The section owns the site root, so its pages live at
 	 * /how-it-works/, /checkout/ and so on, not under a sub-path. A site that does
 	 * want a prefix can still set one in the option below, but the pages then need
@@ -73,6 +80,7 @@ class Nera_SAW_Router {
 		add_action( 'init', array( __CLASS__, 'redirect_legacy_prefix' ), 1 );
 		add_action( 'init', array( __CLASS__, 'add_rules' ) );
 		add_action( 'wp', array( __CLASS__, 'maybe_flush' ) );
+		add_action( 'wp_loaded', array( __CLASS__, 'maybe_flush_rules' ) );
 		add_filter( 'template_include', array( __CLASS__, 'template' ), 99 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_filter( 'nera_saw_standalone_competition_url', array( __CLASS__, 'competition_url' ), 10, 2 );
@@ -309,6 +317,20 @@ class Nera_SAW_Router {
 			'top'
 		);
 
+		// A shared result: /r/<token>/ (see Nera_SAW_Share).
+		add_rewrite_rule(
+			'^' . $prefix . 'r/([A-Za-z0-9_-]+)/?$',
+			'index.php?' . self::QV_ROUTE . '=share&' . self::QV_ARG . '=$matches[1]',
+			'top'
+		);
+
+		// The free sign-up steps under the Free page: /free/join/, /free/verify/.
+		add_rewrite_rule(
+			'^' . self::free_base() . '/(join|verify)/?$',
+			'index.php?' . self::QV_ROUTE . '=free-$matches[1]',
+			'top'
+		);
+
 		/*
 		 * No rule for the section root. It is a real page now, and claiming its URL
 		 * here would shadow the page an administrator is editing -- they would save
@@ -328,6 +350,34 @@ class Nera_SAW_Router {
 		}
 		delete_option( self::OPTION_FLUSH );
 		flush_rewrite_rules( false );
+	}
+
+	/**
+	 * Flush once when this file's rules change (REWRITE_VERSION).
+	 */
+	public static function maybe_flush_rules() {
+		if ( (int) get_option( self::REWRITE_VERSION_OPTION, 0 ) >= self::REWRITE_VERSION ) {
+			return;
+		}
+		update_option( self::REWRITE_VERSION_OPTION, self::REWRITE_VERSION );
+		flush_rewrite_rules( false );
+	}
+
+	/**
+	 * The Free page's path as a rule pattern, with the section prefix ('free' when
+	 * the page is missing). A page change asks for a flush, so the rule follows it.
+	 *
+	 * @return string
+	 */
+	private static function free_base() {
+		$id     = class_exists( 'Nera_SAW_Standalone_Pages' ) ? Nera_SAW_Standalone_Pages::page_id( 'free' ) : 0;
+		$uri    = $id ? trim( (string) get_page_uri( $id ), '/' ) : '';
+		$uri    = '' !== $uri ? $uri : 'free';
+		$prefix = self::prefix();
+		if ( '' !== $prefix && 0 !== strpos( $uri, $prefix . '/' ) ) {
+			$uri = $prefix . '/' . $uri;
+		}
+		return implode( '/', array_map( static function ( $part ) { return preg_quote( $part, '#' ); }, explode( '/', $uri ) ) );
 	}
 
 	/**
@@ -552,6 +602,9 @@ class Nera_SAW_Router {
 			array(
 				'competitions' => 'competitions.php',
 				'competition'  => 'competition.php',
+				'share'        => 'share.php',
+				'free-join'    => 'free-join.php',
+				'free-verify'  => 'free-verify.php',
 			)
 		);
 	}
