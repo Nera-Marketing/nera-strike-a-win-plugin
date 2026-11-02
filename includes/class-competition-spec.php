@@ -119,6 +119,7 @@ class Nera_SAW_Competition_Spec {
 			'timer'            => self::timer(),
 			'quiz'             => self::quiz( $config, $competition_id ),
 			'tiers'            => self::tiers( $config, $competition_id ),
+			'is_free'          => Nera_SAW_Competition_Config::is_free( $competition_id ),
 		);
 
 		$spec = array_merge( $spec, self::dates( $competition_id ) );

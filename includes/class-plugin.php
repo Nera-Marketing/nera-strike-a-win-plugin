@@ -96,6 +96,8 @@ class Nera_SAW_Plugin {
 		require_once $dir . 'class-frontend.php';
 		require_once $dir . 'class-product-frontend.php';
 		require_once $dir . 'class-cart-entry.php';
+		require_once $dir . 'class-free.php';
+		require_once $dir . 'class-free-signup.php';
 		require_once $dir . 'class-order-cta.php';
 		require_once $dir . 'class-integrations.php';
 		require_once $dir . 'class-seed-image.php';
@@ -148,6 +150,8 @@ class Nera_SAW_Plugin {
 
 		// Fixed-price tier entry (cart) + platform integrations (STW/LFW suppression).
 		Nera_SAW_Cart_Entry::init();
+		Nera_SAW_Free::init();
+		Nera_SAW_Free_Signup::init();
 		Nera_SAW_Order_Cta::init();
 		Nera_SAW_Integrations::init();
 		Nera_SAW_Catalogue_Isolation::init();
