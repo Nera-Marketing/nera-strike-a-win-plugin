@@ -235,19 +235,9 @@ class Nera_SAW_Free {
 		if ( ! Nera_SAW_Competition_Config::is_competition( $competition_id ) || ! Nera_SAW_Competition_Config::is_free( $competition_id ) || 'publish' !== get_post_status( $competition_id ) ) {
 			return $fail( 'closed' );
 		}
-		$existing = Nera_SAW_Run_Grants::free_grant( $user_id, $competition_id );
-		if ( $existing ) {
-			// Starting a run consumes the grant's single unit; until then it is unplayed.
-			if ( 'active' === $existing->status && (int) $existing->consumed < (int) $existing->qty ) {
-				return (int) $existing->id;
-			}
-			return $fail( 'used' );
-		}
-		$phone = (string) get_user_meta( $user_id, Nera_SAW_Free_Signup::META_PHONE, true );
-		if ( Nera_SAW_Run_Grants::free_phone_used( $phone, $competition_id, $user_id ) ) {
-			return $fail( 'phone_used' );
-		}
 
+		// Ahead of the resume below: a returning player must not start a run that
+		// cannot finish before the competition closes.
 		$config = Nera_SAW_Competition_Config::get( $competition_id );
 		$end    = (string) get_post_meta( $competition_id, '_lty_end_date_gmt', true );
 		if ( '' !== $end ) {
@@ -259,6 +249,19 @@ class Nera_SAW_Free {
 			if ( $closes - time() < $window ) {
 				return $fail( 'closing' );
 			}
+		}
+
+		$existing = Nera_SAW_Run_Grants::free_grant( $user_id, $competition_id );
+		if ( $existing ) {
+			// Starting a run consumes the grant's single unit; until then it is unplayed.
+			if ( 'active' === $existing->status && (int) $existing->consumed < (int) $existing->qty ) {
+				return (int) $existing->id;
+			}
+			return $fail( 'used' );
+		}
+		$phone = (string) get_user_meta( $user_id, Nera_SAW_Free_Signup::META_PHONE, true );
+		if ( Nera_SAW_Run_Grants::free_phone_used( $phone, $competition_id, $user_id ) ) {
+			return $fail( 'phone_used' );
 		}
 
 		$tier = self::tier( $config );
