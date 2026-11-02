@@ -1149,14 +1149,72 @@ class Nera_SAW_Run {
 			return self::collect_run_ticket_numbers( $run_id );
 		}
 
-		$numbers = Nera_SAW_Ticket_Award::award( (int) $run->order_id, (int) $run->competition_id, (int) $run->user_id, $spins, (string) $run->tier_key );
-		$picked  = is_array( $numbers ) ? $numbers : array();
-		self::allocate_numbers_to_slots( $run_id, $picked );
-		Nera_SAW_Ticket_Award::prune_orphan_tickets_for_order( (int) $run->order_id, (int) $run->competition_id );
-		Nera_SAW_Integrations::sync_public_sold_count( (int) $run->competition_id );
-		self::maybe_close_competition( $run );
+		/*
+		 * Two completions of the same run (a double request, a retry, the stale-run
+		 * sweeper next to the client) can both pass the check above before either
+		 * has allocated its numbers. Mint under a per-run lock and check again
+		 * inside it, so a run's tickets are minted at most once.
+		 */
+		if ( ! self::acquire_run_mint_lock( $run_id ) ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf( 'Run mint lock busy for run #%d — another completion is minting it.', (int) $run_id ),
+				array( 'run_id' => (int) $run_id, 'competition_id' => (int) $run->competition_id, 'user_id' => (int) $run->user_id )
+			);
+			return self::collect_run_ticket_numbers( $run_id );
+		}
+
+		try {
+			if ( self::tickets_minted_for_run( $run_id ) ) {
+				return self::collect_run_ticket_numbers( $run_id );
+			}
+
+			$numbers = Nera_SAW_Ticket_Award::award( (int) $run->order_id, (int) $run->competition_id, (int) $run->user_id, $spins, (string) $run->tier_key, (int) $run_id );
+			$picked  = is_array( $numbers ) ? $numbers : array();
+			self::allocate_numbers_to_slots( $run_id, $picked );
+			Nera_SAW_Ticket_Award::prune_orphan_tickets_for_order( (int) $run->order_id, (int) $run->competition_id );
+			Nera_SAW_Integrations::sync_public_sold_count( (int) $run->competition_id );
+			self::maybe_close_competition( $run );
+		} finally {
+			self::release_run_mint_lock( $run_id );
+		}
 
 		return self::collect_run_ticket_numbers( $run_id );
+	}
+
+	/**
+	 * Name of the database lock that serialises minting for one run. MySQL
+	 * named locks are server-wide, so the name carries the site's database and
+	 * table prefix (and stays within the 64-character limit).
+	 *
+	 * @param int $run_id Run ID.
+	 * @return string
+	 */
+	private static function run_mint_lock_name( $run_id ) {
+		global $wpdb;
+		return 'saw_mint_' . md5( DB_NAME . '|' . $wpdb->prefix ) . '_' . (int) $run_id;
+	}
+
+	/**
+	 * Take the per-run mint lock, waiting up to 15 seconds for a concurrent
+	 * completion of the same run to finish.
+	 *
+	 * @param int $run_id Run ID.
+	 * @return bool Whether the lock is held.
+	 */
+	private static function acquire_run_mint_lock( $run_id ) {
+		global $wpdb;
+		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::run_mint_lock_name( $run_id ), 15 ) );
+	}
+
+	/**
+	 * Release the per-run mint lock.
+	 *
+	 * @param int $run_id Run ID.
+	 */
+	private static function release_run_mint_lock( $run_id ) {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::run_mint_lock_name( $run_id ) ) );
 	}
 
 	/**
