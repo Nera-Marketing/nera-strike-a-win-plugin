@@ -61,6 +61,28 @@ class Nera_SAW_Wallet {
 		add_action( 'woocommerce_customer_reset_password', array( __CLASS__, 'clear_password_nag' ), 10, 1 );
 		add_action( 'woocommerce_save_account_details', array( __CLASS__, 'after_account_details_saved' ), 10, 1 );
 		add_filter( 'get_user_option_default_password_nag', array( __CLASS__, 'nag_only_on_account_details' ), 10, 3 );
+
+		// 4. The transaction history's dates.
+		add_filter( 'woo_wallet_transactons_datatable_row_data', array( __CLASS__, 'transaction_date' ), 10, 2 );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * 4. The transaction history's dates
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Print each history row's date in the section's one date format.
+	 *
+	 * @param array  $row         Row data for the wallet's transaction table.
+	 * @param object $transaction Transaction row (`date` in site time).
+	 * @return array
+	 */
+	public static function transaction_date( $row, $transaction ) {
+		$date = isset( $transaction->date ) ? wc_string_to_datetime( $transaction->date ) : null;
+		if ( is_array( $row ) && $date ) {
+			$row['date'] = Nera_SAW_Date::display( $date->getTimestamp() );
+		}
+		return $row;
 	}
 
 	/* ---------------------------------------------------------------------

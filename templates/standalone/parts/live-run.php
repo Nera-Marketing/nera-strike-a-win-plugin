@@ -76,7 +76,7 @@ if ( 'closed' === $saw_lr_state ) {
 		__( 'Pick up where you left off. It is held for you until %s.', 'nera-strikeawin' ),
 		// `until` is the stored site-local wall clock read as UTC (the run table's own
 		// convention), so it is printed in UTC to show that same wall clock.
-		wp_date( 'ru' === Nera_SAW_Language::current() ? 'H:i' : get_option( 'time_format' ), (int) $saw_lr['until'], new DateTimeZone( 'UTC' ) )
+		Nera_SAW_Date::clock( (int) $saw_lr['until'], new DateTimeZone( 'UTC' ) )
 	);
 } else {
 	$saw_lr_title = __( 'Run in progress', 'nera-strikeawin' );

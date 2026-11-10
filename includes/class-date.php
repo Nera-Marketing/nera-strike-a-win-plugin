@@ -72,7 +72,7 @@ class Nera_SAW_Date {
 	const MONTHS_SHORT_RU   = array( 1 => 'янв', 2 => 'фев', 3 => 'мар', 4 => 'апр', 5 => 'мая', 6 => 'июн', 7 => 'июл', 8 => 'авг', 9 => 'сен', 10 => 'окт', 11 => 'ноя', 12 => 'дек' );
 
 	/**
-	 * THE date format of the section: "Sun 14 Sep, 9:00pm" (the design's), on every
+	 * THE date format of the section: "Sun 14 Sep, 21:00 UK" (the design's), on every
 	 * screen that shows a date -- the cards, the competition page, Before you pay,
 	 * Play, My account, the results screen and the quiz app. One function so the
 	 * two formats the client found (card "Thu 29 Oct, 2am", page "October 29,
@@ -98,7 +98,47 @@ class Nera_SAW_Date {
 			);
 		}
 
-		return wp_date( 'D j M, g:ia', $timestamp );
+		return self::with_zone( wp_date( 'D j M, H:i', $timestamp ) );
+	}
+
+	/**
+	 * A time of day alone, 24-hour, in the same shape as display(): "21:00 UK"
+	 * in English, "21:00" in Russian.
+	 *
+	 * @param int|false         $timestamp Unix timestamp, or falsy for an empty result.
+	 * @param DateTimeZone|null $timezone  Zone to print the time in; the site's by default.
+	 * @return string
+	 */
+	public static function clock( $timestamp, $timezone = null ) {
+		if ( ! $timestamp ) {
+			return '';
+		}
+
+		return self::with_zone( wp_date( 'H:i', $timestamp, $timezone ) );
+	}
+
+	/**
+	 * The time zone label printed after an English time ("UK"); '' in Russian,
+	 * whose screens add their own note. Filter `nera_saw_date_zone_label`.
+	 *
+	 * @return string
+	 */
+	public static function zone_label() {
+		$ru = class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current();
+
+		return trim( (string) apply_filters( 'nera_saw_date_zone_label', $ru ? '' : 'UK', $ru ? 'ru' : 'en' ) );
+	}
+
+	/**
+	 * Append the zone label to a formatted time.
+	 *
+	 * @param string $time Formatted date and/or time.
+	 * @return string
+	 */
+	private static function with_zone( $time ) {
+		$label = self::zone_label();
+
+		return '' === $label ? $time : $time . ' ' . $label;
 	}
 
 	/**

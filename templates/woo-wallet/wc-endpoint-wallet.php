@@ -39,7 +39,7 @@
  * KEEPING THIS IN STEP WITH WOO-WALLET'S OWN FILE
  * ------------------------------------------------
  * Every line below is an unmodified copy of woo-wallet's own template
- * except the one marked "RUSSIAN OVERRIDE". A future woo-wallet update
+ * except the two marked "RUSSIAN OVERRIDE" and "DATE OVERRIDE". A future woo-wallet update
  * that changes this file will not reach a Russian request until this copy
  * is updated to match — accepted deliberately, the same trade-off
  * `Nera_SAW_Standalone_Chrome::unoverride_template()`'s own docblock
@@ -186,7 +186,7 @@ if ( ! function_exists( 'is_wallet_tab_active' ) ) {
 						<tbody>
 							<?php foreach ( $transactions as $transaction ) : ?>
 								<tr>
-									<td data-label="<?php esc_attr_e( 'Date', 'woo-wallet' ); ?>"><?php echo esc_html( wc_string_to_datetime( $transaction->date )->date_i18n( wc_date_format() ) ); ?></td>
+									<td data-label="<?php esc_attr_e( 'Date', 'woo-wallet' ); ?>"><?php echo esc_html( Nera_SAW_Date::display( wc_string_to_datetime( $transaction->date )->getTimestamp() ) ); /* DATE OVERRIDE: was `date_i18n( wc_date_format() )`, the section's one date format instead. */ ?></td>
 									<td data-label="<?php esc_attr_e( 'Description', 'woo-wallet' ); ?>"><?php echo wp_kses_post( Nera_SAW_Language::translate_wallet_transaction_details( $transaction->details ) ); /* RUSSIAN OVERRIDE: was `wp_kses_post( $transaction->details )` — see this file's own docblock. */ ?></td>
 									<td class="amount <?php echo esc_attr( $transaction->type ); ?>" data-label="<?php esc_attr_e( 'Amount', 'woo-wallet' ); ?>">
 										<?php
