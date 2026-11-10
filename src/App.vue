@@ -238,6 +238,7 @@ const runsRemainingTier = ref( null );
 const tierLabel = ref( '' );
 const slotResults = ref( [] ); // [{ slot_no, outcome, spins_awarded }] — the results chip row.
 const drawDate = ref( '' );
+const drawCloses = ref( '' );
 const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
 const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
 const nextRunTotal = ref( 0 );
@@ -1736,6 +1737,7 @@ async function fetchRunComplete() {
 		tierLabel.value = summary.tier_label || summary.tier_key || '';
 		slotResults.value = Array.isArray( summary.slot_results ) ? summary.slot_results : [];
 		drawDate.value = summary.draw_date || '';
+		drawCloses.value = summary.draw_closes || '';
 		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
@@ -2070,7 +2072,7 @@ onUnmounted( () => {
 				</p>
 				<template v-else>
 					<p class="saw-results__fineprint">{{ t('noEntryNote', 'No tickets were earned, so there is no entry in this draw, and no refund is due.') }}</p>
-					<p v-if="drawDate" class="saw-results__fineprint saw-results__fineprint--muted">{{ fmt('drawClosesPrefix', 'The draw closes %s.', drawDate) }}</p>
+					<p v-if="drawCloses" class="saw-results__fineprint saw-results__fineprint--muted">{{ fmt('drawClosesPrefix', 'The draw closes %s.', drawCloses) }}</p>
 				</template>
 			</div>
 

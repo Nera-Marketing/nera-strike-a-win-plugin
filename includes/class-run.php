@@ -1261,16 +1261,14 @@ class Nera_SAW_Run {
 			// The player's tickets on this competition after this run, for the results
 			// screen's draw box (minting above has already run).
 			'tickets_in_draw'       => self::tickets_in_draw( (int) $user_id, (int) $run->competition_id ),
-			// The results screen's "Draw: <date>" line. Reused from the standalone
-			// result-overlay clone rather than re-implemented — one place reads the
-			// LFW product's end date, in both modes.
-			// A free run's draw line reads the competition's own live draw date,
-			// '' while it is not set (the app shows "to be confirmed").
-			'draw_date'             => $is_free
-				? Nera_SAW_Free::live_draw_text( (int) $run->competition_id )
-				: ( class_exists( 'Nera_SAW_Standalone_Result_Screen' )
-					? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
-					: '' ),
+			// The live draw date: a free competition's own live draw date, '' while it is
+			// not set. Paid competitions have no draw date (their end date is when entries
+			// close), so the app shows "to be confirmed".
+			'draw_date'             => $is_free ? Nera_SAW_Free::live_draw_text( (int) $run->competition_id ) : '',
+			// When entries close, for copy that is about closing ("The draw closes …").
+			'draw_closes'           => ! $is_free && class_exists( 'Nera_SAW_Standalone_Result_Screen' )
+				? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
+				: '',
 			'is_free'               => $is_free,
 		) + self::purchase_position( $run ) + self::next_run_position( (int) $user_id, $run );
 	}
