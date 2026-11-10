@@ -104,6 +104,7 @@ class Nera_SAW_Language {
 
 		if ( class_exists( 'Nera_SAW_Mode' ) && Nera_SAW_Mode::is_standalone() ) {
 			add_filter( 'user_trailingslashit', array( __CLASS__, 'carry_current_language' ), 10, 1 );
+			add_filter( 'woocommerce_get_endpoint_url', array( __CLASS__, 'merge_endpoint_query' ), 20, 1 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
@@ -2373,6 +2374,36 @@ class Nera_SAW_Language {
 		}
 
 		return add_query_arg( self::SWITCH_ARG, $lang, $url );
+	}
+
+	/**
+	 * Fold a second query string into the first on an account endpoint URL.
+	 *
+	 * WooCommerce runs the bare endpoint path through `user_trailingslashit`,
+	 * where carry_current_language() adds the language argument, and then
+	 * appends the permalink's own query (which already holds it) after a
+	 * second `?`. Merging the parts leaves each argument once.
+	 *
+	 * @param string $url Endpoint URL.
+	 * @return string
+	 */
+	public static function merge_endpoint_query( $url ) {
+		if ( substr_count( (string) $url, '?' ) < 2 ) {
+			return $url;
+		}
+
+		$fragment = '';
+		$hash     = strpos( $url, '#' );
+		if ( false !== $hash ) {
+			$fragment = substr( $url, $hash );
+			$url      = substr( $url, 0, $hash );
+		}
+
+		$parts = explode( '?', $url );
+		$base  = array_shift( $parts );
+		parse_str( implode( '&', $parts ), $args );
+
+		return add_query_arg( urlencode_deep( $args ), $base ) . $fragment;
 	}
 
 	/**
