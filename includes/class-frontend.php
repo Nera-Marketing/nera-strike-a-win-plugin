@@ -308,7 +308,7 @@ class Nera_SAW_Frontend {
 				'seeResults'         => __( 'See my results', 'nera-strikeawin' ),
 				// Screen-reader-only announcements for the Answer reveal (the visual
 				// reveal is colour alone, which assistive tech cannot convey).
-				'revealCorrect'      => __( 'Correct. %d tickets earned.', 'nera-strikeawin' ),
+				'revealCorrect'      => Nera_SAW_I18n::n_template( 'Correct. %d ticket earned.', 'Correct. %d tickets earned.' ),
 				'revealWrong'        => __( 'Wrong. The correct answer was: %s', 'nera-strikeawin' ),
 				'revealTimeout'      => __( 'Time up, no answer counted. The correct answer was: %s', 'nera-strikeawin' ),
 				'revealWrongBare'    => __( 'Wrong. No tickets.', 'nera-strikeawin' ),

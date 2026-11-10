@@ -814,7 +814,7 @@ const revealAnnouncement = computed( () => {
 		return '';
 	}
 	if ( lastResult.correct ) {
-		return t( 'revealCorrect', 'Correct. %d tickets earned.' ).replace( '%d', String( lastResult.spins_awarded ) );
+		return fmt( 'revealCorrect', 'Correct. %d ticket earned.|Correct. %d tickets earned.', lastResult.spins_awarded );
 	}
 	const answer = correctAnswerText.value;
 	if ( lastResult.timed_out ) {
