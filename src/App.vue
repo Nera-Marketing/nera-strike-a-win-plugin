@@ -178,16 +178,14 @@ const competition = ( window.NeraSAW && window.NeraSAW.competition ) || {};
 // resumed run or "End run" may arrive without a tier prop).
 const tierKey = ref( props.tier || '' );
 
-// "Quiz n of N · Premium ×10": n is this run's place among the runs the same
+// "Quiz n of N · Gold": n is this run's place among the runs the same
 // purchase bought for this tier, N how many it bought (also "Quiz 1 of 1").
-// The multiplier is only shown above 1.
 const quizOfLabel = computed( () => {
 	const tiers = competition.tiers && 'object' === typeof competition.tiers ? competition.tiers : {};
 	const tier = tiers[ tierKey.value ] || null;
 	const label = tier ? tier.label : tierKey.value;
-	const mult = tier ? Number( tier.multiplier ) || 1 : 1;
 	const head = fmt( 'quizOf', 'Quiz {n} of {total}', runIndex.value, runTotal.value );
-	return label ? head + ' · ' + label + ( mult > 1 ? ' ×' + mult : '' ) : head;
+	return label ? head + ' · ' + label : head;
 } );
 
 // Pre-run stage count, seeded before the language-choice screen
@@ -2018,7 +2016,7 @@ onUnmounted( () => {
 			<template v-else>
 			<p class="saw-results__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
 			<p class="saw-results__headline">{{ resultsHeadline }}</p>
-			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}</p>
+			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}<span v-if="tierLabel" class="saw-results__tier"> · {{ tierLabel }}</span></p>
 
 			<div class="saw-results__stats">
 				<div class="saw-results__stat">
