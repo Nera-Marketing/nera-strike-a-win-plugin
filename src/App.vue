@@ -693,10 +693,8 @@ function flyTicket( option, before, gain ) {
 
 // Tickets earned counts up from 0 over about a second; at once with reduced motion.
 let countFrame = 0;
-let countTarget = null;
 function countUpTickets( to ) {
 	cancelAnimationFrame( countFrame );
-	countTarget = to || 0;
 	if ( ! to || prefersReducedMotion() ) {
 		shownTickets.value = to || 0;
 		return;
@@ -1742,10 +1740,7 @@ async function fetchRunComplete() {
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
-		// The count started from the run's own tally; only a different confirmed total restarts it.
-		if ( countTarget !== finalSpins.value ) {
-			countUpTickets( finalSpins.value );
-		}
+		countUpTickets( finalSpins.value );
 	} catch ( e ) {
 		ticketsError.value = e && e.message ? e.message : t( 'ticketsMintError', 'We could not add your tickets right now.' );
 	} finally {
@@ -1759,8 +1754,6 @@ async function toEnd() {
 	quizSessionActive = false;
 	breadcrumb.clear( props.competitionId );
 	releaseNavigationGuard();
-	// Counts up from the run's own tally while the tickets are minted.
-	countUpTickets( finalSpins.value );
 	phase.value = 'end';
 	await fetchRunComplete();
 }
@@ -1933,16 +1926,18 @@ onUnmounted( () => {
 			<template v-if="isFree">
 				<section class="saw-fres__win">
 					<p class="saw-fres__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
+					<template v-if="summaryReady">
 					<div class="saw-fres__score" :aria-label="t('freeScore', 'Your score') + ': ' + correctCount + '/' + shareTotal"><b>{{ correctCount }}</b><span>/{{ shareTotal }}</span></div>
 					<p class="saw-fres__verdict">{{ resultsHeadline }}</p>
 					<div class="saw-fres__dots" aria-hidden="true">
 						<i v-for="r in slotResults" :key="r.slot_no" :class="{ 'is-ok': 'correct' === r.outcome }"></i>
 					</div>
-					<p v-if="summaryReady && ! hasTickets" class="saw-fres__none">{{ t('freeNone', 'No quiz tickets this time, so no draw entries were added.') }}</p>
-					<div v-else-if="hasTickets" class="saw-fres__tix">
+					<p v-if="! hasTickets" class="saw-fres__none">{{ t('freeNone', 'No quiz tickets this time, so no draw entries were added.') }}</p>
+					<div v-else class="saw-fres__tix">
 						<div class="saw-fres__tixl"><small>{{ t('freeTickets', 'Tickets earned') }}</small><b><span>+</span><span>{{ formatCount( shownTickets ) }}</span></b></div>
-						<div v-if="summaryReady" class="saw-fres__added"><span class="saw-fres__ck" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10" /></svg></span>{{ t('freeAdded', 'Added to your account') }}</div>
+						<div class="saw-fres__added"><span class="saw-fres__ck" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10" /></svg></span>{{ t('freeAdded', 'Added to your account') }}</div>
 					</div>
+					</template>
 					<p v-if="summaryReady" class="saw-fres__draw">{{ freeDrawLine }}</p>
 				</section>
 
@@ -2015,9 +2010,10 @@ onUnmounted( () => {
 			</template>
 			<template v-else>
 			<p class="saw-results__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
-			<p class="saw-results__headline">{{ resultsHeadline }}</p>
+			<p v-if="summaryReady" class="saw-results__headline">{{ resultsHeadline }}</p>
 			<p v-if="competition.name" class="saw-results__name">{{ competition.name }}<span v-if="tierLabel" class="saw-results__tier"> · {{ tierLabel }}</span></p>
 
+			<template v-if="summaryReady">
 			<div class="saw-results__stats">
 				<div class="saw-results__stat">
 					<small>{{ t('scoreLabel', 'Score') }}</small>
@@ -2034,6 +2030,7 @@ onUnmounted( () => {
 			<div v-if="resultChips.length" class="saw-qlad saw-results__chips" aria-hidden="true">
 				<i v-for="c in resultChips" :key="c.key" :class="'is-' + c.kind">{{ c.text }}</i>
 			</div>
+			</template>
 
 			<div v-if="ticketsLoading" class="saw-minting" role="status" aria-live="polite">
 				<span class="saw-spinner" aria-hidden="true"></span>
@@ -2043,7 +2040,7 @@ onUnmounted( () => {
 				<p>{{ ticketsError }}</p>
 				<button type="button" class="saw-btn saw-btn-ghost" @click="fetchRunComplete">{{ t('retryTickets', 'Try again') }}</button>
 			</div>
-			<template v-else>
+			<template v-else-if="summaryReady">
 				<div v-if="hasTickets" class="saw-results__draw">
 					<div>{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div>
 				</div>
