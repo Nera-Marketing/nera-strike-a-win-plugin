@@ -605,8 +605,15 @@ class Nera_SAW_Standalone_Basket {
 			return array();
 		}
 
-		$labels = array();
-		foreach ( WC()->payment_gateways->get_available_payment_gateways() as $gateway ) {
+		// Matched on id: the section checkout offers only these gateways, but its filter
+		// does not run on this screen.
+		$enabled = Nera_SAW_Checkout::enabled_gateways();
+		$labels  = array();
+		foreach ( WC()->payment_gateways->get_available_payment_gateways() as $id => $gateway ) {
+			if ( ! in_array( $id, $enabled, true ) ) {
+				continue;
+			}
+
 			$title = self::plain_label( $gateway->get_title() );
 
 			if ( '' === $title ) {
