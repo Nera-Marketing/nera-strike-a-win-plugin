@@ -109,6 +109,10 @@ class Nera_SAW_Language {
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'woocommerce_order_details_status', array( __CLASS__, 'translate_order_status_sentence' ), 10, 2 );
+			add_action( 'woocommerce_my_account_my_orders_column_order-date', array( __CLASS__, 'order_date_column' ) );
+			// Rows come from admin-ajax, so no account-page gate: the language is read from the cookie.
+			// After Nera_SAW_Wallet::transaction_date(), which sets the section's short date for every language.
+			add_filter( 'woo_wallet_transactons_datatable_row_data', array( __CLASS__, 'translate_wallet_row_date' ), 20, 2 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_complaints_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_player_protection_strings' ), 10, 3 );
@@ -437,6 +441,13 @@ class Nera_SAW_Language {
 				'Pay with wallet.' => 'Оплатить из кошелька.',
 				'Total Balance'  => 'Баланс',
 				'Wallet topup'   => 'Пополнить кошелёк',
+				'Wallet Topup'   => 'Пополнить кошелёк',
+				'Enter amount'   => 'Введите сумму',
+				'Add Funds'      => 'Пополнить',
+				'No transactions found' => 'Операций пока нет',
+				'No transactions available' => 'Операций пока нет',
+				'Date'           => 'Дата',
+				'Details'        => 'Описание',
 				'Transactions'   => 'Операции',
 				'Balance History' => 'История баланса',
 				'Description'    => 'Описание',
@@ -597,6 +608,43 @@ class Nera_SAW_Language {
 		$ru = self::saw_ru_strings();
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The date cell of the account orders list. Hooking the column replaces WooCommerce's
+	 * own cell in every language, so English prints the same markup and format it would.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return void
+	 */
+	public static function order_date_column( $order ) {
+		$date = $order instanceof WC_Order ? $order->get_date_created() : null;
+		if ( ! $date ) {
+			return;
+		}
+
+		$label = 'ru' === self::current()
+			? Nera_SAW_Date::format_ru( $date->getTimestamp(), false )
+			: wc_format_datetime( $date );
+
+		printf( '<time datetime="%s">%s</time>', esc_attr( $date->date( 'c' ) ), esc_html( $label ) );
+	}
+
+	/**
+	 * Russian date for a row of woo-wallet's transactions table.
+	 *
+	 * @param array<string,mixed> $row         Row data sent to the table.
+	 * @param object              $transaction Transaction record.
+	 * @return array<string,mixed>
+	 */
+	public static function translate_wallet_row_date( $row, $transaction ) {
+		if ( 'ru' !== self::current() || ! is_array( $row ) || empty( $transaction->date ) ) {
+			return $row;
+		}
+
+		$row['date'] = Nera_SAW_Date::format_ru( wc_string_to_datetime( $transaction->date )->getTimestamp(), false );
+
+		return $row;
 	}
 
 	/**
@@ -841,6 +889,10 @@ class Nera_SAW_Language {
 				'Log in to your account to continue' => 'Войдите в аккаунт, чтобы продолжить',
 				'Your Account'                      => 'Ваш аккаунт',
 				'Create Account'                    => 'Создать аккаунт',
+				'No order has been made yet.'       => 'Заказов пока нет.',
+				'Browse products'                   => 'Смотреть конкурсы',
+				'Show password'                     => 'Показать пароль',
+				'Hide password'                     => 'Скрыть пароль',
 			);
 		}
 

@@ -90,8 +90,8 @@ class Nera_SAW_Frontend {
 			return self::wrap_page_shell(
 				$inner,
 				array(
-					'title' => __( 'Play [BRAND]', 'nera-strikeawin' ),
-					'intro' => __( 'Log in to play the quiz and earn tickets for the draw.', 'nera-strikeawin' ),
+					'title' => Nera_SAW_I18n::t( 'Play [BRAND]' ),
+					'intro' => Nera_SAW_I18n::t( 'Log in to play the quiz and earn tickets for the draw.' ),
 				)
 			);
 		}
@@ -128,8 +128,8 @@ class Nera_SAW_Frontend {
 		return self::wrap_page_shell(
 			self::render_hub(),
 			array(
-				'title' => __( 'Your [BRAND] entries', 'nera-strikeawin' ),
-				'intro' => __( 'Each run is one quiz. Correct answers earn tickets in the draw.', 'nera-strikeawin' ),
+				'title' => Nera_SAW_I18n::t( 'Your [BRAND] entries' ),
+				'intro' => Nera_SAW_I18n::t( 'Each run is one quiz. Correct answers earn tickets in the draw.' ),
 			)
 		);
 	}
