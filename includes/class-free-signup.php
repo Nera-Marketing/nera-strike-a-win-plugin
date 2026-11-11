@@ -47,10 +47,11 @@ class Nera_SAW_Free_Signup {
 	const IP_PREFIX     = 'nera_saw_free_ip_';
 
 	/**
-	 * Countries offered for the mobile number: ISO code => dialling code, GB first.
+	 * Countries offered for the mobile number: ISO code => dialling code, GB then IE first (UK and Ireland sales).
 	 */
 	const COUNTRIES = array(
 		'GB' => '44',
+		'IE' => '353',
 		'AE' => '971',
 		'RU' => '7',
 		'KZ' => '7',
