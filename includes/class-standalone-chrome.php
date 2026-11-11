@@ -293,6 +293,11 @@ class Nera_SAW_Standalone_Chrome {
 			Nera_SAW_Account_Pages::DRAW_RESULTS,
 		);
 
+		// `/my-wallet/` renders the wallet alone (see my-account.php), so only the wallet stands in there.
+		if ( wc_is_current_account_menu_item( 'woo-wallet' ) ) {
+			return array( 'woo-wallet' );
+		}
+
 		foreach ( $details_keys as $endpoint ) {
 			if ( wc_is_current_account_menu_item( $endpoint ) ) {
 				return array_values( array_intersect( $details_keys, array_keys( wc_get_account_menu_items() ) ) );

@@ -13,10 +13,12 @@
  * WHAT MOVED
  * ----------
  * Addresses and Payment methods are gone from the nav entirely (the client's
- * own call: a digital run has neither to manage). Orders and My Wallet no
- * longer have rows of their own — both are folded into "Account details"
- * alongside the account-edit form, each still its own `<details>` so
- * reading an order does not mean losing the wallet balance. My runs &
+ * own call: a digital run has neither to manage). Orders has no row of its
+ * own — it is folded into "Account details" alongside the account-edit form
+ * and the wallet, each still its own `<details>` so reading an order does
+ * not mean losing the wallet balance. The wallet also has its own Wallet
+ * row: `/my-wallet/` itself shows the wallet alone, while the Account
+ * details screen keeps its Wallet panel. My runs &
  * tickets / Draw results / Responsible play are new endpoints this plugin
  * registers itself (`Nera_SAW_Account_Pages`).
  *
@@ -64,6 +66,11 @@ global $wp;
  * @return string Row key, or '' for the hub itself.
  */
 $saw_current_row = static function () use ( $saw_account_details_keys ) {
+	// The wallet endpoint opens its own wallet-only view even though the
+	// Account details composite also shows a Wallet panel.
+	if ( wc_is_current_account_menu_item( 'woo-wallet' ) ) {
+		return 'woo-wallet';
+	}
 	foreach ( array_merge( $saw_account_details_keys, array( 'my-runs-tickets', 'draw-results', 'responsible-play' ) ) as $saw_key ) {
 		if ( wc_is_current_account_menu_item( $saw_key ) ) {
 			return in_array( $saw_key, $saw_account_details_keys, true ) ? 'account-details' : $saw_key;
@@ -106,7 +113,8 @@ if ( '' === $saw_row ) {
 	}
 
 	/**
-	 * The hub's own four rows, in the order the client's mock shows them.
+	 * The hub's rows, in the order the client's mock shows them, with Wallet
+	 * before Account details.
 	 *
 	 * @param array $rows Endpoint key => label.
 	 */
@@ -116,6 +124,7 @@ if ( '' === $saw_row ) {
 			'my-runs-tickets'  => __( 'My runs & tickets', 'nera-strikeawin' ),
 			'draw-results'     => __( 'Draw results', 'nera-strikeawin' ),
 			'responsible-play' => __( 'Responsible play', 'nera-strikeawin' ),
+			'woo-wallet'       => __( 'Wallet', 'nera-strikeawin' ),
 			'account-details'  => __( 'Account details', 'nera-strikeawin' ),
 		)
 	);
@@ -144,7 +153,7 @@ if ( '' === $saw_row ) {
 				<?php
 				// account-details has no WooCommerce menu-item key of its own --
 				// it is this template's composite, not a registered endpoint --
-				// so it always gets its row; the three real endpoints only show
+				// so it always gets its row; the real endpoints only show
 				// once WooCommerce actually offers them.
 				if ( 'account-details' !== $saw_key && ! isset( $saw_items[ $saw_key ] ) ) {
 					continue;
