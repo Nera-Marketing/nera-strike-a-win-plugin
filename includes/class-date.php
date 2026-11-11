@@ -118,6 +118,21 @@ class Nera_SAW_Date {
 	}
 
 	/**
+	 * When a competition closes, as a Unix timestamp, or 0 when it has no end date.
+	 *
+	 * Read from `_lty_end_date_gmt`, the meta the lottery plugin closes the draw
+	 * at. The local `_lty_end_date` can disagree with it, so it is never used.
+	 *
+	 * @param int $product_id Competition (product) ID.
+	 * @return int
+	 */
+	public static function lty_end_ts( $product_id ) {
+		$gmt = (string) get_post_meta( (int) $product_id, '_lty_end_date_gmt', true );
+
+		return '' !== $gmt ? (int) strtotime( $gmt . ' UTC' ) : 0;
+	}
+
+	/**
 	 * The time zone label printed after an English time ("UK"); '' in Russian,
 	 * whose screens add their own note. Filter `nera_saw_date_zone_label`.
 	 *

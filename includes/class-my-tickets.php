@@ -119,8 +119,7 @@ class Nera_SAW_My_Tickets {
 				$tier_label = Nera_SAW_Account_Pages::tier_label( $config, (string) key( $tiers ) );
 			}
 
-			$end_gmt = (string) get_post_meta( $cid, '_lty_end_date_gmt', true );
-			$end     = (string) get_post_meta( $cid, '_lty_end_date', true );
+			$end_ts  = Nera_SAW_Date::lty_end_ts( $cid );
 			$image   = get_the_post_thumbnail_url( $cid, 'woocommerce_thumbnail' );
 			$is_free = class_exists( 'Nera_SAW_Competition_Config' ) && Nera_SAW_Competition_Config::is_free( $cid );
 
@@ -135,8 +134,8 @@ class Nera_SAW_My_Tickets {
 				'in_progress'    => $c['in_progress'],
 				'tiers'          => $c['tiers'],
 				'tier_label'     => $tier_label,
-				'closes'         => '' !== $end ? substr( $end, 0, 16 ) : '',
-				'closes_ts'      => '' !== $end_gmt ? (int) strtotime( $end_gmt . ' UTC' ) : 0,
+				'closes'         => $end_ts ? wp_date( 'Y-m-d H:i', $end_ts ) : '',
+				'closes_ts'      => $end_ts,
 				'drawn'          => 'lty_lottery_finished' === get_post_meta( $cid, 'lty_lottery_status', true ),
 				// Free competition: its tickets come from order-less free runs, and its
 				// live draw date is its own field ('' while not set).
