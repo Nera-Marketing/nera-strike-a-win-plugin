@@ -76,7 +76,9 @@ if ( empty( $saw_competition_ids ) ) {
 
 		$saw_draw_text = Nera_SAW_Standalone_Result_Screen::draw_text( $saw_competition_id );
 		$saw_closes_ts = Nera_SAW_Date::lty_end_ts( $saw_competition_id );
-		$saw_drawn     = 'lty_lottery_finished' === get_post_meta( $saw_competition_id, 'lty_lottery_status', true );
+		// Closed once drawn (any draw path) or past the closing time, even before a draw.
+		$saw_closed    = ( class_exists( 'Nera_SAW_Share' ) && Nera_SAW_Share::is_drawn( $saw_competition_id ) )
+			|| ( $saw_closes_ts && $saw_closes_ts < time() );
 		?>
 
 		<section class="saw-runs-tickets__competition">
@@ -86,7 +88,7 @@ if ( empty( $saw_competition_ids ) ) {
 				<p class="saw-runs-tickets__closes">
 					<?php
 					printf(
-						$saw_drawn
+						$saw_closed
 							/* translators: %s: date entries closed */
 							? esc_html__( 'Entries closed %s', 'nera-strikeawin' )
 							/* translators: %s: date entries close */
