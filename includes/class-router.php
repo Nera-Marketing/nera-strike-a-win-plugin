@@ -625,19 +625,18 @@ class Nera_SAW_Router {
 			return true;
 		}
 
-		if ( ! is_page() || ! class_exists( 'Nera_SAW_Standalone_Pages' ) ) {
-			return false;
+		$is_ours = false;
+		if ( is_page() && class_exists( 'Nera_SAW_Standalone_Pages' ) ) {
+			$assigned = (string) get_post_meta( get_queried_object_id(), '_wp_page_template', true );
+			$is_ours  = 0 === strpos( $assigned, Nera_SAW_Standalone_Pages::TEMPLATE_PREFIX );
 		}
-
-		$assigned = (string) get_post_meta( get_queried_object_id(), '_wp_page_template', true );
-		$is_ours  = 0 === strpos( $assigned, Nera_SAW_Standalone_Pages::TEMPLATE_PREFIX );
 
 		/**
 		 * Filter whether this request is a standalone screen.
 		 *
-		 * Checkout is the case this exists for: it is WooCommerce's own page, so it
-		 * carries none of the plugin's markers, but the section renders it and it
-		 * must load the section's stylesheet like everything else.
+		 * For screens a theme renders in the section's shell that carry none of the
+		 * plugin's markers: checkout (WooCommerce's own page) or a theme's 404 page.
+		 * They must load the section's stylesheet like everything else.
 		 *
 		 * @param bool $is_ours Whether the request is a standalone screen.
 		 */
