@@ -461,15 +461,18 @@ class Nera_SAW_Constants {
 	 * @return array
 	 */
 	private static function normalise_level( $level ) {
-		$level = (array) $level;
+		$level    = (array) $level;
+		$label    = isset( $level['label'] ) ? (string) $level['label'] : '';
+		$label_ru = isset( $level['label_ru'] ) ? (string) $level['label_ru'] : '';
 		return array(
-			'key'     => isset( $level['key'] ) ? (string) $level['key'] : '',
+			'key'      => isset( $level['key'] ) ? (string) $level['key'] : '',
 			// The stored English name, shown to a Russian player in Russian (never in the admin).
-			'label'   => isset( $level['label'] ) ? (string) ( class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::translate_level_label( (string) $level['label'] ) : $level['label'] ) : '',
-			'rank'    => isset( $level['rank'] ) ? (int) $level['rank'] : 0,
-			'reward'  => isset( $level['reward'] ) ? (int) $level['reward'] : 0,
-			'color'   => ! empty( $level['color'] ) ? (string) $level['color'] : '',
-			'deleted' => ! empty( $level['deleted'] ),
+			'label'    => class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::translate_level_label( $label, $label_ru ) : $label,
+			'label_ru' => $label_ru,
+			'rank'     => isset( $level['rank'] ) ? (int) $level['rank'] : 0,
+			'reward'   => isset( $level['reward'] ) ? (int) $level['reward'] : 0,
+			'color'    => ! empty( $level['color'] ) ? (string) $level['color'] : '',
+			'deleted'  => ! empty( $level['deleted'] ),
 		);
 	}
 

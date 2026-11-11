@@ -574,8 +574,9 @@ class Nera_SAW_Language {
 	 * so `saw_lang=ru` had no effect on any of it. Deliberately does NOT cover
 	 * the difficulty‑band names (Easy/Moderate/Hard/…) or the tier names
 	 * (Standard/Premium) — those are admin‑editable labels (`class-constants.php`,
-	 * a competition's own tier config), not this plugin's fixed chrome, and
-	 * translating them would need a per‑value table, not a fixed string map.
+	 * a competition's own tier config), not this plugin's fixed chrome. Level
+	 * names carry their own Russian label (`label_ru`, Ladder screen), read by
+	 * `self::translate_level_label()`.
 	 *
 	 * `is_admin()` excludes this plugin's OWN admin screens, several of which
 	 * reuse plain English words from this same list (`Day`, `Month`, `Closes`,
@@ -1230,16 +1231,21 @@ class Nera_SAW_Language {
 	}
 
 	/**
-	 * A difficulty level's name as a Russian player reads it. The five names the ladder ships
-	 * with are translated; a name an administrator has changed is left exactly as written.
+	 * A difficulty level's name as a Russian player reads it: the level's own Russian label
+	 * from the Ladder screen when set, else the five names the ladder ships with are
+	 * translated and any other name is left exactly as written.
 	 * Never applied in the admin: the Ladder screen edits and saves the stored English name.
 	 *
-	 * @param string $label Level label.
+	 * @param string $label    Level label.
+	 * @param string $label_ru The level's Russian label ('' = none).
 	 * @return string
 	 */
-	public static function translate_level_label( $label ) {
+	public static function translate_level_label( $label, $label_ru = '' ) {
 		if ( is_admin() || 'ru' !== self::current() ) {
 			return $label;
+		}
+		if ( '' !== trim( (string) $label_ru ) ) {
+			return (string) $label_ru;
 		}
 		static $ru = array(
 			'Easy'      => 'Легко',
