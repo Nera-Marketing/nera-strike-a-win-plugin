@@ -279,7 +279,7 @@ class Nera_SAW_Competition_Admin {
 						<tr>
 							<td><span class="saw-dot" style="background:<?php echo esc_attr( $dot ); ?>"></span><?php echo esc_html( $lv['label'] ); ?></td>
 							<td><input type="number" min="0" name="saw_dist[<?php echo esc_attr( $lv['key'] ); ?>]" value="<?php echo (int) $count; ?>" style="width:80px" /></td>
-							<td><input type="number" min="0" name="saw_reward[<?php echo esc_attr( $lv['key'] ); ?>]" value="<?php echo esc_attr( $reward ); ?>" placeholder="<?php echo (int) $lv['reward']; ?>" style="width:80px" /></td>
+							<td><input type="number" min="1" name="saw_reward[<?php echo esc_attr( $lv['key'] ); ?>]" value="<?php echo esc_attr( $reward ); ?>" placeholder="<?php echo (int) $lv['reward']; ?>" style="width:80px" /></td>
 						</tr>
 					<?php endforeach; ?>
 					</tbody>
@@ -538,7 +538,7 @@ class Nera_SAW_Competition_Admin {
 		foreach ( (array) ( $_POST['saw_reward'] ?? array() ) as $key => $reward ) {
 			$reward = trim( (string) $reward );
 			if ( '' !== $reward ) {
-				$rewards[ sanitize_key( $key ) ] = max( 0, (int) $reward );
+				$rewards[ sanitize_key( $key ) ] = max( 1, (int) $reward );
 			}
 		}
 		// Per-competition tier overrides (keyed by the global tier key). A blank

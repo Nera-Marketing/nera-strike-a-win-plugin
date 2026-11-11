@@ -113,7 +113,7 @@ class Nera_SAW_Ladder_Admin {
 		foreach ( $rows as $row ) {
 			$label  = isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '';
 			$color  = isset( $row['color'] ) ? self::sanitize_hex( $row['color'] ) : '';
-			$reward = isset( $row['reward'] ) ? max( 0, (int) $row['reward'] ) : 0;
+			$reward = isset( $row['reward'] ) ? max( 1, (int) $row['reward'] ) : 1;
 			$key    = isset( $row['key'] ) ? sanitize_key( $row['key'] ) : '';
 			$remove = ! empty( $row['remove'] );
 
@@ -250,7 +250,7 @@ class Nera_SAW_Ladder_Admin {
 	private static function level_row( $i, $level, $tpl = false ) {
 		$key    = $tpl ? '' : (string) $level['key'];
 		$label  = $tpl ? '' : (string) $level['label'];
-		$reward = $tpl ? 0 : (int) $level['reward'];
+		$reward = $tpl ? 1 : (int) $level['reward'];
 		$color  = $tpl ? '#2e7d32' : ( ! empty( $level['color'] ) ? $level['color'] : Nera_SAW_Constants::level_color( $key ) );
 		$n      = function ( $field ) use ( $i, $tpl ) {
 			return $tpl ? '' : sprintf( 'name="level[%d][%s]"', (int) $i, $field );
@@ -260,7 +260,7 @@ class Nera_SAW_Ladder_Admin {
 		echo '<td class="saw-order-cell">' . ( $tpl ? '' : esc_html( $i + 1 ) ) . '</td>';
 		printf( '<td><input type="text" class="saw-color" data-name="color" %s value="%s"></td>', $n( 'color' ), esc_attr( $color ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 		printf( '<td><input type="text" class="saw-label regular-text" data-name="label" %s value="%s" placeholder="%s"></td>', $n( 'label' ), esc_attr( $label ), esc_attr__( 'e.g. Moderate', 'nera-strikeawin' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
-		printf( '<td><input type="number" min="0" data-name="reward" %s value="%d" style="width:90px"></td>', $n( 'reward' ), (int) $reward ); // phpcs:ignore WordPress.Security.EscapeOutput
+		printf( '<td><input type="number" min="1" data-name="reward" %s value="%d" style="width:90px"></td>', $n( 'reward' ), (int) $reward ); // phpcs:ignore WordPress.Security.EscapeOutput
 		printf( '<td><input type="hidden" class="saw-key" data-name="key" %s value="%s"><button type="button" class="button-link saw-remove-level" title="%s">&times;</button></td>', $n( 'key' ), esc_attr( $key ), esc_attr__( 'Remove level', 'nera-strikeawin' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '</tr>';
 	}
