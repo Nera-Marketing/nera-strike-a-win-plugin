@@ -134,6 +134,9 @@ class Nera_SAW_Plugin {
 		// Diagnostic quiz log (daily prune).
 		Nera_SAW_Log::init();
 
+		// Russian alt text field on media items.
+		Nera_SAW_Competition_Spec::init();
+
 		// Reservation lifecycle bound to the standard WooCommerce order flow.
 		Nera_SAW_Reservations::init();
 

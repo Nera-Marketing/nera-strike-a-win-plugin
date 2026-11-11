@@ -406,6 +406,7 @@ class Nera_SAW_Competition_Admin {
 	 */
 	private static function draw_prize_row( array $row, $key = '' ) {
 		$name       = isset( $row['name'] ) ? (string) $row['name'] : '';
+		$name_ru    = isset( $row['name_ru'] ) ? (string) $row['name_ru'] : '';
 		$type       = isset( $row['prize_type'] ) && 'coupon' === $row['prize_type'] ? 'coupon' : 'product';
 		$product_id = isset( $row['gift_product_id'] ) ? (int) $row['gift_product_id'] : 0;
 		$amount     = isset( $row['coupon_amount'] ) && '' !== $row['coupon_amount'] ? (float) $row['coupon_amount'] : '';
@@ -420,6 +421,7 @@ class Nera_SAW_Competition_Admin {
 			<td>
 				<input type="hidden" name="saw_prize[<?php echo esc_attr( $key ); ?>][id]" value="<?php echo esc_attr( isset( $row['id'] ) ? $row['id'] : '' ); ?>" />
 				<input type="text" name="saw_prize[<?php echo esc_attr( $key ); ?>][name]" value="<?php echo esc_attr( $name ); ?>" style="width:100%" placeholder="<?php esc_attr_e( 'e.g. £500 cash', 'nera-strikeawin' ); ?>" />
+				<input type="text" name="saw_prize[<?php echo esc_attr( $key ); ?>][name_ru]" value="<?php echo esc_attr( $name_ru ); ?>" style="width:100%;margin-top:4px" placeholder="<?php esc_attr_e( 'Name in Russian', 'nera-strikeawin' ); ?>" aria-label="<?php esc_attr_e( 'Name in Russian', 'nera-strikeawin' ); ?>" />
 			</td>
 			<td>
 				<select name="saw_prize[<?php echo esc_attr( $key ); ?>][prize_type]">
