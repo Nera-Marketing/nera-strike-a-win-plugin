@@ -168,6 +168,26 @@ class Nera_SAW_Standalone_Result_Screen {
 	}
 
 	/**
+	 * What a "Draw:" line says for a competition: a free competition's live draw
+	 * date when one is set, otherwise "date to be confirmed". A paid competition
+	 * has no draw date of its own; its end date is when entries close, so that
+	 * (draw_date() above) is never shown as the draw.
+	 *
+	 * @param WC_Product|int|null $product The competition, or its ID.
+	 * @return string Empty when there is no competition.
+	 */
+	public static function draw_text( $product ) {
+		$id = $product instanceof WC_Product ? $product->get_id() : (int) $product;
+		if ( ! $id ) {
+			return '';
+		}
+
+		$live = Nera_SAW_Competition_Config::is_free( $id ) ? Nera_SAW_Free::live_draw_text( $id ) : '';
+
+		return '' !== $live ? $live : Nera_SAW_I18n::t( 'date to be confirmed' );
+	}
+
+	/**
 	 * A wording field, falling back to the same default the mu-plugin uses.
 	 *
 	 * Read from the same options so the two skins never disagree about the copy.
