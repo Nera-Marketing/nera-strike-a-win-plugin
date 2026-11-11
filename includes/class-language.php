@@ -1796,6 +1796,7 @@ class Nera_SAW_Language {
 				'Closes %s · Drawn automatically'        => 'Закрывается %s · Розыгрыш автоматически',
 				'Drawn automatically'                    => 'Розыгрыш автоматически',
 				'Closes %s'                              => 'Закрывается %s',
+				'Entries closed %s'                      => 'Приём закрыт %s',
 				'Closes'                                 => 'Закрывается',
 				'Draw'                                   => 'Розыгрыш',
 				'Automatic, once closed'                 => 'Автоматически, после закрытия',
