@@ -621,7 +621,7 @@ class Nera_SAW_Language {
 		}
 
 		$label = 'ru' === self::current()
-			? Nera_SAW_Date::display( $date->getTimestamp() )
+			? Nera_SAW_Date::format_ru( $date->getTimestamp(), false )
 			: wc_format_datetime( $date );
 
 		printf( '<time datetime="%s">%s</time>', esc_attr( $date->date( 'c' ) ), esc_html( $label ) );
@@ -646,7 +646,7 @@ class Nera_SAW_Language {
 		}
 
 		$created = $order->get_date_created();
-		$date    = $created ? Nera_SAW_Date::display( $created->getTimestamp() ) : '';
+		$date    = $created ? Nera_SAW_Date::format_ru( $created->getTimestamp(), false ) : '';
 
 		return sprintf(
 			/* translators: 1: order number 2: order date 3: order status (already translated) */
