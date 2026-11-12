@@ -1877,7 +1877,7 @@ onUnmounted( () => {
 					<div><small>{{ t('playingFor', 'Playing for') }}</small><b v-if="competition.value">{{ competition.value }}</b><span>{{ competition.name }}</span></div>
 				</div>
 
-				<div class="saw-qcard">
+				<div :key="slot.slot_no" class="saw-qcard">
 					<div class="saw-qtop">
 						<h1 class="saw-question">{{ slot.question }}</h1>
 						<div
