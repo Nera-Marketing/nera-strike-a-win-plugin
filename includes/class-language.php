@@ -136,6 +136,7 @@ class Nera_SAW_Language {
 			// See self::current()'s docblock (step 2) for why this needs a cookie
 			// rather than the WooCommerce session this used at first.
 			add_action( 'template_redirect', array( __CLASS__, 'remember_in_cookie' ) );
+			add_action( 'wp_head', array( __CLASS__, 'cached_page_fallback' ), 1 );
 
 			/*
 			 * WooCommerce's own checkout form has no hidden saw_lang field either, so
@@ -2299,7 +2300,7 @@ class Nera_SAW_Language {
 			COOKIEPATH ? COOKIEPATH : '/',
 			COOKIE_DOMAIN,
 			is_ssl(),
-			true
+			false
 		);
 	}
 
@@ -2324,6 +2325,36 @@ class Nera_SAW_Language {
 		}
 
 		PLL_Cookie::set( $current );
+	}
+
+	/**
+	 * Recover the remembered language when a page cache answers without PHP.
+	 *
+	 * A host-level page cache serves the default-language copy to every visitor
+	 * whose URL carries no `saw_lang`, so `self::current()` never sees the cookie.
+	 * When the cookie names another language, the page arrived in a different one
+	 * and the URL has no `saw_lang` yet, this reloads the same URL with it added:
+	 * a query string bypasses the cache, and the reloaded URL then carries
+	 * `saw_lang`, so the check cannot fire twice. The cookie must therefore stay
+	 * readable from JS (see `self::remember_in_cookie()`).
+	 *
+	 * Logged-in visitors are skipped: hosts never serve them cached copies.
+	 */
+	public static function cached_page_fallback() {
+		if ( is_user_logged_in() || ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return;
+		}
+
+		$others = array_values( array_diff( self::codes(), array( self::default_code() ) ) );
+		if ( ! $others ) {
+			return;
+		}
+
+		printf(
+			'<script id="nera-saw-lang-fallback">(function(){try{var m=document.cookie.match(/(?:^|;\\s*)%1$s=([a-z0-9_-]+)/);if(!m||%2$s.indexOf(m[1])<0)return;var c=m[1],l=(document.documentElement.lang||"").toLowerCase();if(l===c||l.indexOf(c+"-")===0)return;var u=new URL(location.href);if(u.searchParams.has("%1$s"))return;u.searchParams.set("%1$s",c);location.replace(u.href);}catch(e){}})();</script>' . "\n",
+			esc_js( self::SWITCH_ARG ),
+			wp_json_encode( $others )
+		);
 	}
 
 	/**
