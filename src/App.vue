@@ -1103,6 +1103,7 @@ function onLeaveDialogKeydown( e ) {
 // is not kept, so reopening tries again.
 const shareCardData = ( window.NeraSAW && window.NeraSAW.shareCard ) || {};
 const shareBrand = shareCardData.brand || 'Strike & Win';
+const shareBrandParts = shareBrand.split( /\s*&\s*/ ).map( ( part ) => part.toUpperCase() );
 const shareHost = window.location.host;
 const shareOpen = ref( false );
 const shareUrl = ref( '' );
@@ -1964,7 +1965,7 @@ onUnmounted( () => {
 								<div class="saw-sharesheet__in" aria-hidden="true">
 									<div class="saw-sharesheet__top">
 										<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
-										<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
+										<span v-else class="saw-sharesheet__logo"><template v-for="( part, i ) in shareBrandParts" :key="i"><span v-if="i" class="saw-sharesheet__logo-amp">&amp;</span><span v-if="part">{{ part }}</span></template></span>
 										<span class="saw-sharesheet__kicker">{{ isFree ? t('shareFreeKicker', 'Free quiz') : t('shareKicker', 'Prize quiz') }}</span>
 									</div>
 									<div class="saw-sharesheet__mid">
@@ -2025,7 +2026,7 @@ onUnmounted( () => {
 				<div class="saw-results__stat saw-results__stat--tickets" :class="{ 'is-zero': !hasTickets }">
 					<small>{{ t('ticketsEarnedLabel', 'Tickets earned') }}</small>
 					<b>{{ hasTickets ? '+' + formatCount( shownTickets ) : '0' }}</b>
-					<span>{{ hasTickets ? t('inThisDraw', 'in this draw') : '—' }}</span>
+					<span>{{ t('inThisDraw', 'in this draw') }}</span>
 				</div>
 			</div>
 
@@ -2171,7 +2172,7 @@ onUnmounted( () => {
 						<div class="saw-sharesheet__in" aria-hidden="true">
 							<div class="saw-sharesheet__top">
 								<img v-if="shareCardData.logo" class="saw-sharesheet__logo" :src="shareCardData.logo" :alt="shareBrand">
-								<span v-else class="saw-sharesheet__logo">{{ shareBrand }}</span>
+								<span v-else class="saw-sharesheet__logo"><template v-for="( part, i ) in shareBrandParts" :key="i"><span v-if="i" class="saw-sharesheet__logo-amp">&amp;</span><span v-if="part">{{ part }}</span></template></span>
 								<span class="saw-sharesheet__kicker">{{ isFree ? t('shareFreeKicker', 'Free quiz') : t('shareKicker', 'Prize quiz') }}</span>
 							</div>
 							<div class="saw-sharesheet__mid">
@@ -2736,6 +2737,7 @@ body.saw-quiz-dialog-open { overflow: hidden; }
 .saw-sharesheet__in { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 7cqw 7cqw 6cqw; }
 .saw-sharesheet__top { display: flex; justify-content: space-between; align-items: center; gap: 3cqw; }
 .saw-sharesheet__logo { display: block; max-width: 45%; height: auto; max-height: 9cqw; font-size: 4.6cqw; font-weight: 900; line-height: 1; }
+span.saw-sharesheet__logo { display: inline-flex; align-items: center; gap: 0.34em; max-width: none; max-height: none; white-space: nowrap; }
 .saw-sharesheet__kicker { font-size: 2.7cqw; font-weight: 800; line-height: 1; text-transform: uppercase; padding: 1.6cqw 2.8cqw; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.3); }
 .saw-sharesheet__mid { margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
 .saw-sharesheet__label { font-size: 3.2cqw; font-weight: 800; text-transform: uppercase; }
