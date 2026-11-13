@@ -69,7 +69,7 @@ class Nera_SAW_Date {
 	 * Weekday and month abbreviations for the Russian short form (Sun = 0).
 	 */
 	const WEEKDAYS_SHORT_RU = array( 'вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб' );
-	const MONTHS_SHORT_RU   = array( 1 => 'янв', 2 => 'фев', 3 => 'мар', 4 => 'апр', 5 => 'мая', 6 => 'июн', 7 => 'июл', 8 => 'авг', 9 => 'сен', 10 => 'окт', 11 => 'ноя', 12 => 'дек' );
+	const MONTHS_SHORT_RU   = array( 1 => 'янв.', 2 => 'февр.', 3 => 'мар.', 4 => 'апр.', 5 => 'мая', 6 => 'июн.', 7 => 'июл.', 8 => 'авг.', 9 => 'сент.', 10 => 'окт.', 11 => 'нояб.', 12 => 'дек.' );
 
 	/**
 	 * THE date format of the section: "Sun 14 Sep, 21:00 UK" (the design's), on every
@@ -252,7 +252,7 @@ class Nera_SAW_Date {
 	public static function countdown_units() {
 		// A language switch rather than _x(): the strings table only maps plain msgids.
 		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() ) {
-			return array( 'd' => 'д', 'h' => 'ч', 'm' => 'мин', 's' => 'с' );
+			return array( 'd' => 'д', 'h' => 'ч', 'm' => 'м', 's' => 'с' );
 		}
 		return array( 'd' => 'd', 'h' => 'h', 'm' => 'm', 's' => 's' );
 	}
