@@ -1979,7 +1979,7 @@ onUnmounted( () => {
 					</div>
 					<p v-if="! hasTickets" class="saw-fres__none">{{ t('freeNone', 'No quiz tickets this time, so no draw entries were added.') }}</p>
 					<div v-else class="saw-fres__tix">
-						<div class="saw-fres__tixl"><small>{{ t('freeTickets', 'Tickets earned') }}</small><b><span>+</span><span>{{ formatCount( shownTickets ) }}</span></b></div>
+						<div class="saw-fres__tixl"><small>{{ t('freeTickets', 'Tickets earned') }}</small><b aria-hidden="true"><span>+</span><span>{{ formatCount( shownTickets ) }}</span></b><span class="saw-sr-only">+{{ formatCount( finalSpins ) }}</span></div>
 						<div class="saw-fres__added"><span class="saw-fres__ck" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10" /></svg></span>{{ t('freeAdded', 'Added to your account') }}</div>
 					</div>
 					</template>
@@ -2068,7 +2068,8 @@ onUnmounted( () => {
 				</div>
 				<div class="saw-results__stat saw-results__stat--tickets" :class="{ 'is-zero': !hasTickets }">
 					<small>{{ t('ticketsEarnedLabel', 'Tickets earned') }}</small>
-					<b>{{ hasTickets ? '+' + formatCount( shownTickets ) : '0' }}</b>
+					<b aria-hidden="true">{{ hasTickets ? '+' + formatCount( shownTickets ) : '0' }}</b>
+					<span class="saw-sr-only">{{ hasTickets ? '+' + formatCount( finalSpins ) : '0' }}</span>
 					<span>{{ t('inThisDraw', 'in this draw') }}</span>
 				</div>
 			</div>
