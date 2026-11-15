@@ -244,6 +244,7 @@ const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run le
 const nextRunTotal = ref( 0 );
 const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
 const shownTickets = ref( 0 ); // the tickets-earned figure as it counts up.
+const shownScore = ref( 0 ); // the score figure as it counts up.
 
 const slot = reactive( {
 	slot_no: 0,
@@ -706,24 +707,44 @@ function flyTicket( option, before, gain ) {
 	}
 }
 
-// Tickets earned counts up from 0 over about a second; at once with reduced motion.
-let countFrame = 0;
-function countUpTickets( to ) {
-	cancelAnimationFrame( countFrame );
+// Score and tickets earned count up from 0 (650ms, ease-out cubic); the final figures at once with reduced motion.
+const countFrames = { score: 0, tickets: 0 };
+let countDelay = 0;
+function stopCountUp() {
+	cancelAnimationFrame( countFrames.score );
+	cancelAnimationFrame( countFrames.tickets );
+	clearTimeout( countDelay );
+}
+function countUp( key, shown, to, delay ) {
 	if ( ! to || prefersReducedMotion() ) {
-		shownTickets.value = to || 0;
+		shown.value = to || 0;
 		return;
 	}
-	const from = performance.now();
-	const step = ( now ) => {
-		const p = Math.min( 1, ( now - from ) / 1000 );
-		shownTickets.value = Math.round( to * ( 1 - Math.pow( 1 - p, 3 ) ) );
-		if ( p < 1 ) {
-			countFrame = requestAnimationFrame( step );
-		}
+	// Set to 0 in the same tick the result renders, so the first figure painted is 0, never a partial total.
+	shown.value = 0;
+	const run = () => {
+		let from = 0;
+		const step = ( now ) => {
+			from = from || now;
+			const p = Math.min( 1, ( now - from ) / 650 );
+			shown.value = Math.round( to * ( 1 - Math.pow( 1 - p, 3 ) ) );
+			if ( p < 1 ) {
+				countFrames[ key ] = requestAnimationFrame( step );
+			}
+		};
+		countFrames[ key ] = requestAnimationFrame( step );
 	};
-	shownTickets.value = 0;
-	countFrame = requestAnimationFrame( step );
+	if ( delay ) {
+		countDelay = setTimeout( run, delay );
+	} else {
+		run();
+	}
+}
+function countUpResult() {
+	stopCountUp();
+	countUp( 'score', shownScore, correctCount.value, 0 );
+	// On the free result the tickets wait until the score card has scaled in.
+	countUp( 'tickets', shownTickets, finalSpins.value, isFree ? 450 : 0 );
 }
 
 const visibleTicketNumbers = computed( () =>
@@ -1742,6 +1763,7 @@ async function fetchRunComplete() {
 	ticketsLoading.value = true;
 	ticketsError.value = '';
 	summaryReady.value = false;
+	stopCountUp();
 	try {
 		// EXPERIMENTAL: one call carrying every locally-accumulated answer,
 		// instead of a separate /answer per question plus this /complete call.
@@ -1762,7 +1784,7 @@ async function fetchRunComplete() {
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
-		countUpTickets( finalSpins.value );
+		countUpResult();
 	} catch ( e ) {
 		ticketsError.value = e && e.message ? e.message : t( 'ticketsMintError', 'We could not add your tickets right now.' );
 	} finally {
@@ -1823,6 +1845,7 @@ onMounted( () => {
 } );
 onUnmounted( () => {
 	clearTicker();
+	stopCountUp();
 	removeTicketFly();
 	clearTimeout( landTimer );
 	releaseNavigationGuard();
@@ -1949,10 +1972,10 @@ onUnmounted( () => {
 				<section class="saw-fres__win">
 					<p class="saw-fres__kicker">{{ t('resultKicker', 'Challenge completed') }}</p>
 					<template v-if="summaryReady">
-					<div class="saw-fres__score" :aria-label="t('freeScore', 'Your score') + ': ' + correctCount + '/' + shareTotal"><b>{{ correctCount }}</b><span>/{{ shareTotal }}</span></div>
+					<div class="saw-fres__score"><b aria-hidden="true">{{ shownScore }}</b><span aria-hidden="true">/{{ shareTotal }}</span><span class="saw-sr-only">{{ t('freeScore', 'Your score') + ': ' + correctCount + '/' + shareTotal }}</span></div>
 					<p class="saw-fres__verdict">{{ resultsHeadline }}</p>
 					<div class="saw-fres__dots" aria-hidden="true">
-						<i v-for="r in slotResults" :key="r.slot_no" :class="{ 'is-ok': 'correct' === r.outcome }"></i>
+						<i v-for="( r, k ) in slotResults" :key="r.slot_no" :class="{ 'is-ok': 'correct' === r.outcome }" :style="{ '--d': k }"></i>
 					</div>
 					<p v-if="! hasTickets" class="saw-fres__none">{{ t('freeNone', 'No quiz tickets this time, so no draw entries were added.') }}</p>
 					<div v-else class="saw-fres__tix">
@@ -2039,7 +2062,8 @@ onUnmounted( () => {
 			<div class="saw-results__stats">
 				<div class="saw-results__stat">
 					<small>{{ t('scoreLabel', 'Score') }}</small>
-					<b>{{ correctCount }}<i>/{{ totalSlots || slotResults.length }}</i></b>
+					<b aria-hidden="true">{{ shownScore }}<i>/{{ totalSlots || slotResults.length }}</i></b>
+					<span class="saw-sr-only">{{ correctCount }}/{{ totalSlots || slotResults.length }}</span>
 					<span>{{ t('correctAnswers', 'correct answers') }}</span>
 				</div>
 				<div class="saw-results__stat saw-results__stat--tickets" :class="{ 'is-zero': !hasTickets }">
