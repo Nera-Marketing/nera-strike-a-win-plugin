@@ -294,16 +294,16 @@ function cacheSlotContent( slots ) {
 // every change to it sets this too.
 const answeredCount = ref( 0 );
 
-// One chip per question: answered right (is-ok), answered wrong or timed out
-// (is-no), the current one (is-cur), later ones plain. Built from the answers
-// themselves, so a resumed run (answers restored, no per-question results)
-// shows the same chips as one played straight through.
 // The chip answered right just before the current question loaded pops once (is-just).
 // Set from submit() and handed over when the next slot loads, so a resumed run or a
 // reloaded slot never pops.
 const justSlot = ref( null );
 let pendingJust = null;
 
+// One chip per question: answered right (is-ok), answered wrong or timed out
+// (is-no), the current one (is-cur), later ones plain. Built from the answers
+// themselves, so a resumed run (answers restored, no per-question results)
+// shows the same chips as one played straight through.
 const ladderChips = computed( () => {
 	const chosen = new Map( experimentalAnswers.slice( 0, answeredCount.value ).map( ( a ) => [ a.slot_no, a.chosen_index ] ) );
 	return ladderSlots.value.map( ( s ) => {

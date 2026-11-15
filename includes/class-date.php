@@ -78,7 +78,7 @@ class Nera_SAW_Date {
 	 * two formats the client found (card "Thu 29 Oct, 2am", page "October 29,
 	 * 2026, 2:34 am") cannot come back by someone passing a different pattern.
 	 *
-	 * Russian is the same shape in Russian: "вс, 14 сен, 21:00" (24-hour clock).
+	 * Russian is the same shape in Russian: "вс, 14 сент., 21:00" (24-hour clock).
 	 *
 	 * @param int|false $timestamp Unix timestamp, or falsy for an empty result.
 	 * @return string
