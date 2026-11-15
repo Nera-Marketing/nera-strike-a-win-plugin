@@ -2267,6 +2267,7 @@ class Nera_SAW_Language {
 		}
 
 		self::remember_in_polylang_cookie( $current );
+		self::keep_out_of_page_cache( $current );
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read for a same-request equality check, never output or stored.
 		$stored = isset( $_COOKIE[ self::SWITCH_ARG ] ) ? (string) $_COOKIE[ self::SWITCH_ARG ] : '';
@@ -2284,15 +2285,16 @@ class Nera_SAW_Language {
 			 * saw_lang-less GET form hop.
 			 */
 			if ( '' !== $stored ) {
-				setcookie( self::SWITCH_ARG, '', time() - YEAR_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), true );
+				setcookie( self::SWITCH_ARG, '', time() - YEAR_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
 			}
 			return;
 		}
 
-		if ( $stored === $current ) {
-			return;
-		}
-
+		/*
+		 * Set again even when the request already carries the same value: a
+		 * cookie written with HttpOnly stays HttpOnly until it is replaced, and
+		 * self::cached_page_fallback() can only read one that is not.
+		 */
 		setcookie(
 			self::SWITCH_ARG,
 			$current,
@@ -2302,6 +2304,33 @@ class Nera_SAW_Language {
 			is_ssl(),
 			false
 		);
+	}
+
+	/**
+	 * Keep a page out of shared caches when its language came from a cookie.
+	 *
+	 * A bare URL rendered in a non-default language only because of a cookie
+	 * (this plugin's or Polylang's) would otherwise be stored by a host page
+	 * cache under that URL and served to visitors who never chose it. Keyed on
+	 * the outcome rather than on which cookie won, so any cookie-driven
+	 * resolution is covered. A `saw_lang` in the URL makes the cache key differ
+	 * already, and hosts do not cache signed-in visitors.
+	 *
+	 * @param string $current Language code this request resolved to.
+	 */
+	protected static function keep_out_of_page_cache( $current ) {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence check only.
+		if ( isset( $_REQUEST[ self::SWITCH_ARG ] ) || $current === self::default_code() || is_user_logged_in() || ! in_array( $method, array( 'GET', 'HEAD' ), true ) ) {
+			return;
+		}
+
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
+		header( 'Vary: Cookie', false );
 	}
 
 	/**
