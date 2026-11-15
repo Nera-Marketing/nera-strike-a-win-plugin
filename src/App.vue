@@ -297,6 +297,12 @@ const answeredCount = ref( 0 );
 // (is-no), the current one (is-cur), later ones plain. Built from the answers
 // themselves, so a resumed run (answers restored, no per-question results)
 // shows the same chips as one played straight through.
+// The chip answered right just before the current question loaded pops once (is-just).
+// Set from submit() and handed over when the next slot loads, so a resumed run or a
+// reloaded slot never pops.
+const justSlot = ref( null );
+let pendingJust = null;
+
 const ladderChips = computed( () => {
 	const chosen = new Map( experimentalAnswers.slice( 0, answeredCount.value ).map( ( a ) => [ a.slot_no, a.chosen_index ] ) );
 	return ladderSlots.value.map( ( s ) => {
@@ -307,14 +313,22 @@ const ladderChips = computed( () => {
 		} else if ( s.slot_no === slot.slot_no ) {
 			state = 'is-cur';
 		}
+		if ( 'is-ok' === state && s.slot_no === justSlot.value ) {
+			state += ' is-just';
+		}
 		return { no: s.slot_no, reward: s.reward, state };
 	} );
 } );
 
-// The progress line under the quiz bar: answered / total.
-const progressPct = computed( () =>
-	totalSlots.value ? Math.min( 100, ( answeredCount.value / totalSlots.value ) * 100 ) : 0
-);
+// The progress line under the quiz bar: questions before the current one / total, so it
+// steps when the next question loads rather than while the answer is revealed.
+const progressPct = computed( () => {
+	if ( ! totalSlots.value ) {
+		return 0;
+	}
+	const done = ( 'question' === phase.value || 'reveal' === phase.value ) && slot.slot_no > 0 ? slot.slot_no - 1 : answeredCount.value;
+	return Math.min( 100, ( done / totalSlots.value ) * 100 );
+} );
 
 let ticker = null;
 let holdTicker = null;
@@ -1497,6 +1511,8 @@ const Nera_SAW_QUIZ_LADDER = 'ladder';
 
 async function start() {
 	retryAction = start;
+	justSlot.value = null;
+	pendingJust = null;
 	try {
 		const state = await api.startRun( props.competitionId, props.tier, props.startToken, chosenLanguage.value );
 		applyState( state );
@@ -1593,6 +1609,8 @@ async function loadSlot( slotNo ) {
 	revealSecondsLeft.value = 0;
 	revealIsFinal.value = false;
 	removeTicketFly();
+	justSlot.value = pendingJust;
+	pendingJust = null;
 
 	phase.value = 'question';
 	startCountdown();
@@ -1686,6 +1704,7 @@ async function submit( option ) {
 	const awarded = isCorrect ? ( slot.reward || 0 ) : 0;
 	const spinsBefore = spinsSoFar.value || 0;
 
+	pendingJust = isCorrect && ! prefersReducedMotion() ? slot.slot_no : null;
 	experimentalAnswers.push( { slot_no: slot.slot_no, chosen_index: chosenIndex } );
 	answeredCount.value = experimentalAnswers.length;
 	spinsSoFar.value = ( spinsSoFar.value || 0 ) + awarded;
