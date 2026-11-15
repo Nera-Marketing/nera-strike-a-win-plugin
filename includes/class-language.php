@@ -2291,9 +2291,9 @@ class Nera_SAW_Language {
 		}
 
 		/*
-		 * Set again even when the request already carries the same value: a
-		 * cookie written with HttpOnly stays HttpOnly until it is replaced, and
-		 * self::cached_page_fallback() can only read one that is not.
+		 * Written on every non-default-language response, without HttpOnly, so
+		 * self::cached_page_fallback() can read it from document.cookie and its
+		 * one-day expiry runs from the latest visit.
 		 */
 		setcookie(
 			self::SWITCH_ARG,
