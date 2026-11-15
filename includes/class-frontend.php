@@ -183,7 +183,9 @@ class Nera_SAW_Frontend {
 		// competition — empty on a monolingual site, or when the Russian (etc.)
 		// bank is too thin for this competition's distribution. See
 		// Nera_SAW_Run::playable_languages() and CONTEXT.md "Bank health".
-		$languages = $competition_id ? Nera_SAW_Run::playable_languages( $competition_id ) : array();
+		// With the setting off the list stays empty, so no card shows and the run takes
+		// the page's current language.
+		$languages = ( $competition_id && Nera_SAW_Constants::ask_quiz_language() ) ? Nera_SAW_Run::playable_languages( $competition_id ) : array();
 		$language_names = array();
 		foreach ( $languages as $code ) {
 			$language_names[ $code ] = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $code ) : $code;

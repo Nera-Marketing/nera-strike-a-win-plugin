@@ -200,6 +200,8 @@ class Nera_SAW_Constants {
 			'feedback_seconds'   => self::FEEDBACK_SECONDS_DEFAULT,
 			// Manual "Next question" button during the answer reveal. Off: the hold runs out by itself.
 			'reveal_next_button' => false,
+			// Quiz-language card before a run. Off: the run follows the language the player browses in.
+			'ask_quiz_language'  => false,
 			// The site's name as players see it (Nera_SAW_Brand). One place, not typed into templates.
 			'brand_name'         => 'Strike And Win',
 			// Wallet top-up limits (Nera_SAW_Wallet). Provisional until the client
@@ -414,6 +416,24 @@ class Nera_SAW_Constants {
 		 * @param bool $v Value from Settings.
 		 */
 		return (bool) apply_filters( 'nera_saw_reveal_next_button', $v );
+	}
+
+	/**
+	 * Whether players pick the quiz language on a card before a run starts (global
+	 * setting, off by default). Off: the run is drawn in the site's current language.
+	 *
+	 * @return bool
+	 */
+	public static function ask_quiz_language() {
+		$s = self::settings();
+		$v = ! empty( $s['ask_quiz_language'] );
+
+		/**
+		 * Filter whether the quiz-language card is shown before a run.
+		 *
+		 * @param bool $v Value from Settings.
+		 */
+		return (bool) apply_filters( 'nera_saw_ask_quiz_language', $v );
 	}
 
 	/**

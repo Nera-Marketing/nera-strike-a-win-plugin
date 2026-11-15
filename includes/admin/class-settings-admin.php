@@ -99,6 +99,7 @@ class Nera_SAW_Settings_Admin {
 		$feedback_seconds = max( Nera_SAW_Constants::FEEDBACK_SECONDS_MIN, min( Nera_SAW_Constants::FEEDBACK_SECONDS_MAX, $feedback_seconds ) );
 		// An unticked checkbox posts nothing: that is off.
 		$reveal_next_button = ! empty( $_POST['reveal_next_button'] );
+		$ask_quiz_language  = ! empty( $_POST['ask_quiz_language'] );
 
 		$brand_name = isset( $_POST['brand_name'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['brand_name'] ) ) ) : '';
 		if ( '' === $brand_name ) {
@@ -154,6 +155,7 @@ class Nera_SAW_Settings_Admin {
 				'timer_seconds'      => $timer_seconds,
 				'feedback_seconds'   => $feedback_seconds,
 				'reveal_next_button' => $reveal_next_button,
+				'ask_quiz_language'  => $ask_quiz_language,
 				'brand_name'                       => $brand_name,
 				'wallet_topup_max_per_transaction' => $wallet_per_txn,
 				'wallet_topup_max_per_day'         => $wallet_per_day,
@@ -508,6 +510,17 @@ class Nera_SAW_Settings_Admin {
 			esc_html__( 'Show the Next button during the answer reveal', 'nera-strikeawin' )
 		);
 		echo '<p class="saw-muted">' . esc_html__( 'The next question\'s timer starts when that question is served, so this hold never eats into a player\'s answering time.', 'nera-strikeawin' ) . '</p>';
+		echo '</div>';
+
+		// --- Quiz language card --------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Quiz language', 'nera-strikeawin' ) . '</h2>';
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="ask_quiz_language" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Constants::ask_quiz_language(), true, false ),
+			esc_html__( 'Ask players to pick the quiz language', 'nera-strikeawin' )
+		);
+		echo '<p class="saw-muted">' . esc_html__( 'When this is off, questions follow the language the player is browsing the site in.', 'nera-strikeawin' ) . '</p>';
 		echo '</div>';
 
 		// --- Share link card -----------------------------------------------
