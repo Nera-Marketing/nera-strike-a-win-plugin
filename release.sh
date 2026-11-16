@@ -120,6 +120,15 @@ else
   find "$WORK_DIR" -name '*.bak' -type f -delete 2>/dev/null || true
 fi
 
+# Ship tracked files only, plus the fresh build in dist/: drop every untracked or ignored
+# file the copy picked up (local notes, internal docs, dev scripts).
+( cd "$PLUGIN_DIR" && git ls-files -z --others -x node_modules -x .release-tmp ) |
+  while IFS= read -r -d '' f; do
+    case "$f" in dist/*) continue ;; esac
+    rm -f "$WORK_DIR/$f"
+  done
+find "$WORK_DIR" -type d -empty -delete 2>/dev/null || true
+
 echo "▶ Setting * Version + NERA_SAW_VERSION to ${VERSION} in release tree (for PUC)..."
 PHP_MAIN="$WORK_DIR/${PLUGIN_MAIN}"
 if [ ! -f "$PHP_MAIN" ]; then
@@ -237,7 +246,8 @@ else
   fi
 fi
 
-git add -A
+git add -u
+git add dist
 if git diff --staged --quiet; then
   echo "▶ No staged changes after sync — skipping commit (tree already matches release)."
 else

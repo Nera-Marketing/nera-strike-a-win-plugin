@@ -16,3 +16,6 @@ node_modules/
 # (they carry local paths, test addresses and a demo password), neither for this public repo nor the zip.
 /docs/PLAN-*.md
 /tools/
+
+# Local session notes
+/.memsearch/
