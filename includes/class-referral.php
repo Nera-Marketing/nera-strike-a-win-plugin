@@ -241,9 +241,10 @@ class Nera_SAW_Referral {
 
 	/**
 	 * Whether this visitor arrived through a player's link and may be shown the
-	 * friend message: referral on, a cookie code that belongs to a player, not
-	 * the referrer themself, and no free grant of their own on the open free
-	 * competition yet.
+	 * friend message, which promises a bonus: only when reward() could still pay
+	 * it. Referral on, a cookie code that belongs to a player who is under the
+	 * cap; a logged-in visitor must be that player's referred friend, not yet
+	 * rewarded, with no free grant of their own on the open free competition.
 	 *
 	 * @return bool
 	 */
@@ -253,7 +254,7 @@ class Nera_SAW_Referral {
 		}
 		$code     = isset( $_COOKIE[ self::COOKIE ] ) ? (string) wp_unslash( $_COOKIE[ self::COOKIE ] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- matched against the code pattern.
 		$referrer = self::user_by_code( $code );
-		if ( ! $referrer ) {
+		if ( ! $referrer || count( self::friends( $referrer ) ) >= self::cap() ) {
 			return false;
 		}
 		$user_id = get_current_user_id();
@@ -261,6 +262,9 @@ class Nera_SAW_Referral {
 			return true;
 		}
 		if ( $user_id === $referrer ) {
+			return false;
+		}
+		if ( (int) get_user_meta( $user_id, self::META_BY, true ) !== $referrer || '' !== (string) get_user_meta( $user_id, self::META_REWARDED, true ) ) {
 			return false;
 		}
 		$free_id = class_exists( 'Nera_SAW_Free' ) ? (int) Nera_SAW_Free::current() : 0;
