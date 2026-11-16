@@ -423,6 +423,11 @@ class Nera_SAW_Referral {
 			'user_id'        => $friend,
 			'context'        => array( 'referrer' => $referrer ),
 		);
+		// Without the lock the cap check and the friends list update are not atomic: skip rather than risk passing the cap.
+		if ( ! $locked ) {
+			Nera_SAW_Log::add( 'referral', $log + array( 'level' => 'warning', 'message' => sprintf( 'Referral bonus skipped: referrer #%1$d lock busy. Friend #%2$d, competition #%3$d.', $referrer, $friend, $cid ) ) );
+			return;
+		}
 		try {
 			// Another request may have rewarded this friend, or filled the cap, while we waited.
 			wp_cache_delete( $friend, 'user_meta' );
@@ -441,26 +446,34 @@ class Nera_SAW_Referral {
 			}
 
 			$minted = 0;
-			$held   = 0;
+			$got    = array();
 			foreach ( array( $friend, $referrer ) as $owner ) {
 				$result = Nera_SAW_Ticket_Award::award_bonus( $cid, $owner, $friend );
+				// The friend's next free run is always another competition, so a missing ticket can only be finished here.
+				if ( '' === $result ) {
+					$result = Nera_SAW_Ticket_Award::award_bonus( $cid, $owner, $friend );
+				}
 				if ( 'minted' === $result ) {
 					++$minted;
 				}
-				if ( '' !== $result ) {
-					++$held;
-				}
+				$got[ $owner ] = '' !== $result;
 			}
 			Nera_SAW_Spin_Pool::confirm( $cid, 2, $minted );
 
-			// Not marked rewarded until both tickets exist, so a later finalize can finish the job.
-			if ( 2 !== $held ) {
-				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: %2$d of 2 tickets exist. Friend #%3$d, referrer #%4$d.', $cid, $held, $friend, $referrer ), $log );
+			$held = count( array_filter( $got ) );
+			if ( 0 === $held ) {
+				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 0 of 2 tickets exist. Friend #%2$d, referrer #%3$d.', $cid, $friend, $referrer ), $log );
 				return;
 			}
+			if ( 2 !== $held ) {
+				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 1 of 2 tickets exist, the %2$s ticket is missing. Friend #%3$d, referrer #%4$d. Friend marked rewarded; add the missing ticket by hand.', $cid, $got[ $friend ] ? 'referrer\'s' : 'friend\'s', $friend, $referrer ), $log );
+			}
 			update_user_meta( $friend, self::META_REWARDED, $cid );
-			$friends[] = $friend;
-			update_user_meta( $referrer, self::META_FRIENDS, array_values( array_unique( $friends ) ) );
+			// The friends list counts the referrer's bonus tickets, so it only grows when the referrer's ticket exists.
+			if ( $got[ $referrer ] ) {
+				$friends[] = $friend;
+				update_user_meta( $referrer, self::META_FRIENDS, array_values( array_unique( $friends ) ) );
+			}
 			self::flag_same_ip( $friend, $referrer, $cid );
 		} finally {
 			if ( $locked ) {
