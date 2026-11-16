@@ -1811,6 +1811,52 @@ const responsiblePlayUrl = ( window.NeraSAW && window.NeraSAW.responsiblePlayUrl
 const isFree = !! competition.is_free;
 const social = ( window.NeraSAW && window.NeraSAW.social ) || {};
 const homeUrl = ( window.NeraSAW && window.NeraSAW.homeUrl ) || '/';
+// Free result: bonus challenge card (invite friends with a personal link).
+const referral = ( window.NeraSAW && window.NeraSAW.referral ) || {};
+const inviteOn = isFree && !! Number( referral.enabled ) && !! referral.link;
+const inviteCap = Math.max( 1, Number( referral.cap ) || 5 );
+const inviteDone = Math.min( inviteCap, Math.max( 0, Number( referral.rewarded ) || 0 ) );
+const inviteLeft = inviteCap - inviteDone;
+const inviteLink = referral.link || '';
+const inviteCanShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+const inviteOpen = ref( false );
+const inviteCopied = ref( false );
+let inviteCopiedTimer = 0;
+const inviteLeftText = computed( () => {
+	if ( 0 === inviteLeft ) {
+		return t( 'invLeft0', 'All bonus tickets earned' );
+	}
+	if ( 1 === inviteLeft ) {
+		return t( 'invLeft1', '1 bonus ticket still available' );
+	}
+	return fmt( 'invLeft', '{n} bonus tickets still available', inviteLeft, { n: inviteLeft } );
+} );
+const inviteWhatsApp = computed( () => 'https://wa.me/?text=' + encodeURIComponent( shareText.value + ' ' + inviteLink ) );
+const inviteTelegram = computed( () => 'https://t.me/share/url?url=' + encodeURIComponent( inviteLink ) + '&text=' + encodeURIComponent( shareText.value ) );
+
+function inviteShare() {
+	navigator.share( { text: shareText.value, url: inviteLink } ).catch( () => {} );
+}
+
+function inviteCopy() {
+	const done = () => {
+		inviteCopied.value = true;
+		clearTimeout( inviteCopiedTimer );
+		inviteCopiedTimer = setTimeout( () => {
+			inviteCopied.value = false;
+		}, 2500 );
+	};
+	const fallback = () => {
+		if ( copyBySelection( inviteLink ) ) {
+			done();
+		}
+	};
+	if ( navigator.clipboard && typeof navigator.clipboard.writeText === 'function' ) {
+		navigator.clipboard.writeText( inviteLink ).then( done, fallback );
+		return;
+	}
+	fallback();
+}
 const freeDrawLine = computed( () => fmt( 'freeDrawLine', 'Entered in the prize draw · Live draw: {d}', drawDate.value || t( 'drawDateTbc', 'date to be confirmed' ) ) );
 const hasNextRun = computed( () => ( runsRemainingTier.value || 0 ) > 0 && nextRunNo.value > 0 );
 const playAgainUrl = computed( () => {
@@ -2037,6 +2083,35 @@ onUnmounted( () => {
 						<span class="saw-fres__ptx"><b>{{ t('freePreview', 'Preview your story') }}</b><small>{{ t('freePreviewSub', 'Full 9:16 card for Stories and chats') }}</small></span>
 						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
 					</button>
+				</section>
+
+				<section v-if="summaryReady && inviteOn" class="saw-invite" aria-labelledby="saw-invite-title">
+					<span class="saw-invite__badge"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z" /><path d="M10 6v12" stroke-dasharray="2 2" /></svg>{{ t('invKicker', 'Bonus challenge') }}</span>
+					<h2 id="saw-invite-title" class="saw-invite__title">{{ fmt('invTitle', 'Invite {n} friends. Earn up to {n} extra tickets.', inviteCap, { n: inviteCap }) }}</h2>
+					<p class="saw-invite__sub">{{ t('invSub', 'And your friends get a bonus ticket too.') }}</p>
+					<div class="saw-invite__tiles">
+						<div class="saw-invite__tile"><small>{{ t('invYou', 'You get') }}</small><b>+1</b><span>{{ t('invUnit', 'Bonus ticket') }}</span></div>
+						<div class="saw-invite__tile"><small>{{ t('invFriend', 'Your friend gets') }}</small><b>+1</b><span>{{ t('invUnit', 'Bonus ticket') }}</span></div>
+					</div>
+					<div class="saw-invite__prog">
+						<div class="saw-invite__pl"><b>{{ fmt('invProg', '{x} / {m} friends rewarded', inviteDone, { x: inviteDone, m: inviteCap }) }}</b><span>{{ inviteLeftText }}</span></div>
+						<div class="saw-invite__slots" aria-hidden="true">
+							<div v-for="i in inviteCap" :key="i" class="saw-invite__slot" :class="{ 'is-on': i <= inviteDone }" :title="fmt('invSlot', 'Friend {n}', i, { n: i })"><b>+1</b><small>{{ i }}</small></div>
+						</div>
+					</div>
+					<p class="saw-invite__how">{{ t('invHow', 'Your friend joins, verifies their email and completes the free quiz. You both receive a bonus ticket once eligible.') }}</p>
+					<span class="saw-invite__gowrap"><button type="button" class="saw-invite__go" :aria-expanded="inviteOpen ? 'true' : 'false'" aria-controls="saw-invite-opts" @click="inviteOpen = ! inviteOpen">{{ t('invGo', 'Invite friends now') }}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button></span>
+					<div v-if="inviteOpen" id="saw-invite-opts" class="saw-invite__opts">
+						<span class="saw-invite__label">{{ t('invLink', 'Your personal link') }}</span>
+						<span class="saw-invite__link">{{ inviteLink.replace( /^https?:\/\//, '' ) }}</span>
+						<div class="saw-invite__grid">
+							<button v-if="inviteCanShare" type="button" class="saw-invite__btn" @click="inviteShare"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></svg>{{ t('invShare', 'Share') }}</button>
+							<a class="saw-invite__btn" :href="inviteWhatsApp" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.9 7L4 20l1.1-4A8 8 0 1 1 20 12z" /></svg>WhatsApp</a>
+							<a class="saw-invite__btn" :href="inviteTelegram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 3.5L2.5 10.8l6.2 2.3 2.4 6.4 3.4-4.2 5.3 3.9z" /></svg>Telegram</a>
+							<button type="button" class="saw-invite__btn" @click="inviteCopy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>{{ inviteCopied ? t('invCopied', 'Copied') : t('invCopy', 'Copy link') }}</button>
+						</div>
+						<p class="saw-sr-only" aria-live="polite">{{ inviteCopied ? t('invCopied', 'Copied') : '' }}</p>
+					</div>
 				</section>
 
 				<section v-if="social.instagram || social.telegram" class="saw-fres__follow">
@@ -2732,6 +2807,29 @@ onUnmounted( () => {
 .saw-fres__fbtn { border: 1.5px solid currentColor; color: var(--saw-text); }
 .saw-fres__end { margin-top: 16px; display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; }
 .saw-fres__link { min-height: 44px; display: inline-flex; align-items: center; padding: 0 6px; font-size: 14px; color: var(--saw-text-muted); text-decoration: underline; }
+
+.saw-invite { margin-top: 16px; padding: 16px; border-radius: 16px; border: 1px solid var(--saw-surface); text-align: left; }
+.saw-invite__badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.saw-invite__title { margin: 8px 0 0; font-size: 20px; line-height: 1.2; font-weight: 800; }
+.saw-invite__sub { margin: 6px 0 0; font-weight: 700; }
+.saw-invite__tiles { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.saw-invite__tile { padding: 12px 10px; border-radius: 14px; border: 1px solid var(--saw-surface); text-align: center; }
+.saw-invite__tile small, .saw-invite__tile b, .saw-invite__tile span { display: block; }
+.saw-invite__tile b { margin-top: 4px; font-size: 36px; line-height: 1; }
+.saw-invite__prog { margin-top: 12px; }
+.saw-invite__pl { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 10px; }
+.saw-invite__slots { margin-top: 10px; display: grid; grid-template-columns: repeat( 5, minmax( 0, 1fr ) ); gap: 6px; }
+.saw-invite__slot { position: relative; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; border: 1.5px dashed currentColor; opacity: .5; }
+.saw-invite__slot.is-on { border-style: solid; opacity: 1; background: var(--saw-brand); }
+.saw-invite__slot small { position: absolute; top: 3px; right: 5px; font-size: 9px; }
+.saw-invite__how { margin: 12px 0 0; font-size: 13px; }
+.saw-invite__gowrap { display: block; margin-top: 14px; }
+.saw-invite__go { box-sizing: border-box; width: 100%; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--saw-brand); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.saw-invite__opts { margin-top: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--saw-surface); }
+.saw-invite__label { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.saw-invite__link { display: block; margin-top: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: inherit; text-decoration: none; }
+.saw-invite__grid { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.saw-invite__btn { box-sizing: border-box; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border-radius: 999px; border: 1.5px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
 
 @media (max-width: 480px) {
 	.saw-langcard { padding: 32px 20px; }
