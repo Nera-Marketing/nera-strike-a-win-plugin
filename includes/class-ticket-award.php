@@ -343,7 +343,10 @@ class Nera_SAW_Ticket_Award {
 				$ticket_id = $picked ? self::create_orderless_ticket( $product, $user, $picked[0] ) : 0;
 				if ( $ticket_id ) {
 					update_post_meta( (int) $ticket_id, self::BONUS_META, (int) $friend_id );
-					$product->update_post_meta( 'lty_ticket_count', (int) $product->get_lty_ticket_count() + 1 );
+					// The product's count prop was loaded before the lock; another mint may have raised it since.
+					wp_cache_delete( $competition_id, 'post_meta' );
+					$fresh = (int) get_post_meta( $competition_id, '_lty_ticket_count', true );
+					$product->update_post_meta( 'lty_ticket_count', $fresh + 1 );
 					$result = 'minted';
 				}
 			}
