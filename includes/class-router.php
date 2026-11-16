@@ -499,8 +499,24 @@ class Nera_SAW_Router {
 					'next'    => class_exists( 'Nera_SAW_Standalone_Basket' )
 						? Nera_SAW_Standalone_Basket::pre_payment_url()
 						: '',
-					'added'   => __( 'Entry added. Taking you to Before you pay…', 'nera-strikeawin' ),
+					'sheet'   => class_exists( 'Nera_SAW_Standalone_Basket' ) ? Nera_SAW_Standalone_Basket::SHEET : '',
 				)
+			);
+		}
+
+		/*
+		 * The pay sheet: opened over the competition page after Continue, and the
+		 * consent tick's message on Before you pay.
+		 */
+		$saw_pay_page = class_exists( 'Nera_SAW_Standalone_Pages' ) && is_page()
+			&& (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::ROUTE ) === (int) get_queried_object_id();
+		if ( 'competition' === self::current_route() || $saw_pay_page ) {
+			wp_enqueue_script(
+				'nera-saw-paysheet',
+				NERA_SAW_PLUGIN_URL . 'assets/js/paysheet.js',
+				array(),
+				(string) filemtime( NERA_SAW_PLUGIN_DIR . 'assets/js/paysheet.js' ),
+				true
 			);
 		}
 

@@ -1874,9 +1874,6 @@ class Nera_SAW_Language {
 				'Draw End'                                   => 'Розыгрыш окончен',
 				'Reassurance'                                => 'Гарантии',
 				'Entry %s'                                   => 'Номер %s',
-				// Add-to-basket toast (class-router.php) — found still
-				// English on a real purchase screenshot.
-				'Entry added. Taking you to Before you pay…' => 'Участие добавлено. Переходим к оплате…',
 				'difficulty bands'                        => 'уровней сложности',
 				'%s question'                             => '%s вопрос',
 				'%s questions'                            => '%s вопросов',

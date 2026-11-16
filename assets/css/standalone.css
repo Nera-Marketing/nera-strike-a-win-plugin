@@ -4570,3 +4570,12 @@ html.saw-live-modal-open { overflow: hidden; }
 .saw-share__stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
 .saw-share__stat dd { margin: 4px 0 0; font-size: 1.5em; font-weight: 700; }
 .saw-share__title { overflow-wrap: anywhere; }
+
+/* Pay sheet over the competition page: layout only, the theme gives it its look. */
+.saw-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; padding: 12px; background: rgba(0, 0, 0, .55); }
+@media (min-width: 760px) { .saw-scrim { align-items: center; } }
+.saw-scrim[hidden] { display: none; }
+.saw-scrim > .saw-paysheet { width: 100%; max-width: 470px; max-height: 100%; overflow: auto; padding: 20px; border-radius: 16px; background: Canvas; color: CanvasText; }
+.saw-paysheet__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.saw-paysheet__close { flex: none; width: 44px; height: 44px; padding: 0; font: inherit; font-size: 22px; cursor: pointer; }
+html.saw-sheet-open { overflow: hidden; }

@@ -40,6 +40,11 @@ class Nera_SAW_Standalone_Basket {
 	const ROUTE = 'before-you-pay';
 
 	/**
+	 * The pay sheet's slot on the competition page, and its fragment key.
+	 */
+	const SHEET = 'div[data-saw-sheet]';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -68,6 +73,9 @@ class Nera_SAW_Standalone_Basket {
 		add_filter( 'woocommerce_is_order_received_page', array( __CLASS__, 'declare_order_received' ) );
 		add_filter( 'woocommerce_get_order_item_totals', array( __CLASS__, 'plain_payment_row' ), 20, 1 );
 		add_filter( 'woocommerce_get_checkout_url', array( __CLASS__, 'checkout_url_for_entries' ) );
+
+		// Continue on the competition page opens the pay sheet from the add's own response.
+		add_filter( 'woocommerce_add_to_cart_fragments', array( __CLASS__, 'pay_sheet_fragment' ) );
 
 		// The checkout form says which basket it is for, so the submission does not
 		// have to be inferred from a referer that does not survive being re-rendered.
@@ -859,6 +867,83 @@ class Nera_SAW_Standalone_Basket {
 	 */
 	public static function pre_payment_url() {
 		return Nera_SAW_Standalone_Pages::url( self::ROUTE );
+	}
+
+	/**
+	 * The pay sheet, drawn into the section's add-to-cart response.
+	 *
+	 * Only there: the response is never cached, so the basket total and the
+	 * account's billing values never reach a cached competition page.
+	 *
+	 * @param array $fragments Selector => HTML.
+	 * @return array
+	 */
+	public static function pay_sheet_fragment( $fragments ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_REQUEST['saw_basket'] ) || '1' !== (string) $_REQUEST['saw_basket'] || ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return $fragments;
+		}
+
+		// The add has not been totalled yet in this request.
+		WC()->cart->calculate_totals();
+
+		ob_start();
+		echo '<div class="saw-scrim" data-saw-sheet hidden>';
+		Nera_SAW_Router::part(
+			'parts/paysheet.php',
+			array(
+				'saw_entry' => self::current_entry(),
+				'saw_sheet' => true,
+			)
+		);
+		echo '</div>';
+		$fragments[ self::SHEET ] = ob_get_clean();
+
+		return $fragments;
+	}
+
+	/**
+	 * The gateway the pay sheet pays with: the first the section checkout offers.
+	 *
+	 * @return string
+	 */
+	public static function pay_sheet_gateway() {
+		$ids = array_values( array_diff( Nera_SAW_Checkout::enabled_gateways(), array( 'nera_wallet_split' ) ) );
+		return $ids ? $ids[0] : '';
+	}
+
+	/**
+	 * The signed-in player's billing values, for the fields the section checkout asks for.
+	 *
+	 * @return array Field name => value; empty for a visitor.
+	 */
+	public static function pay_sheet_billing() {
+		if ( ! is_user_logged_in() || ! function_exists( 'WC' ) ) {
+			return array();
+		}
+
+		$user     = wp_get_current_user();
+		$customer = WC()->customer;
+		$values   = array(
+			'billing_first_name' => $customer ? $customer->get_billing_first_name() : '',
+			'billing_last_name'  => $customer ? $customer->get_billing_last_name() : '',
+			'billing_email'      => $customer ? $customer->get_billing_email() : '',
+			'billing_country'    => $customer ? $customer->get_billing_country() : '',
+		);
+
+		// A player who never checked out has no billing name or email yet; the account's own stand in.
+		$fallback = array(
+			'billing_first_name' => $user->first_name,
+			'billing_last_name'  => $user->last_name,
+			'billing_email'      => $user->user_email,
+		);
+		foreach ( $fallback as $key => $value ) {
+			if ( '' === (string) $values[ $key ] ) {
+				$values[ $key ] = (string) $value;
+			}
+		}
+
+		return $values;
 	}
 
 	/**
