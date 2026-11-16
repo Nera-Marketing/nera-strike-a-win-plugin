@@ -241,5 +241,11 @@
   "Follow [BRAND] so you don’t miss the next free competition.": "Подпишитесь на [BRAND], чтобы не пропустить следующий бесплатный конкурс.",
   "Follow on Instagram": "Instagram",
   "Join our Telegram channel": "Telegram-канал",
-  "Back to home": "На главную"
+  "Back to home": "На главную",
+  "Payment confirmed": "Оплата подтверждена",
+  "{n} quiz attempt ready to play.": "Готово к игре: {n} попытка.|Готово к игре: {n} попытки.|Готово к игре: {n} попыток.",
+  "Each quiz: {q}, {s}.": "В каждом квизе {q} {s}.",
+  "{n} question": "{n} вопрос|{n} вопроса|{n} вопросов",
+  "{n} second each": "по {n} секунде|по {n} секунды|по {n} секунд",
+  "Go to my challenge": "К моему испытанию"
 }
