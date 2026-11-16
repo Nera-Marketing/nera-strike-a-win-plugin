@@ -1,0 +1,18 @@
+{
+  "collection": "ms_nera_strike_a_win_plugin_c79fbc7d",
+  "failed_files": [],
+  "indexed_chunks": 1,
+  "indexed_files": 3,
+  "last_completed_at": "2026-10-30T02:57:40.146514Z",
+  "last_started_at": "2026-10-30T02:57:36.559149Z",
+  "last_success_at": "2026-10-30T02:57:40.146514Z",
+  "milvus_uri": "~/.memsearch/milvus.db",
+  "operation": "index",
+  "paths": [
+    "/Users/dannyvpz/Danny/Workspace/nera/sites/strike-a-win/app/public/wp-content/plugins/nera-strike-a-win-plugin/.memsearch/memory"
+  ],
+  "schema_version": 1,
+  "status": "ok",
+  "total_files": 3,
+  "updated_at": "2026-10-30T02:57:40.146514Z"
+}
