@@ -25,6 +25,12 @@ class Nera_SAW_Referral {
 	const COOKIE = 'nera_saw_ref';
 
 	/**
+	 * Readable by scripts (the code cookie is not): tells a cached page that this
+	 * browser holds a code, so it can ask for the friend message.
+	 */
+	const MARKER = 'nera_saw_ref_seen';
+
+	/**
 	 * User meta: the player's link code.
 	 */
 	const META_CODE = '_nera_saw_ref_code';
@@ -70,6 +76,7 @@ class Nera_SAW_Referral {
 	public static function init() {
 		// Ahead of the free sign-up screens, which redirect and exit.
 		add_action( 'template_redirect', array( __CLASS__, 'capture' ), 4 );
+		add_action( 'template_redirect', array( __CLASS__, 'keep_invite_out_of_page_cache' ), 5 );
 		add_action( 'nera_saw_free_account_created', array( __CLASS__, 'attribute' ) );
 		add_action( 'nera_saw_free_run_finalized', array( __CLASS__, 'reward' ), 20, 4 );
 	}
@@ -216,8 +223,76 @@ class Nera_SAW_Referral {
 					'samesite' => 'Lax',
 				)
 			);
+			setcookie(
+				self::MARKER,
+				'1',
+				array(
+					'expires'  => $expires,
+					'path'     => COOKIEPATH ? COOKIEPATH : '/',
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => false,
+					'samesite' => 'Lax',
+				)
+			);
 		}
 		return $expires;
+	}
+
+	/**
+	 * Whether this visitor arrived through a player's link and may be shown the
+	 * friend message: referral on, a cookie code that belongs to a player, not
+	 * the referrer themself, and no free grant of their own on the open free
+	 * competition yet.
+	 *
+	 * @return bool
+	 */
+	public static function has_valid_ref() {
+		if ( ! self::enabled() ) {
+			return false;
+		}
+		$code     = isset( $_COOKIE[ self::COOKIE ] ) ? (string) wp_unslash( $_COOKIE[ self::COOKIE ] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- matched against the code pattern.
+		$referrer = self::user_by_code( $code );
+		if ( ! $referrer ) {
+			return false;
+		}
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return true;
+		}
+		if ( $user_id === $referrer ) {
+			return false;
+		}
+		$free_id = class_exists( 'Nera_SAW_Free' ) ? (int) Nera_SAW_Free::current() : 0;
+		return ! ( $free_id && Nera_SAW_Run_Grants::free_grant( $user_id, $free_id ) );
+	}
+
+	/**
+	 * Whether this request is the Free page (a routed screen or its page).
+	 *
+	 * @return bool
+	 */
+	public static function on_free_page() {
+		if ( 'free' === Nera_SAW_Router::current_route() ) {
+			return true;
+		}
+		return is_page() && class_exists( 'Nera_SAW_Standalone_Pages' ) && 'free' === Nera_SAW_Standalone_Pages::route_of( get_queried_object_id() );
+	}
+
+	/**
+	 * The Free page renders the friend message from the visitor's code cookie, which
+	 * a host page cache ignores: a response carrying the message must never be stored
+	 * (it would be served to everyone), and the script on the cached page fetches it.
+	 */
+	public static function keep_invite_out_of_page_cache() {
+		if ( ! self::on_free_page() || ! self::has_valid_ref() ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
+		header( 'Vary: Cookie', false );
 	}
 
 	/**
