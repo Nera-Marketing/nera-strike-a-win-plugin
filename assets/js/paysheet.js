@@ -95,6 +95,8 @@
 		var body = new FormData( form );
 		post.disabled = true;
 
+		clearFieldErrors( form );
+
 		if ( button ) {
 			button.disabled = true;
 		}
@@ -111,10 +113,11 @@
 			}
 			if ( errors ) {
 				errors.innerHTML = html || '';
-				if ( ! errors.textContent.trim() ) {
+				var placed = fieldErrors( form, errors );
+				if ( ! errors.textContent.trim() && ! placed ) {
 					errors.textContent = errors.getAttribute( 'data-saw-fallback' ) || '';
 				}
-				errors.hidden = false;
+				errors.hidden = ! errors.textContent.trim();
 			}
 		}
 
@@ -138,15 +141,63 @@
 			} );
 	}
 
+	// WooCommerce tags a field's error with the field's name (data-id): each such error moves
+	// under its field; the rest stay in the errors box. Returns how many moved.
+	function fieldErrors( form, box ) {
+		var inputs = form.querySelectorAll( '[data-saw-pay-fields] [name]' );
+		var placed = 0;
+		var first = null;
+		Array.prototype.forEach.call( box.querySelectorAll( '[data-id]' ), function ( item ) {
+			var input = null;
+			for ( var i = 0; i < inputs.length; i++ ) {
+				if ( inputs[ i ].name === item.getAttribute( 'data-id' ) ) {
+					input = inputs[ i ];
+				}
+			}
+			if ( ! input ) {
+				return;
+			}
+			var msg = document.createElement( 'p' );
+			msg.className = 'saw-field__err';
+			msg.id = input.id + '-err';
+			msg.textContent = item.textContent.trim();
+			input.insertAdjacentElement( 'afterend', msg );
+			input.setAttribute( 'aria-invalid', 'true' );
+			input.setAttribute( 'aria-describedby', msg.id );
+			item.parentNode.removeChild( item );
+			first = first || input;
+			placed++;
+		} );
+		if ( first ) {
+			first.focus();
+		}
+		return placed;
+	}
+
+	function clearFieldErrors( form ) {
+		Array.prototype.forEach.call( form.querySelectorAll( '.saw-field__err' ), function ( msg ) {
+			msg.parentNode.removeChild( msg );
+		} );
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-fields] [aria-invalid]' ), function ( input ) {
+			input.removeAttribute( 'aria-invalid' );
+			input.removeAttribute( 'aria-describedby' );
+		} );
+	}
+
 	// Only a sheet that carries what the checkout needs (a signed-in player's nonce and
-	// billing values) pays from here; otherwise the form goes on to the checkout page.
+	// billing fields) pays from here; otherwise the form goes on to the checkout page.
 	document.addEventListener( 'submit', function ( event ) {
 		var form = event.target;
-		if ( event.defaultPrevented || ! form.matches || ! form.matches( '[data-saw-consent]' ) || ! window.fetch ) {
+		if ( event.defaultPrevented || ! form.matches || ! form.matches( '[data-saw-consent]' ) ) {
 			return;
 		}
 		var post = form.querySelector( '[data-saw-pay-post]' );
-		if ( ! post || ! post.getAttribute( 'data-saw-pay-post' ) || ! post.querySelector( '[name="woocommerce-process-checkout-nonce"]' ) || ! post.querySelector( '[name^="billing_"]' ) ) {
+		if ( ! window.fetch || ! post || ! post.getAttribute( 'data-saw-pay-post' ) || ! post.querySelector( '[name="woocommerce-process-checkout-nonce"]' ) || ! form.querySelector( '[name^="billing_"]' ) ) {
+			// The checkout page asks for these itself, and an email address does not belong in the URL this GET builds.
+			var fields = form.querySelector( '[data-saw-pay-fields]' );
+			if ( fields ) {
+				fields.disabled = true;
+			}
 			return;
 		}
 		event.preventDefault();

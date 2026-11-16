@@ -212,6 +212,10 @@ class Nera_SAW_Constants {
 			// provider is agreed -- and whether the coupon prompt does.
 			'checkout_gateways'                => array( 'wallet' ),
 			'checkout_show_coupon'             => false,
+			// Billing on the pay sheet: off = no country field (billing country is the United
+			// Kingdom) and an optional last name. A competition may override either.
+			'checkout_show_country'            => false,
+			'checkout_last_name_required'      => false,
 			// Optional blocks on the quiz results screen (keys of result_blocks()).
 			'result_display'                   => array( 'draw_line' ),
 			// Days a shared result link stays live (Nera_SAW_Share::days()); the draw ends it sooner.

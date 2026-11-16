@@ -947,6 +947,63 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
+	 * The billing fields the pay sheet shows, prefilled from pay_sheet_billing().
+	 *
+	 * Field names are WooCommerce's, so Pay posts them to the checkout as they are.
+	 *
+	 * @param int $competition_id The basket entry's competition.
+	 * @return array[] Each: name, label, type (text|email|select), value, required, autocomplete, options (select only).
+	 */
+	public static function pay_sheet_fields( $competition_id ) {
+		$values = self::pay_sheet_billing();
+		$last   = Nera_SAW_Checkout::last_name_required( $competition_id );
+		$fields = array(
+			array(
+				'name'         => 'billing_first_name',
+				'label'        => __( 'First name', 'nera-strikeawin' ),
+				'type'         => 'text',
+				'required'     => true,
+				'autocomplete' => 'given-name',
+			),
+			array(
+				'name'         => 'billing_last_name',
+				/* translators: %s: field label */
+				'label'        => $last ? __( 'Last name', 'nera-strikeawin' ) : sprintf( __( '%s (optional)', 'nera-strikeawin' ), __( 'Last name', 'nera-strikeawin' ) ),
+				'type'         => 'text',
+				'required'     => $last,
+				'autocomplete' => 'family-name',
+			),
+			array(
+				'name'         => 'billing_email',
+				'label'        => __( 'Email for your receipt and draw reminders', 'nera-strikeawin' ),
+				'type'         => 'email',
+				'required'     => true,
+				'autocomplete' => 'email',
+			),
+		);
+
+		if ( Nera_SAW_Checkout::show_country( $competition_id ) && function_exists( 'WC' ) && WC()->countries ) {
+			$fields[] = array(
+				'name'         => 'billing_country',
+				'label'        => __( 'Country', 'nera-strikeawin' ),
+				'type'         => 'select',
+				'required'     => true,
+				'autocomplete' => 'country',
+				'options'      => WC()->countries->get_allowed_countries(),
+			);
+		}
+
+		foreach ( $fields as $i => $field ) {
+			$fields[ $i ]['value'] = isset( $values[ $field['name'] ] ) ? (string) $values[ $field['name'] ] : '';
+			if ( 'select' === $field['type'] && ! isset( $field['options'][ $fields[ $i ]['value'] ] ) ) {
+				$fields[ $i ]['value'] = Nera_SAW_Checkout::DEFAULT_COUNTRY;
+			}
+		}
+
+		return $fields;
+	}
+
+	/**
 	 * The one entry in the basket, assembled for a screen to render.
 	 *
 	 * Returns the first entry found rather than the only one, because a basket that

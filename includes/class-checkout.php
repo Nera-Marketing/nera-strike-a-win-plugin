@@ -5,8 +5,9 @@
  *
  * Lewis, 2 October: a run is a digital entry, so the checkout asks for as little as it can.
  *
- *  - BILLING: first name, last name, email, country. No street, town, postcode, phone,
- *    company or order notes (the date of birth is already taken at registration).
+ *  - BILLING: first name, last name, email and, when a setting asks for it, country (else
+ *    the United Kingdom). No street, town, postcode, phone, company or order notes (the date
+ *    of birth is already taken at registration).
  *  - COUNTRY: United Kingdom and Ireland only.
  *  - CONSENT: the one tick on Before you pay (age, terms and rules), nothing more at
  *    checkout. Since that is now the only record of the player's agreement, it is also
@@ -37,6 +38,11 @@ class Nera_SAW_Checkout {
 	 */
 	const SETTING_GATEWAYS = 'checkout_gateways';
 	const SETTING_COUPON   = 'checkout_show_coupon';
+	const SETTING_COUNTRY  = 'checkout_show_country';
+	const SETTING_LAST     = 'checkout_last_name_required';
+
+	/** The billing country when the checkout does not ask for one. */
+	const DEFAULT_COUNTRY = 'GB';
 
 	/**
 	 * The split-payment pseudo-gateway: its radio's value, and the settings key that shows it.
@@ -93,6 +99,7 @@ class Nera_SAW_Checkout {
 		add_filter( 'woocommerce_available_payment_gateways', array( __CLASS__, 'gateways' ), 99 );
 		add_filter( 'woocommerce_gateway_title', array( __CLASS__, 'card_title' ), 99, 2 );
 		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'map_split_payment' ), 5 );
+		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'default_country' ), 10 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'record_split' ), 10, 1 );
 
 		// PayPal Payments loads its SDK and renders button containers on the checkout whether or
@@ -132,7 +139,62 @@ class Nera_SAW_Checkout {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * First name, last name, email, country. Nothing else.
+	 * The competition of the basket's entry, for the per-competition checkout switches.
+	 *
+	 * @return int 0 when the basket holds none.
+	 */
+	private static function entry_competition_id() {
+		$entry = Nera_SAW_Standalone_Basket::current_entry();
+		return ( $entry && ! empty( $entry['spec']['id'] ) ) ? (int) $entry['spec']['id'] : 0;
+	}
+
+	/**
+	 * Does the checkout ask for the country? Off: no field, the billing country is DEFAULT_COUNTRY.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_country( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_COUNTRY, 'nera_saw_checkout_show_country', $competition_id );
+	}
+
+	/**
+	 * Is the last name a required field?
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function last_name_required( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_LAST, 'nera_saw_checkout_last_name_required', $competition_id );
+	}
+
+	/**
+	 * An on/off setting: the global value, then the competition's override unless it inherits.
+	 *
+	 * @param string $key            Settings key, also the competition config key.
+	 * @param string $filter         Filter name; args value, competition id, global value.
+	 * @param int    $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	private static function switch_setting( $key, $filter, $competition_id ) {
+		$s      = Nera_SAW_Constants::settings();
+		$global = ! empty( $s[ $key ] );
+		$value  = $global;
+
+		$competition_id = (int) $competition_id;
+		if ( $competition_id > 0 ) {
+			$config = Nera_SAW_Competition_Config::get( $competition_id );
+			$own    = Nera_SAW_Competition_Config::sanitize_switch_override( isset( $config[ $key ] ) ? $config[ $key ] : '' );
+			if ( '' !== $own ) {
+				$value = '1' === $own;
+			}
+		}
+
+		return (bool) apply_filters( $filter, $value, $competition_id, $global );
+	}
+
+	/**
+	 * First name, last name, email and, when asked for, country. Nothing else.
 	 *
 	 * @param array $fields Checkout fields.
 	 * @return array
@@ -141,6 +203,8 @@ class Nera_SAW_Checkout {
 		if ( ! self::is_entry_checkout() || self::is_topup_cart() || empty( $fields['billing'] ) ) {
 			return $fields;
 		}
+
+		$competition_id = self::entry_competition_id();
 
 		$keep = array(
 			'billing_first_name' => array( 10, 'form-row-first' ),
@@ -159,14 +223,32 @@ class Nera_SAW_Checkout {
 				continue;
 			}
 			$fields['billing'][ $key ]['priority'] = $layout[0];
-			$fields['billing'][ $key ]['required'] = true;
+			$fields['billing'][ $key ]['required'] = 'billing_last_name' === $key ? self::last_name_required( $competition_id ) : true;
 			// The theme's half/full-width helper classes are replaced, not added to.
 			$fields['billing'][ $key ]['class'] = array( $layout[1] );
+		}
+
+		if ( ! self::show_country( $competition_id ) ) {
+			unset( $fields['billing']['billing_country'] );
 		}
 
 		unset( $fields['shipping'], $fields['order'] );
 
 		return $fields;
+	}
+
+	/**
+	 * With no country field, the order and the customer are billed to DEFAULT_COUNTRY.
+	 *
+	 * @param array $data Posted checkout data.
+	 * @return array
+	 */
+	public static function default_country( $data ) {
+		if ( self::is_entry_checkout() && ! self::is_topup_cart() && ! self::show_country( self::entry_competition_id() ) ) {
+			$data['billing_country'] = self::DEFAULT_COUNTRY;
+		}
+
+		return $data;
 	}
 
 	/**

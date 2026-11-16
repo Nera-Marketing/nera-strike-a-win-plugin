@@ -168,8 +168,23 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_HASH ); ?>" value="<?php echo esc_attr( Nera_SAW_Checkout::basket_hash() ); ?>">
 				<?php if ( is_user_logged_in() ) { wp_nonce_field( 'woocommerce-process_checkout', 'woocommerce-process-checkout-nonce', false ); } ?>
 				<input type="hidden" name="payment_method" value="<?php echo esc_attr( Nera_SAW_Standalone_Basket::pay_sheet_gateway() ); ?>">
-				<?php foreach ( Nera_SAW_Standalone_Basket::pay_sheet_billing() as $saw_key => $saw_value ) : ?>
-					<input type="hidden" name="<?php echo esc_attr( $saw_key ); ?>" value="<?php echo esc_attr( $saw_value ); ?>">
+			</fieldset>
+			<?php // The billing fields Pay sends, prefilled from the account; WooCommerce saves what is typed to it. ?>
+			<fieldset class="saw-paysheet__fields" data-saw-pay-fields>
+				<?php foreach ( Nera_SAW_Standalone_Basket::pay_sheet_fields( (int) $saw_spec['id'] ) as $saw_field ) : ?>
+					<?php $saw_fid = 'saw-pay-' . str_replace( '_', '-', $saw_field['name'] ); ?>
+					<div class="saw-field">
+						<label for="<?php echo esc_attr( $saw_fid ); ?>"><?php echo esc_html( $saw_field['label'] ); ?></label>
+						<?php if ( 'select' === $saw_field['type'] ) : ?>
+							<select id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo $saw_field['required'] ? ' required' : ''; ?>>
+								<?php foreach ( $saw_field['options'] as $saw_code => $saw_name ) : ?>
+									<option value="<?php echo esc_attr( $saw_code ); ?>"<?php selected( $saw_field['value'], (string) $saw_code ); ?>><?php echo esc_html( html_entity_decode( $saw_name, ENT_QUOTES, 'UTF-8' ) ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						<?php else : ?>
+							<input type="<?php echo esc_attr( $saw_field['type'] ); ?>" id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" value="<?php echo esc_attr( $saw_field['value'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo 'email' === $saw_field['type'] ? ' inputmode="email"' : ''; ?><?php echo $saw_field['required'] ? ' required' : ''; ?>>
+						<?php endif; ?>
+					</div>
 				<?php endforeach; ?>
 			</fieldset>
 		<?php endif; ?>

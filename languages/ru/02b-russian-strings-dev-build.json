@@ -247,5 +247,8 @@
   "Each quiz: {q}, {s}.": "В каждом квизе {q} {s}.",
   "{n} question": "{n} вопрос|{n} вопроса|{n} вопросов",
   "{n} second each": "по {n} секунде|по {n} секунды|по {n} секунд",
-  "Go to my challenge": "К моему испытанию"
+  "Go to my challenge": "К моему испытанию",
+  "Email for your receipt and draw reminders": "Email для чека и напоминаний о розыгрыше",
+  "%s (optional)": "%s (необязательно)",
+  "Country": "Страна"
 }

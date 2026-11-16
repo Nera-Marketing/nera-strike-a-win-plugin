@@ -42,6 +42,10 @@ class Nera_SAW_Competition_Config {
 			// Days a shared result link lives: '' = inherit the global setting.
 			// Resolve through Nera_SAW_Share::days().
 			'share_link_days' => '',
+			// Pay sheet billing: '' = inherit the global setting, '1' on, '0' off. Resolve
+			// through Nera_SAW_Checkout::show_country() / last_name_required().
+			'checkout_show_country'       => '',
+			'checkout_last_name_required' => '',
 			// Free text, not a number: the prototype prints it verbatim ("£28,000")
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
@@ -260,6 +264,10 @@ class Nera_SAW_Competition_Config {
 		$share_days                = isset( $config['share_link_days'] ) ? trim( (string) $config['share_link_days'] ) : '';
 		$config['share_link_days'] = ( '' !== $share_days && (int) $share_days >= 1 ) ? (string) (int) $share_days : '';
 
+		foreach ( array( 'checkout_show_country', 'checkout_last_name_required' ) as $key ) {
+			$config[ $key ] = self::sanitize_switch_override( $config[ $key ] );
+		}
+
 		$config['cash_alternative'] = sanitize_text_field(
 			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''
 		);
@@ -277,6 +285,17 @@ class Nera_SAW_Competition_Config {
 		// The reservation pool cap is the competition's LFW ticket stock (not a
 		// Strike And Win field). No-oversell holds against this at checkout-init.
 		Nera_SAW_Spin_Pool::ensure( $product_id, self::lfw_stock( $product_id ) );
+	}
+
+	/**
+	 * An on/off override that may also inherit: '' (inherit), '1' or '0'.
+	 *
+	 * @param mixed $value Posted or stored value.
+	 * @return string
+	 */
+	public static function sanitize_switch_override( $value ) {
+		$value = trim( (string) $value );
+		return in_array( $value, array( '1', '0' ), true ) ? $value : '';
 	}
 
 	/**

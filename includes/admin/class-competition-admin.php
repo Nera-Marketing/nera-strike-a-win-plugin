@@ -228,6 +228,29 @@ class Nera_SAW_Competition_Admin {
 					<span class="description"><?php esc_html_e( 'Ladder runs the levels in stages, easy to hard, and the competition page shows a stage for each. Random mixes them across the run, so there are no stages to show — only how many questions come from each level.', 'nera-strikeawin' ); ?></span>
 				</p>
 				<?php
+				// Pay sheet billing switches: blank inherits Settings > Checkout, named in the label.
+				$saw_switches = array(
+					'checkout_show_country'       => array( __( 'Ask for country', 'nera-strikeawin' ), Nera_SAW_Checkout::show_country() ),
+					'checkout_last_name_required' => array( __( 'Last name required', 'nera-strikeawin' ), Nera_SAW_Checkout::last_name_required() ),
+				);
+				foreach ( $saw_switches as $saw_key => $saw_switch ) :
+					$saw_own = isset( $config[ $saw_key ] ) ? (string) $config[ $saw_key ] : '';
+					?>
+					<p class="form-field">
+						<label for="saw_<?php echo esc_attr( $saw_key ); ?>"><?php echo esc_html( $saw_switch[0] ); ?></label>
+						<select name="saw_<?php echo esc_attr( $saw_key ); ?>" id="saw_<?php echo esc_attr( $saw_key ); ?>" class="short" style="width:260px">
+							<option value="" <?php selected( $saw_own, '' ); ?>>
+								<?php
+								/* translators: %s: the global value, On or Off. */
+								echo esc_html( sprintf( __( 'Inherit global — %s', 'nera-strikeawin' ), $saw_switch[1] ? __( 'On', 'nera-strikeawin' ) : __( 'Off', 'nera-strikeawin' ) ) );
+								?>
+							</option>
+							<option value="1" <?php selected( $saw_own, '1' ); ?>><?php esc_html_e( 'On', 'nera-strikeawin' ); ?></option>
+							<option value="0" <?php selected( $saw_own, '0' ); ?>><?php esc_html_e( 'Off', 'nera-strikeawin' ); ?></option>
+						</select>
+					</p>
+				<?php endforeach; ?>
+				<?php
 				// Result screen blocks: inherit the global list, or this
 				// competition's own (which may be none ticked).
 				$saw_result_own    = isset( $config['result_display'] ) && is_array( $config['result_display'] );
@@ -580,6 +603,8 @@ class Nera_SAW_Competition_Admin {
 				? Nera_SAW_Constants::sanitize_result_display( isset( $_POST['saw_result_display'] ) ? (array) wp_unslash( $_POST['saw_result_display'] ) : array() )
 				: '',
 			'share_link_days' => isset( $_POST['saw_share_link_days'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_share_link_days'] ) ) : '',
+			'checkout_show_country'       => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_country'] ) ? wp_unslash( $_POST['saw_checkout_show_country'] ) : '' ),
+			'checkout_last_name_required' => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_last_name_required'] ) ? wp_unslash( $_POST['saw_checkout_last_name_required'] ) : '' ),
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
 			'level_rewards'  => $rewards,
