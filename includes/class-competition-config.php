@@ -19,6 +19,7 @@ class Nera_SAW_Competition_Config {
 
 	const META_KEY     = '_saw_config';
 	const META_IS_COMP = '_saw_is_competition';
+	const META_IS_FREE = '_saw_is_free';
 
 	/**
 	 * Default config skeleton.
@@ -34,6 +35,13 @@ class Nera_SAW_Competition_Config {
 			// Per-competition Quiz Method. Blank = inherit the global setting;
 			// resolve through Nera_SAW_Mode::quiz_method(), never read directly.
 			'quiz_method'    => Nera_SAW_Mode::INHERIT,
+			// Results screen blocks: '' = inherit the global list, an array = this
+			// competition's own list (an empty array shows none). Resolve through
+			// Nera_SAW_Constants::result_display().
+			'result_display' => '',
+			// Days a shared result link lives: '' = inherit the global setting.
+			// Resolve through Nera_SAW_Share::days().
+			'share_link_days' => '',
 			// Free text, not a number: the prototype prints it verbatim ("£28,000")
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
@@ -43,7 +51,6 @@ class Nera_SAW_Competition_Config {
 			// What the prize itself is worth on the market today, in pounds (a number, or empty to
 			// show nothing). Not the price of a run: that comes from the tiers.
 			'market_value'   => '',
-			'timer_seconds'  => Nera_SAW_Constants::TIMER_MAX_SECONDS, // per-question (Type 1).
 			'total_time'     => 0, // whole-quiz minutes (Type 2, future).
 			'distribution'   => array(), // level_key => count.
 			'level_rewards'  => array(), // level_key => tickets override.
@@ -213,6 +220,16 @@ class Nera_SAW_Competition_Config {
 	}
 
 	/**
+	 * Is this competition a free one? Entered by a free quiz run, never bought.
+	 *
+	 * @param int $product_id Product ID.
+	 * @return bool
+	 */
+	public static function is_free( $product_id ) {
+		return '1' === (string) get_post_meta( (int) $product_id, self::META_IS_FREE, true );
+	}
+
+	/**
 	 * Persist config and clamp locked values.
 	 *
 	 * A competition is a lottery (Spin-to-Win) product; tiers are Strikeawin-owned
@@ -230,14 +247,18 @@ class Nera_SAW_Competition_Config {
 		// 'tiers' is derived (global set + overrides); never persist it.
 		unset( $config['tiers'] );
 
-		// Compliance-locked clamps.
-		$config['timer_seconds'] = Nera_SAW_Constants::clamp_timer( $config['timer_seconds'] );
-
 		// Blank stays blank: "inherit" is a legal answer here, so the plain
 		// sanitiser's fall back to `random` would silently pin every competition.
 		$config['quiz_method'] = Nera_SAW_Mode::sanitize_quiz_method_override(
 			isset( $config['quiz_method'] ) ? $config['quiz_method'] : Nera_SAW_Mode::INHERIT
 		);
+
+		$config['result_display'] = is_array( $config['result_display'] )
+			? Nera_SAW_Constants::sanitize_result_display( $config['result_display'] )
+			: '';
+
+		$share_days                = isset( $config['share_link_days'] ) ? trim( (string) $config['share_link_days'] ) : '';
+		$config['share_link_days'] = ( '' !== $share_days && (int) $share_days >= 1 ) ? (string) (int) $share_days : '';
 
 		$config['cash_alternative'] = sanitize_text_field(
 			isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : ''

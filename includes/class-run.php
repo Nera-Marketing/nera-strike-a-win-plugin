@@ -410,7 +410,7 @@ class Nera_SAW_Run {
 		}
 
 		$config = json_decode( $run->config_snapshot, true );
-		$timer  = Nera_SAW_Constants::clamp_timer( isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS );
+		$timer  = self::timer_for( is_array( $config ) ? $config : array() );
 
 		// Snapshot the full question onto the slot on first serve (immune to later
 		// edits/soft-delete; drives scoring + the Report).
@@ -1113,6 +1113,18 @@ class Nera_SAW_Run {
 			);
 		}
 
+		if ( Nera_SAW_Run_Grants::is_free_run( $run ) ) {
+			/**
+			 * Fires once when a free run finalizes (this call claimed it).
+			 *
+			 * @param int    $run_id         Run ID.
+			 * @param int    $user_id        User ID.
+			 * @param int    $competition_id Free competition ID.
+			 * @param string $end_reason     completed|abandoned|expired.
+			 */
+			do_action( 'nera_saw_free_run_finalized', (int) $run_id, (int) $run->user_id, (int) $run->competition_id, (string) $end_reason );
+		}
+
 		return true;
 	}
 
@@ -1137,14 +1149,72 @@ class Nera_SAW_Run {
 			return self::collect_run_ticket_numbers( $run_id );
 		}
 
-		$numbers = Nera_SAW_Ticket_Award::award( (int) $run->order_id, (int) $run->competition_id, (int) $run->user_id, $spins, (string) $run->tier_key );
-		$picked  = is_array( $numbers ) ? $numbers : array();
-		self::allocate_numbers_to_slots( $run_id, $picked );
-		Nera_SAW_Ticket_Award::prune_orphan_tickets_for_order( (int) $run->order_id, (int) $run->competition_id );
-		Nera_SAW_Integrations::sync_public_sold_count( (int) $run->competition_id );
-		self::maybe_close_competition( $run );
+		/*
+		 * Two completions of the same run (a double request, a retry, the stale-run
+		 * sweeper next to the client) can both pass the check above before either
+		 * has allocated its numbers. Mint under a per-run lock and check again
+		 * inside it, so a run's tickets are minted at most once.
+		 */
+		if ( ! self::acquire_run_mint_lock( $run_id ) ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf( 'Run mint lock busy for run #%d — another completion is minting it.', (int) $run_id ),
+				array( 'run_id' => (int) $run_id, 'competition_id' => (int) $run->competition_id, 'user_id' => (int) $run->user_id )
+			);
+			return self::collect_run_ticket_numbers( $run_id );
+		}
+
+		try {
+			if ( self::tickets_minted_for_run( $run_id ) ) {
+				return self::collect_run_ticket_numbers( $run_id );
+			}
+
+			$numbers = Nera_SAW_Ticket_Award::award( (int) $run->order_id, (int) $run->competition_id, (int) $run->user_id, $spins, (string) $run->tier_key, (int) $run_id );
+			$picked  = is_array( $numbers ) ? $numbers : array();
+			self::allocate_numbers_to_slots( $run_id, $picked );
+			Nera_SAW_Ticket_Award::prune_orphan_tickets_for_order( (int) $run->order_id, (int) $run->competition_id );
+			Nera_SAW_Integrations::sync_public_sold_count( (int) $run->competition_id );
+			self::maybe_close_competition( $run );
+		} finally {
+			self::release_run_mint_lock( $run_id );
+		}
 
 		return self::collect_run_ticket_numbers( $run_id );
+	}
+
+	/**
+	 * Name of the database lock that serialises minting for one run. MySQL
+	 * named locks are server-wide, so the name carries the site's database and
+	 * table prefix (and stays within the 64-character limit).
+	 *
+	 * @param int $run_id Run ID.
+	 * @return string
+	 */
+	private static function run_mint_lock_name( $run_id ) {
+		global $wpdb;
+		return 'saw_mint_' . md5( DB_NAME . '|' . $wpdb->prefix ) . '_' . (int) $run_id;
+	}
+
+	/**
+	 * Take the per-run mint lock, waiting up to 15 seconds for a concurrent
+	 * completion of the same run to finish.
+	 *
+	 * @param int $run_id Run ID.
+	 * @return bool Whether the lock is held.
+	 */
+	private static function acquire_run_mint_lock( $run_id ) {
+		global $wpdb;
+		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', self::run_mint_lock_name( $run_id ), 15 ) );
+	}
+
+	/**
+	 * Release the per-run mint lock.
+	 *
+	 * @param int $run_id Run ID.
+	 */
+	private static function release_run_mint_lock( $run_id ) {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', self::run_mint_lock_name( $run_id ) ) );
 	}
 
 	/**
@@ -1175,6 +1245,7 @@ class Nera_SAW_Run {
 				$tier_label = (string) $tier['label'];
 			}
 		}
+		$is_free = class_exists( 'Nera_SAW_Free' ) && Nera_SAW_Run_Grants::is_free_run( $run );
 
 		return array(
 			'run_id'                => (int) $run_id,
@@ -1186,14 +1257,70 @@ class Nera_SAW_Run {
 			'ticket_numbers'        => $numbers,
 			'runs_remaining_total'  => Nera_SAW_Run_Grants::balance_total( (int) $user_id, (int) $run->competition_id ),
 			'runs_remaining_tier'   => isset( $balances[ $tier_key ] ) ? (int) $balances[ $tier_key ] : 0,
-			'slot_results'          => self::slot_results( (int) $run_id ),
-			// The results screen's "Draw: <date>" line. Reused from the standalone
-			// result-overlay clone rather than re-implemented — one place reads the
-			// LFW product's end date, in both modes.
-			'draw_date'             => class_exists( 'Nera_SAW_Standalone_Result_Screen' )
+			'slot_results'          => self::slot_results( (int) $run_id, self::tier_multiplier( $run ) ),
+			// The player's tickets on this competition after this run, for the results
+			// screen's draw box (minting above has already run).
+			'tickets_in_draw'       => self::tickets_in_draw( (int) $user_id, (int) $run->competition_id ),
+			// The live draw date: a free competition's own live draw date, '' while it is
+			// not set. Paid competitions have no draw date (their end date is when entries
+			// close), so the app shows "to be confirmed".
+			'draw_date'             => $is_free ? Nera_SAW_Free::live_draw_text( (int) $run->competition_id ) : '',
+			// When entries close, for copy that is about closing ("The draw closes …").
+			'draw_closes'           => ! $is_free && class_exists( 'Nera_SAW_Standalone_Result_Screen' )
 				? Nera_SAW_Standalone_Result_Screen::draw_date( wc_get_product( (int) $run->competition_id ) )
 				: '',
-		) + self::purchase_position( $run );
+			'is_free'               => $is_free,
+		) + self::purchase_position( $run ) + self::next_run_position( (int) $user_id, $run );
+	}
+
+	/**
+	 * Tickets a player holds on one competition whose draw has not happened yet.
+	 *
+	 * @param int $user_id        User ID.
+	 * @param int $competition_id Competition product ID.
+	 * @return int
+	 */
+	public static function tickets_in_draw( $user_id, $competition_id ) {
+		global $wpdb;
+		$runs  = Nera_SAW_Database::table( 'runs' );
+		$slots = Nera_SAW_Database::table( 'run_slots' );
+		return (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT COALESCE( SUM( s.spins_awarded ), 0 ) FROM {$runs} r
+				 JOIN {$slots} s ON s.run_id = r.id
+				 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = r.competition_id AND m.meta_key = 'lty_lottery_status'
+				 WHERE r.user_id = %d AND r.competition_id = %d AND r.status = 'finalized' AND ( m.meta_value IS NULL OR m.meta_value <> 'lty_lottery_finished' )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(int) $user_id,
+				(int) $competition_id
+			)
+		);
+	}
+
+	/**
+	 * The run a player would play next on this run's tier, counted over every
+	 * active grant they hold for it ("quiz 2 of 6"), the same count the play
+	 * page's briefing shows. Zeroes when nothing is left to play on the tier.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param object $run     Run row (reads competition_id, tier_key).
+	 * @return array{next_run_no:int, next_run_total:int}
+	 */
+	private static function next_run_position( $user_id, $run ) {
+		global $wpdb;
+		$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				'SELECT COALESCE( SUM( qty ), 0 ) AS n, COALESCE( SUM( consumed ), 0 ) AS c FROM ' . Nera_SAW_Database::table( 'run_grants' ) . " WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND status = 'active'", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				(int) $user_id,
+				(int) $run->competition_id,
+				(string) $run->tier_key
+			)
+		);
+		$total = $row ? (int) $row->n : 0;
+		$next  = $row ? (int) $row->c + 1 : 0;
+		if ( $total < 1 || $next > $total ) {
+			return array( 'next_run_no' => 0, 'next_run_total' => 0 );
+		}
+		return array( 'next_run_no' => $next, 'next_run_total' => $total );
 	}
 
 	/**
@@ -1201,15 +1328,19 @@ class Nera_SAW_Run {
 	 * screen's row of chips ("+2", "0", "–"). Safe to disclose in full: the run is
 	 * over, so every one of these is history, not an answer key still in play.
 	 *
-	 * @param int $run_id Run ID.
-	 * @return array<int, array{slot_no:int, outcome:string, spins_awarded:int}>
+	 * `reward` is what the question was worth on the run's tier, whatever the
+	 * outcome, so a wrong or missed question still shows its value.
+	 *
+	 * @param int $run_id     Run ID.
+	 * @param int $multiplier The run's tier multiplier.
+	 * @return array<int, array{slot_no:int, outcome:string, spins_awarded:int, reward:int}>
 	 */
-	private static function slot_results( $run_id ) {
+	private static function slot_results( $run_id, $multiplier = 1 ) {
 		global $wpdb;
 		$t    = Nera_SAW_Database::table( 'run_slots' );
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT slot_no, outcome, spins_awarded FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC",
+				"SELECT slot_no, outcome, spins_awarded, reward_base FROM {$t} WHERE run_id = %d ORDER BY slot_no ASC",
 				(int) $run_id
 			)
 		);
@@ -1223,6 +1354,7 @@ class Nera_SAW_Run {
 				// no answer was ever counted for it.
 				'outcome'       => $row->outcome ? (string) $row->outcome : 'timeout',
 				'spins_awarded' => (int) $row->spins_awarded,
+				'reward'        => (int) $row->reward_base * max( 1, (int) $multiplier ),
 			);
 		}
 		return $out;
@@ -2193,15 +2325,19 @@ class Nera_SAW_Run {
 	 * ================================================================== */
 
 	/**
-	 * Per-question timer for a run's config, clamped.
+	 * Per-question timer for a run.
 	 *
-	 * @param array $config Config snapshot.
+	 * The timer is one site-wide setting, so the config is not consulted: a
+	 * `timer_seconds` left in an older competition config or run snapshot is
+	 * ignored. The parameter stays so every caller keeps passing the config
+	 * it already has.
+	 *
+	 * @param array $config Config snapshot (unused).
 	 * @return int Seconds.
 	 */
 	private static function timer_for( array $config ) {
-		return Nera_SAW_Constants::clamp_timer(
-			isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-		);
+		unset( $config );
+		return Nera_SAW_Constants::timer_seconds();
 	}
 
 	/**

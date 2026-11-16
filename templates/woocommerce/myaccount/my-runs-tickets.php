@@ -4,10 +4,9 @@
  *
  * Per competition this player has touched at all: runs still in progress
  * (Continue), runs ready to play (still in the balance, never started),
- * completed runs with the tickets and entry numbers they earned, and the
- * draw's own closing date — the one place a player can check what they
- * hold in a draw once the result screen has been left, which until now was
- * nowhere.
+ * completed runs with the tickets and entry numbers they earned, when entries
+ * close and when the draw is — the one place a player can check what they hold in a draw
+ * once the result screen has been left, which until now was nowhere.
  *
  * @package Nera_Strikeawin
  */
@@ -75,19 +74,38 @@ if ( empty( $saw_competition_ids ) ) {
 			return $tier && ! empty( $tier['label'] ) ? (string) $tier['label'] : $tier_key;
 		};
 
-		$saw_end_date_gmt = get_post_meta( $saw_competition_id, '_lty_end_date_gmt', true );
+		$saw_draw_text = Nera_SAW_Standalone_Result_Screen::draw_text( $saw_competition_id );
+		$saw_closes_ts = Nera_SAW_Date::lty_end_ts( $saw_competition_id );
+		// Closed once drawn (any draw path) or past the closing time, even before a draw.
+		$saw_closed    = ( class_exists( 'Nera_SAW_Share' ) && Nera_SAW_Share::is_drawn( $saw_competition_id ) )
+			|| ( $saw_closes_ts && $saw_closes_ts < time() );
 		?>
 
 		<section class="saw-runs-tickets__competition">
 			<h3 class="saw-runs-tickets__title"><?php echo esc_html( $saw_entry['title'] ); ?></h3>
 
-			<?php if ( $saw_end_date_gmt ) : ?>
+			<?php if ( $saw_closes_ts ) : ?>
+				<p class="saw-runs-tickets__closes">
+					<?php
+					printf(
+						$saw_closed
+							/* translators: %s: date entries closed */
+							? esc_html__( 'Entries closed %s', 'nera-strikeawin' )
+							/* translators: %s: date entries close */
+							: esc_html__( 'Closes %s', 'nera-strikeawin' ),
+						esc_html( Nera_SAW_Date::display( $saw_closes_ts ) )
+					);
+					?>
+				</p>
+			<?php endif; ?>
+
+			<?php if ( '' !== $saw_draw_text ) : ?>
 				<p class="saw-runs-tickets__draw">
 					<?php
 					printf(
-						/* translators: %s: localized draw date */
+						/* translators: %s: live draw date, or "date to be confirmed" */
 						esc_html__( 'Draw: %s', 'nera-strikeawin' ),
-						esc_html( Nera_SAW_Date::display( strtotime( (string) $saw_end_date_gmt . ' UTC' ) ) )
+						esc_html( $saw_draw_text )
 					);
 					?>
 				</p>

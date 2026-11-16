@@ -144,27 +144,29 @@ class Nera_SAW_Standalone_Result_Screen {
 	 * @return string
 	 */
 	public static function draw_date( $product ) {
-		if ( ! $product || ! method_exists( $product, 'get_lty_end_date' ) ) {
+		$stamp = $product ? Nera_SAW_Date::lty_end_ts( $product->get_id() ) : 0;
+
+		return $stamp ? Nera_SAW_Date::display( $stamp ) : '';
+	}
+
+	/**
+	 * What a "Draw:" line says for a competition: a free competition's live draw
+	 * date when one is set, otherwise "date to be confirmed". A paid competition
+	 * has no draw date of its own; its end date is when entries close, so that
+	 * (draw_date() above) is never shown as the draw.
+	 *
+	 * @param WC_Product|int|null $product The competition, or its ID.
+	 * @return string Empty when there is no competition.
+	 */
+	public static function draw_text( $product ) {
+		$id = $product instanceof WC_Product ? $product->get_id() : (int) $product;
+		if ( ! $id ) {
 			return '';
 		}
 
-		// The GMT copy, read as UTC -- the same instant the competition page's "Closes"
-		// uses. The plain end date is stored in the SITE's timezone, and reading that as
-		// if it were UTC put this line an hour (the site's offset) off every other date
-		// on the screens: "Sun 8 Nov, 12:52am" here against "Sat 7 Nov, 11:52pm" there.
-		$gmt = (string) get_post_meta( $product->get_id(), '_lty_end_date_gmt', true );
-		if ( '' !== $gmt ) {
-			return Nera_SAW_Date::display( (int) strtotime( $gmt . ' UTC' ) );
-		}
+		$live = Nera_SAW_Competition_Config::is_free( $id ) ? Nera_SAW_Free::live_draw_text( $id ) : '';
 
-		$end = $product->get_lty_end_date();
-		if ( ! $end ) {
-			return '';
-		}
-
-		$stamp = is_numeric( $end ) ? (int) $end : (int) strtotime( get_gmt_from_date( (string) $end ) . ' UTC' );
-
-		return Nera_SAW_Date::display( $stamp );
+		return '' !== $live ? $live : Nera_SAW_I18n::t( 'date to be confirmed' );
 	}
 
 	/**

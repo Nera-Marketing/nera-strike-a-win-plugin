@@ -43,6 +43,118 @@ class Nera_SAW_Run_Grants {
 	}
 
 	/**
+	 * Grant made by a paid order line.
+	 */
+	const SOURCE_ORDER = 'order';
+
+	/**
+	 * Grant made by a free competition entry: no order, one per person per competition.
+	 */
+	const SOURCE_FREE = 'free';
+
+	/**
+	 * Create the single free run for a user on a free competition and reserve its
+	 * tickets in the pool. The table's grant_once key makes a second free grant for
+	 * the same user and competition impossible, whatever the first one's status.
+	 *
+	 * @param int    $user_id        User ID.
+	 * @param int    $competition_id Free competition ID.
+	 * @param string $tier_key       Tier the run is played on.
+	 * @param array  $config         Competition config.
+	 * @return int|WP_Error Grant ID, or WP_Error (`saw_free_used`, `saw_free_full`).
+	 */
+	public static function grant_free( $user_id, $competition_id, $tier_key, array $config ) {
+		global $wpdb;
+		$per_run = (int) Nera_SAW_Competition_Config::max_possible_spins( $config, $tier_key );
+		$now     = current_time( 'mysql' );
+
+		$inserted = $wpdb->query(
+			$wpdb->prepare(
+				"INSERT IGNORE INTO " . self::table() . "
+				 (user_id, competition_id, order_id, order_item_id, tier_key, source, qty, consumed, reserved_per_run, config_snapshot, status, created_at, updated_at)
+				 VALUES (%d, %d, 0, 0, %s, %s, 1, 0, %d, %s, 'active', %s, %s)",
+				(int) $user_id,
+				(int) $competition_id,
+				(string) $tier_key,
+				self::SOURCE_FREE,
+				$per_run,
+				wp_json_encode( $config ),
+				$now,
+				$now
+			)
+		);
+		if ( ! $inserted ) {
+			return new WP_Error( 'saw_free_used', 'Free run already granted.' );
+		}
+		$grant_id = (int) $wpdb->insert_id;
+
+		// A run's tickets must be backed by the pool before it can be played.
+		if ( $per_run > 0 && ! Nera_SAW_Spin_Pool::try_reserve( (int) $competition_id, $per_run ) ) {
+			$wpdb->delete( self::table(), array( 'id' => $grant_id ), array( '%d' ) );
+			return new WP_Error( 'saw_free_full', 'No tickets left to reserve.' );
+		}
+		return $grant_id;
+	}
+
+	/**
+	 * The user's free grant on a competition, any status, or null.
+	 *
+	 * @param int $user_id        User ID.
+	 * @param int $competition_id Competition ID.
+	 * @return object|null
+	 */
+	public static function free_grant( $user_id, $competition_id ) {
+		global $wpdb;
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM " . self::table() . " WHERE source = %s AND user_id = %d AND competition_id = %d LIMIT 1",
+				self::SOURCE_FREE,
+				(int) $user_id,
+				(int) $competition_id
+			)
+		);
+	}
+
+	/**
+	 * Whether another account with this mobile number already has a free grant on
+	 * the competition.
+	 *
+	 * @param string $phone          Mobile in E.164 form.
+	 * @param int    $competition_id Competition ID.
+	 * @param int    $user_id        The account asking (left out).
+	 * @return bool
+	 */
+	public static function free_phone_used( $phone, $competition_id, $user_id ) {
+		global $wpdb;
+		if ( '' === (string) $phone ) {
+			return false;
+		}
+		return (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT g.id FROM " . self::table() . " g
+				 JOIN {$wpdb->usermeta} m ON m.user_id = g.user_id AND m.meta_key = %s AND m.meta_value = %s
+				 WHERE g.source = %s AND g.competition_id = %d AND g.user_id <> %d
+				 LIMIT 1",
+				Nera_SAW_Free_Signup::META_PHONE,
+				(string) $phone,
+				self::SOURCE_FREE,
+				(int) $competition_id,
+				(int) $user_id
+			)
+		);
+	}
+
+	/**
+	 * Whether a run was played on a free grant: free runs carry no order.
+	 *
+	 * @param object $run Run row (order_id, user_id, competition_id).
+	 * @return bool
+	 */
+	public static function is_free_run( $run ) {
+		return $run && (int) $run->order_id < 1 && null !== self::free_grant( (int) $run->user_id, (int) $run->competition_id );
+	}
+
+	/**
 	 * Grant runs for each Strike And Win competition line on a paid order + reserve
 	 * that line's max-possible tickets. Idempotent per order line.
 	 *
@@ -300,9 +412,11 @@ class Nera_SAW_Run_Grants {
 	 * @param int    $competition_id Competition ID.
 	 * @param string $tier_key       Tier key.
 	 * @param int    $order_id       Preferred granting order (0 to ignore).
+	 * @param string $source         Grant source to refund to (`order` by default; a free
+	 *                               grant is one run per person and is never credited back).
 	 * @return bool True if a run was refunded.
 	 */
-	public static function refund_one( $user_id, $competition_id, $tier_key, $order_id = 0 ) {
+	public static function refund_one( $user_id, $competition_id, $tier_key, $order_id = 0, $source = self::SOURCE_ORDER ) {
 		global $wpdb;
 		$table = self::table();
 
@@ -311,12 +425,13 @@ class Nera_SAW_Run_Grants {
 			$grant_id = (int) $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT id FROM {$table}
-					 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND order_id = %d AND consumed > 0
+					 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND order_id = %d AND source = %s AND consumed > 0
 					 ORDER BY id ASC LIMIT 1",
 					(int) $user_id,
 					(int) $competition_id,
 					(string) $tier_key,
-					(int) $order_id
+					(int) $order_id,
+					(string) $source
 				)
 			);
 		}
@@ -324,11 +439,12 @@ class Nera_SAW_Run_Grants {
 			$grant_id = (int) $wpdb->get_var(
 				$wpdb->prepare(
 					"SELECT id FROM {$table}
-					 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND consumed > 0
+					 WHERE user_id = %d AND competition_id = %d AND tier_key = %s AND source = %s AND consumed > 0
 					 ORDER BY id ASC LIMIT 1",
 					(int) $user_id,
 					(int) $competition_id,
-					(string) $tier_key
+					(string) $tier_key,
+					(string) $source
 				)
 			);
 		}

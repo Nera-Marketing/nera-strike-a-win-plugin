@@ -46,12 +46,13 @@ class Nera_SAW_Runs_List_Table extends WP_List_Table {
 			'status'  => __( 'Status', 'nera-strikeawin' ),
 			'played'  => __( 'Played at', 'nera-strikeawin' ),
 			'tickets' => __( 'Tickets won', 'nera-strikeawin' ),
+			'review'  => __( 'Review', 'nera-strikeawin' ),
 			'view'    => '',
 		);
 	}
 
 	/**
-	 * The filter bar (AJAX username + order number).
+	 * The filter bar (AJAX username + order number + flagged free entries).
 	 */
 	public function filter_bar() {
 		$user  = isset( $_GET['s_user'] ) ? sanitize_text_field( wp_unslash( $_GET['s_user'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -59,6 +60,7 @@ class Nera_SAW_Runs_List_Table extends WP_List_Table {
 		echo '<div class="saw-field-row" style="margin-bottom:12px">';
 		echo '<label class="saw-field"><span>' . esc_html__( 'User name', 'nera-strikeawin' ) . '</span><input type="text" id="saw-filter-user" name="s_user" value="' . esc_attr( $user ) . '" autocomplete="off"></label>';
 		echo '<label class="saw-field"><span>' . esc_html__( 'Order number', 'nera-strikeawin' ) . '</span><input type="text" name="s_order" value="' . esc_attr( $order ) . '"></label>';
+		echo '<label class="saw-field"><span>&nbsp;</span><span><input type="checkbox" name="saw_review" value="1"' . checked( self::flagged_only(), true, false ) . '> ' . esc_html__( 'Flagged for review', 'nera-strikeawin' ) . '</span></label>';
 		echo '<label class="saw-field"><span>&nbsp;</span>';
 		submit_button( __( 'Filter', 'nera-strikeawin' ), '', 'filter', false );
 		echo '</label>';
@@ -101,6 +103,13 @@ class Nera_SAW_Runs_List_Table extends WP_List_Table {
 			}
 			$where[] = 'user_id IN (' . implode( ',', array_fill( 0, count( $user_ids ), '%d' ) ) . ')';
 			$params  = array_merge( $params, $user_ids );
+		}
+
+		// Free runs whose player's free grant on this competition shares an IP or device with another.
+		if ( self::flagged_only() ) {
+			$where[]  = "order_id = 0 AND user_id IN ( SELECT g.user_id FROM " . Nera_SAW_Database::table( 'run_grants' ) . " g WHERE g.source = %s AND g.competition_id = %d AND g.review <> '' )";
+			$params[] = Nera_SAW_Run_Grants::SOURCE_FREE;
+			$params[] = $this->competition_id;
 		}
 
 		$where_sql = implode( ' AND ', $where );
@@ -249,6 +258,30 @@ class Nera_SAW_Runs_List_Table extends WP_List_Table {
 	 */
 	public function column_tickets( $item ) {
 		return (int) $item->spins_confirmed;
+	}
+
+	/**
+	 * Review column: why a free run's entry is flagged; empty otherwise.
+	 *
+	 * @param object $item Run row.
+	 * @return string
+	 */
+	public function column_review( $item ) {
+		if ( (int) $item->order_id > 0 ) {
+			return '';
+		}
+		$grant = Nera_SAW_Run_Grants::free_grant( (int) $item->user_id, (int) $item->competition_id );
+		$label = ( $grant && isset( $grant->review ) ) ? Nera_SAW_Free_Review::label( $grant->review ) : '';
+		return '' === $label ? '' : '<span class="saw-pill saw-pill--red">' . esc_html( $label ) . '</span>';
+	}
+
+	/**
+	 * Whether the list is narrowed to runs flagged for review.
+	 *
+	 * @return bool
+	 */
+	private static function flagged_only() {
+		return ! empty( $_GET['saw_review'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**

@@ -40,6 +40,11 @@ class Nera_SAW_Ticket_Award {
 	const ORDER_FLAG_EARNED = '_nera_saw_quiz_earned';
 
 	/**
+	 * Ticket post meta: the run a free-run ticket was minted for.
+	 */
+	const RUN_META = '_nera_saw_run_id';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -81,12 +86,19 @@ class Nera_SAW_Ticket_Award {
 	 * @param int    $user_id        User ID.
 	 * @param int    $count          Earned ticket count.
 	 * @param string $tier_key       Tier that earned the tickets (required when the order has multiple tier lines).
+	 * @param int    $run_id         Run that earned the tickets (keys a free run's tickets to it).
 	 * @return string[] Minted ticket numbers (empty on failure).
 	 */
-	public static function award( $order_id, $competition_id, $user_id, $count, $tier_key = '' ) {
+	public static function award( $order_id, $competition_id, $user_id, $count, $tier_key = '', $run_id = 0 ) {
 		$count = max( 0, (int) $count );
 		if ( $count < 1 ) {
 			return array();
+		}
+		// A free run has no order: its tickets are minted straight onto the competition.
+		if ( (int) $order_id < 1 ) {
+			return null !== Nera_SAW_Run_Grants::free_grant( (int) $user_id, (int) $competition_id )
+				? self::award_free( (int) $competition_id, (int) $user_id, $count, (int) $run_id )
+				: array();
 		}
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -216,6 +228,125 @@ class Nera_SAW_Ticket_Award {
 		self::sync_order_line_tickets( (int) $order_id, (int) $competition_id );
 
 		return array_map( 'strval', $picked );
+	}
+
+	/**
+	 * Mint a free run's tickets: no order and no order line, so the tickets are
+	 * created directly as confirmed (`lty_ticket_buyer`) LTY tickets on the
+	 * competition, with LTY's own ticket meta and `lty_order_id` 0. They count,
+	 * list and draw like any other ticket of that competition; the run's slots keep
+	 * the numbers. No LTY confirmation email fires (it needs an order).
+	 *
+	 * Each ticket carries the run ID (RUN_META). Tickets the run already holds
+	 * (a mint that stopped before its numbers reached the slots) are reused, and
+	 * only the missing ones are created, so a run never ends up with more
+	 * tickets than it earned.
+	 *
+	 * @param int $competition_id Free competition ID.
+	 * @param int $user_id        User ID.
+	 * @param int $count          Earned ticket count.
+	 * @param int $run_id         Run that earned the tickets (0 = unknown).
+	 * @return string[] The run's ticket numbers (empty on failure).
+	 */
+	private static function award_free( $competition_id, $user_id, $count, $run_id = 0 ) {
+		$product = wc_get_product( $competition_id );
+		$user    = get_user_by( 'id', $user_id );
+		if ( ! $user || ! $product || ! function_exists( 'lty_is_lottery_product' ) || ! lty_is_lottery_product( $product ) || ! function_exists( 'lty_create_new_lottery_ticket' ) ) {
+			return array();
+		}
+
+		$lock_token = self::acquire_mint_lock( $competition_id );
+		if ( false === $lock_token ) {
+			Nera_SAW_Log::error(
+				'run_complete',
+				sprintf( 'Ticket mint lock busy for competition #%d — proceeding unlocked.', (int) $competition_id ),
+				array( 'competition_id' => (int) $competition_id, 'order_id' => 0, 'user_id' => (int) $user_id )
+			);
+		}
+
+		$existing = array();
+		$picked   = array();
+		try {
+			$existing = $run_id > 0 ? self::run_ticket_numbers( $product, $run_id ) : array();
+			$missing  = $count - count( $existing );
+			$picked   = $missing > 0 ? self::pick_numbers( $product, $missing ) : array();
+			foreach ( $picked as $number ) {
+				$ticket_id = lty_create_new_lottery_ticket(
+					array(
+						'lty_user_id'       => (int) $user->ID,
+						'lty_product_id'    => (int) $product->get_id(),
+						'lty_amount'        => 0,
+						'lty_user_name'     => $user->user_login,
+						'lty_user_email'    => $user->user_email,
+						'lty_currency'      => get_woocommerce_currency(),
+						'lty_order_id'      => 0,
+						'lty_answer'        => '',
+						'lty_answers'       => array(),
+						'lty_valid_answer'  => 'no',
+						'lty_ip_address'    => '',
+						'lty_list_count'    => $product->get_lty_list_count(),
+						'lty_ticket_number' => (string) $number,
+					),
+					array(
+						'post_parent' => $product->get_lottery_id(),
+						'post_status' => 'lty_ticket_buyer',
+					)
+				);
+				if ( $ticket_id && $run_id > 0 ) {
+					update_post_meta( (int) $ticket_id, self::RUN_META, (int) $run_id );
+				}
+			}
+			if ( $picked ) {
+				// LTY's confirm raises this counter per ticket and its delete lowers it.
+				$product->update_post_meta( 'lty_ticket_count', (int) $product->get_lty_ticket_count() + count( $picked ) );
+			}
+		} finally {
+			if ( false !== $lock_token ) {
+				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
+			}
+		}
+
+		if ( empty( $picked ) ) {
+			if ( empty( $existing ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[nera-strikeawin] Ticket award: no available numbers for #' . (int) $competition_id );
+			}
+			return array_map( 'strval', $existing );
+		}
+		if ( class_exists( 'LTY_Transient_Handler' ) ) {
+			LTY_Transient_Handler::delete_all_transients( $competition_id, $user_id );
+		}
+
+		/** This action is documented in award(). */
+		do_action( 'nera_saw_tickets_awarded', 0, $competition_id, $user_id, $picked );
+
+		return array_map( 'strval', array_merge( $existing, $picked ) );
+	}
+
+	/**
+	 * Ticket numbers already minted for a free run on the competition, oldest first.
+	 *
+	 * @param WC_Product $product Lottery product.
+	 * @param int        $run_id  Run ID.
+	 * @return string[]
+	 */
+	private static function run_ticket_numbers( $product, $run_id ) {
+		global $wpdb;
+		return array_map(
+			'strval',
+			(array) $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT n.meta_value FROM {$wpdb->posts} p
+					 JOIN {$wpdb->postmeta} r ON r.post_id = p.ID AND r.meta_key = %s AND r.meta_value = %s
+					 JOIN {$wpdb->postmeta} n ON n.post_id = p.ID AND n.meta_key = 'lty_ticket_number'
+					 WHERE p.post_type = 'lty_lottery_ticket' AND p.post_parent = %d
+					   AND p.post_status IN ( 'lty_ticket_buyer', 'lty_ticket_winner' )
+					 ORDER BY p.ID ASC",
+					self::RUN_META,
+					(string) (int) $run_id,
+					(int) $product->get_lottery_id()
+				)
+			)
+		);
 	}
 
 	/**

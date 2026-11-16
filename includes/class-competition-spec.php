@@ -116,9 +116,10 @@ class Nera_SAW_Competition_Spec {
 			'market_value'     => isset( $config['market_value'] ) && '' !== $config['market_value'] ? (float) $config['market_value'] : 0.0,
 			'cash_alternative' => isset( $config['cash_alternative'] ) ? (string) $config['cash_alternative'] : '',
 			'stock'            => self::stock( $competition_id ),
-			'timer'            => self::timer( $config ),
+			'timer'            => self::timer(),
 			'quiz'             => self::quiz( $config, $competition_id ),
 			'tiers'            => self::tiers( $config, $competition_id ),
+			'is_free'          => Nera_SAW_Competition_Config::is_free( $competition_id ),
 		);
 
 		$spec = array_merge( $spec, self::dates( $competition_id ) );
@@ -156,8 +157,68 @@ class Nera_SAW_Competition_Spec {
 		$url = $id ? wp_get_attachment_image_url( $id, 'large' ) : '';
 		return array(
 			'url' => $url ? $url : '',
-			'alt' => $id ? (string) get_post_meta( $id, '_wp_attachment_image_alt', true ) : '',
+			'alt' => $id ? self::image_alt( $id ) : '',
 		);
+	}
+
+	/**
+	 * Adds the Russian alt text field to the media editor.
+	 */
+	public static function init() {
+		add_filter( 'attachment_fields_to_edit', array( __CLASS__, 'alt_ru_field' ), 10, 2 );
+		add_filter( 'attachment_fields_to_save', array( __CLASS__, 'save_alt_ru_field' ), 10, 2 );
+	}
+
+	/**
+	 * An image's alt text for the visitor's language: the Russian alt when one is set.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return string
+	 */
+	public static function image_alt( $attachment_id ) {
+		$attachment_id = (int) $attachment_id;
+		if ( class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current() ) {
+			$alt_ru = (string) get_post_meta( $attachment_id, '_saw_alt_ru', true );
+			if ( '' !== $alt_ru ) {
+				return $alt_ru;
+			}
+		}
+		return (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+	}
+
+	/**
+	 * @param array   $form_fields Attachment edit fields.
+	 * @param WP_Post $post        Attachment.
+	 * @return array
+	 */
+	public static function alt_ru_field( $form_fields, $post ) {
+		if ( ! $post instanceof WP_Post || ! wp_attachment_is_image( $post->ID ) ) {
+			return $form_fields;
+		}
+		$form_fields['saw_alt_ru'] = array(
+			'label' => __( 'Alt text (Russian)', 'nera-strikeawin' ),
+			'input' => 'text',
+			'value' => (string) get_post_meta( $post->ID, '_saw_alt_ru', true ),
+		);
+		return $form_fields;
+	}
+
+	/**
+	 * @param array $post       Attachment data being saved.
+	 * @param array $attachment Posted attachment fields.
+	 * @return array
+	 */
+	public static function save_alt_ru_field( $post, $attachment ) {
+		if ( empty( $post['ID'] ) || ! isset( $attachment['saw_alt_ru'] ) ) {
+			return $post;
+		}
+		$alt_ru = sanitize_text_field( (string) $attachment['saw_alt_ru'] );
+		if ( '' === $alt_ru ) {
+			delete_post_meta( (int) $post['ID'], '_saw_alt_ru' );
+		} else {
+			update_post_meta( (int) $post['ID'], '_saw_alt_ru', $alt_ru );
+		}
+		return $post;
 	}
 
 	/**
@@ -234,14 +295,11 @@ class Nera_SAW_Competition_Spec {
 	/**
 	 * Timer: seconds per question, and when the countdown turns red.
 	 *
-	 * @param array $config Competition config.
 	 * @return array
 	 */
-	private static function timer( array $config ) {
+	private static function timer() {
 		return array(
-			'seconds'   => (int) Nera_SAW_Constants::clamp_timer(
-				isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-			),
+			'seconds'   => (int) Nera_SAW_Constants::timer_seconds(),
 			'red_below' => (int) Nera_SAW_Constants::timer_warn_seconds(),
 		);
 	}
@@ -327,7 +385,8 @@ class Nera_SAW_Competition_Spec {
 
 			$out[] = array(
 				'key'         => $key,
-				'label'       => (string) $tier['label'],
+				// Shared English tier names ("Standard", "Premium") shown in the visitor's language.
+				'label'       => Nera_SAW_I18n::t( (string) $tier['label'] ),
 				'price'       => (float) $tier['price'],
 				'multiplier'  => (int) $tier['multiplier'],
 				'status'      => isset( $status['status'] ) ? (string) $status['status'] : 'green',

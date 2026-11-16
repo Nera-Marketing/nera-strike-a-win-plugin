@@ -170,7 +170,7 @@ class Nera_SAW_Report_Admin {
 		// page (not admin-ajax.php), preserving competition + any filters. WP_List_Table
 		// builds links from a PATH-relative REQUEST_URI (host is prepended).
 		$args = array( 'page' => self::SLUG, 'competition' => $competition_id );
-		foreach ( array( 's_user', 's_order', 'paged' ) as $k ) {
+		foreach ( array( 's_user', 's_order', 'saw_review', 'paged' ) as $k ) {
 			if ( isset( $_GET[ $k ] ) && '' !== $_GET[ $k ] ) {
 				$args[ $k ] = sanitize_text_field( wp_unslash( $_GET[ $k ] ) );
 			}

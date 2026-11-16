@@ -104,10 +104,12 @@ class Nera_SAW_Language {
 
 		if ( class_exists( 'Nera_SAW_Mode' ) && Nera_SAW_Mode::is_standalone() ) {
 			add_filter( 'user_trailingslashit', array( __CLASS__, 'carry_current_language' ), 10, 1 );
+			add_filter( 'woocommerce_get_endpoint_url', array( __CLASS__, 'merge_endpoint_query' ), 20, 1 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_age_gate_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_saw_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_loginreg_strings' ), 10, 3 );
 			add_filter( 'woocommerce_order_details_status', array( __CLASS__, 'translate_order_status_sentence' ), 10, 2 );
+			add_action( 'woocommerce_my_account_my_orders_column_order-date', array( __CLASS__, 'order_date_column' ) );
 			add_filter( 'gettext', array( __CLASS__, 'translate_responsible_play_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_complaints_strings' ), 10, 3 );
 			add_filter( 'gettext', array( __CLASS__, 'translate_player_protection_strings' ), 10, 3 );
@@ -134,6 +136,7 @@ class Nera_SAW_Language {
 			// See self::current()'s docblock (step 2) for why this needs a cookie
 			// rather than the WooCommerce session this used at first.
 			add_action( 'template_redirect', array( __CLASS__, 'remember_in_cookie' ) );
+			add_action( 'wp_head', array( __CLASS__, 'cached_page_fallback' ), 1 );
 
 			/*
 			 * WooCommerce's own checkout form has no hidden saw_lang field either, so
@@ -433,8 +436,16 @@ class Nera_SAW_Language {
 		if ( null === $ru ) {
 			$ru = array(
 				'My Wallet'      => 'Мой кошелёк',
+				'Pay with wallet.' => 'Оплатить из кошелька.',
 				'Total Balance'  => 'Баланс',
 				'Wallet topup'   => 'Пополнить кошелёк',
+				'Wallet Topup'   => 'Пополнить кошелёк',
+				'Enter amount'   => 'Введите сумму',
+				'Add Funds'      => 'Пополнить',
+				'No transactions found' => 'Операций пока нет',
+				'No transactions available' => 'Операций пока нет',
+				'Date'           => 'Дата',
+				'Details'        => 'Описание',
 				'Transactions'   => 'Операции',
 				'Balance History' => 'История баланса',
 				'Description'    => 'Описание',
@@ -572,8 +583,9 @@ class Nera_SAW_Language {
 	 * so `saw_lang=ru` had no effect on any of it. Deliberately does NOT cover
 	 * the difficulty‑band names (Easy/Moderate/Hard/…) or the tier names
 	 * (Standard/Premium) — those are admin‑editable labels (`class-constants.php`,
-	 * a competition's own tier config), not this plugin's fixed chrome, and
-	 * translating them would need a per‑value table, not a fixed string map.
+	 * a competition's own tier config), not this plugin's fixed chrome. Level
+	 * names carry their own Russian label (`label_ru`, Ladder screen), read by
+	 * `self::translate_level_label()`.
 	 *
 	 * `is_admin()` excludes this plugin's OWN admin screens, several of which
 	 * reuse plain English words from this same list (`Day`, `Month`, `Closes`,
@@ -594,6 +606,26 @@ class Nera_SAW_Language {
 		$ru = self::saw_ru_strings();
 
 		return isset( $ru[ $original ] ) ? $ru[ $original ] : $translated;
+	}
+
+	/**
+	 * The date cell of the account orders list. Hooking the column replaces WooCommerce's
+	 * own cell in every language, so English prints the same markup and format it would.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return void
+	 */
+	public static function order_date_column( $order ) {
+		$date = $order instanceof WC_Order ? $order->get_date_created() : null;
+		if ( ! $date ) {
+			return;
+		}
+
+		$label = 'ru' === self::current()
+			? Nera_SAW_Date::format_ru( $date->getTimestamp(), false )
+			: wc_format_datetime( $date );
+
+		printf( '<time datetime="%s">%s</time>', esc_attr( $date->date( 'c' ) ), esc_html( $label ) );
 	}
 
 	/**
@@ -787,6 +819,11 @@ class Nera_SAW_Language {
 				// 'woocommerce'-domain map reached "Place order"/"Billing
 				// address"/etc. already, but never these.
 				'Country / Region'                      => 'Страна',
+				// Order review heading and the two countries the section sells to
+				// (values from WooCommerce's own ru_RU pack).
+				'Product'                               => 'Товар',
+				'United Kingdom (UK)'                   => 'Великобритания',
+				'Ireland'                               => 'Ирландия',
 				'Street address'                        => 'Адрес',
 				// NOT "Apartment, suite, unit, etc." (no "(optional)") — the
 				// theme's own nera_customize_default_address_fields() (inc/
@@ -833,6 +870,10 @@ class Nera_SAW_Language {
 				'Log in to your account to continue' => 'Войдите в аккаунт, чтобы продолжить',
 				'Your Account'                      => 'Ваш аккаунт',
 				'Create Account'                    => 'Создать аккаунт',
+				'No order has been made yet.'       => 'Заказов пока нет.',
+				'Browse products'                   => 'Смотреть конкурсы',
+				'Show password'                     => 'Показать пароль',
+				'Hide password'                     => 'Скрыть пароль',
 			);
 		}
 
@@ -1223,16 +1264,21 @@ class Nera_SAW_Language {
 	}
 
 	/**
-	 * A difficulty level's name as a Russian player reads it. The five names the ladder ships
-	 * with are translated; a name an administrator has changed is left exactly as written.
+	 * A difficulty level's name as a Russian player reads it: the level's own Russian label
+	 * from the Ladder screen when set, else the five names the ladder ships with are
+	 * translated and any other name is left exactly as written.
 	 * Never applied in the admin: the Ladder screen edits and saves the stored English name.
 	 *
-	 * @param string $label Level label.
+	 * @param string $label    Level label.
+	 * @param string $label_ru The level's Russian label ('' = none).
 	 * @return string
 	 */
-	public static function translate_level_label( $label ) {
+	public static function translate_level_label( $label, $label_ru = '' ) {
 		if ( is_admin() || 'ru' !== self::current() ) {
 			return $label;
+		}
+		if ( '' !== trim( (string) $label_ru ) ) {
+			return (string) $label_ru;
 		}
 		static $ru = array(
 			'Easy'      => 'Легко',
@@ -1751,6 +1797,7 @@ class Nera_SAW_Language {
 				'Closes %s · Drawn automatically'        => 'Закрывается %s · Розыгрыш автоматически',
 				'Drawn automatically'                    => 'Розыгрыш автоматически',
 				'Closes %s'                              => 'Закрывается %s',
+				'Entries closed %s'                      => 'Приём закрыт %s',
 				'Closes'                                 => 'Закрывается',
 				'Draw'                                   => 'Розыгрыш',
 				'Automatic, once closed'                 => 'Автоматически, после закрытия',
@@ -1843,12 +1890,14 @@ class Nera_SAW_Language {
 				'Timer'                                    => 'Таймер',
 				'%d seconds per question'                 => '%d секунд на вопрос',
 				'I am over 18 and agree to the terms and conditions.' => 'Мне есть 18 лет, и я принимаю правила и условия.',
+				'I am 18 or over and accept the terms and conditions and the competition rules.' => 'Мне есть 18 лет, и я принимаю условия и правила конкурса.',
 				'Each run is one quiz. Correct answers earn tickets in the draw.' => 'Каждый забег, это одна викторина. Правильные ответы приносят билеты в розыгрыше.',
 				'Each run is one quiz against the clock. Every correct answer earns tickets in this draw.' => 'Каждый забег, это одна викторина на время. Каждый правильный ответ приносит билеты в этом розыгрыше.',
 				'Tap an answer to lock it in. There is no second tap, so choose with care.' => 'Нажмите на ответ, чтобы зафиксировать его. Второго нажатия нет, поэтому выбирайте внимательно.',
 				'Every correct answer earns tickets in this draw. One order can include several runs, and each run adds its tickets to the same entry.' => 'Каждый правильный ответ приносит билеты в этом розыгрыше. В один заказ можно включить несколько забегов, и билеты каждого забега попадают в одно и то же участие.',
 				'Refreshing, using the back button, or leaving mid-run will ask you to confirm. The countdown keeps running on the server, so time you spend away still counts.' => 'При обновлении страницы, нажатии «Назад» или выходе посреди забега вас попросят подтвердить действие. Обратный отсчёт идёт на сервере, поэтому время вне страницы тоже засчитывается.',
 				'Tick both boxes to continue'             => 'Отметьте оба поля, чтобы продолжить',
+				'Tick the box to continue'                => 'Отметьте поле, чтобы продолжить',
 				'End run and see my results'               => 'Завершить забег и посмотреть результаты',
 				'If you close this window the run ends. Tickets you have already won are kept.' => 'Если вы закроете это окно, забег завершится. Уже выигранные билеты сохранятся.',
 				'End this run?'                            => 'Завершить этот забег?',
@@ -1952,7 +2001,7 @@ class Nera_SAW_Language {
 				"You're in the draw"                      => 'Вы участвуете в розыгрыше',
 				'%1$d tickets banked from %2$d correct answers.' => 'Начислено билетов: %1$d за %2$d правильных ответов.',
 				'No tickets this run'                     => 'В этом забеге билетов нет',
-				'None of the %d answers landed in time.'  => 'Ни один из %d ответов не уложился во время.',
+				'No tickets this run. No answer was correct before the clock ran out.' => 'Без билетов в этой попытке. Ни один ответ не был верным до истечения времени.',
 				'%1$d of %2$d correct, but not enough to bank a ticket.' => 'Правильных ответов: %1$d из %2$d, этого недостаточно для билета.',
 				'Score'                                     => 'Результат',
 				'%1$d of %2$d correct'                    => '%1$d из %2$d правильно',
@@ -2218,6 +2267,7 @@ class Nera_SAW_Language {
 		}
 
 		self::remember_in_polylang_cookie( $current );
+		self::keep_out_of_page_cache( $current );
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read for a same-request equality check, never output or stored.
 		$stored = isset( $_COOKIE[ self::SWITCH_ARG ] ) ? (string) $_COOKIE[ self::SWITCH_ARG ] : '';
@@ -2235,15 +2285,16 @@ class Nera_SAW_Language {
 			 * saw_lang-less GET form hop.
 			 */
 			if ( '' !== $stored ) {
-				setcookie( self::SWITCH_ARG, '', time() - YEAR_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), true );
+				setcookie( self::SWITCH_ARG, '', time() - YEAR_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
 			}
 			return;
 		}
 
-		if ( $stored === $current ) {
-			return;
-		}
-
+		/*
+		 * Written on every non-default-language response, without HttpOnly, so
+		 * self::cached_page_fallback() can read it from document.cookie and its
+		 * one-day expiry runs from the latest visit.
+		 */
 		setcookie(
 			self::SWITCH_ARG,
 			$current,
@@ -2251,8 +2302,35 @@ class Nera_SAW_Language {
 			COOKIEPATH ? COOKIEPATH : '/',
 			COOKIE_DOMAIN,
 			is_ssl(),
-			true
+			false
 		);
+	}
+
+	/**
+	 * Keep a page out of shared caches when its language came from a cookie.
+	 *
+	 * A bare URL rendered in a non-default language only because of a cookie
+	 * (this plugin's or Polylang's) would otherwise be stored by a host page
+	 * cache under that URL and served to visitors who never chose it. Keyed on
+	 * the outcome rather than on which cookie won, so any cookie-driven
+	 * resolution is covered. A `saw_lang` in the URL makes the cache key differ
+	 * already, and hosts do not cache signed-in visitors.
+	 *
+	 * @param string $current Language code this request resolved to.
+	 */
+	protected static function keep_out_of_page_cache( $current ) {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence check only.
+		if ( isset( $_REQUEST[ self::SWITCH_ARG ] ) || $current === self::default_code() || is_user_logged_in() || ! in_array( $method, array( 'GET', 'HEAD' ), true ) ) {
+			return;
+		}
+
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
+		header( 'Vary: Cookie', false );
 	}
 
 	/**
@@ -2276,6 +2354,36 @@ class Nera_SAW_Language {
 		}
 
 		PLL_Cookie::set( $current );
+	}
+
+	/**
+	 * Recover the remembered language when a page cache answers without PHP.
+	 *
+	 * A host-level page cache serves the default-language copy to every visitor
+	 * whose URL carries no `saw_lang`, so `self::current()` never sees the cookie.
+	 * When the cookie names another language, the page arrived in a different one
+	 * and the URL has no `saw_lang` yet, this reloads the same URL with it added:
+	 * a query string bypasses the cache, and the reloaded URL then carries
+	 * `saw_lang`, so the check cannot fire twice. The cookie must therefore stay
+	 * readable from JS (see `self::remember_in_cookie()`).
+	 *
+	 * Logged-in visitors are skipped: hosts never serve them cached copies.
+	 */
+	public static function cached_page_fallback() {
+		if ( is_user_logged_in() || ! class_exists( 'Nera_SAW_Router' ) || ! Nera_SAW_Router::is_standalone_screen() ) {
+			return;
+		}
+
+		$others = array_values( array_diff( self::codes(), array( self::default_code() ) ) );
+		if ( ! $others ) {
+			return;
+		}
+
+		printf(
+			'<script id="nera-saw-lang-fallback">(function(){try{var m=document.cookie.match(/(?:^|;\\s*)%1$s=([a-z0-9_-]+)/);if(!m||%2$s.indexOf(m[1])<0)return;var c=m[1],l=(document.documentElement.lang||"").toLowerCase();if(l===c||l.indexOf(c+"-")===0)return;var u=new URL(location.href);if(u.searchParams.has("%1$s"))return;u.searchParams.set("%1$s",c);location.replace(u.href);}catch(e){}})();</script>' . "\n",
+			esc_js( self::SWITCH_ARG ),
+			wp_json_encode( $others )
+		);
 	}
 
 	/**
@@ -2365,6 +2473,36 @@ class Nera_SAW_Language {
 		}
 
 		return add_query_arg( self::SWITCH_ARG, $lang, $url );
+	}
+
+	/**
+	 * Fold a second query string into the first on an account endpoint URL.
+	 *
+	 * WooCommerce runs the bare endpoint path through `user_trailingslashit`,
+	 * where carry_current_language() adds the language argument, and then
+	 * appends the permalink's own query (which already holds it) after a
+	 * second `?`. Merging the parts leaves each argument once.
+	 *
+	 * @param string $url Endpoint URL.
+	 * @return string
+	 */
+	public static function merge_endpoint_query( $url ) {
+		if ( substr_count( (string) $url, '?' ) < 2 ) {
+			return $url;
+		}
+
+		$fragment = '';
+		$hash     = strpos( $url, '#' );
+		if ( false !== $hash ) {
+			$fragment = substr( $url, $hash );
+			$url      = substr( $url, 0, $hash );
+		}
+
+		$parts = explode( '?', $url );
+		$base  = array_shift( $parts );
+		parse_str( implode( '&', $parts ), $args );
+
+		return add_query_arg( urlencode_deep( $args ), $base ) . $fragment;
 	}
 
 	/**

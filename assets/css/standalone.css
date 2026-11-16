@@ -2486,10 +2486,14 @@ body.saw-app.lty-rs-scroll-locked { overflow: hidden; }
   font-weight: 700;
   color: var(--saw-ink);
 }
+.saw-runs-tickets__closes,
 .saw-runs-tickets__draw {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--saw-muted);
+}
+.saw-runs-tickets__closes {
+  margin-bottom: 4px;
 }
 .saw-runs-tickets__group {
   margin-top: 12px;
@@ -4558,3 +4562,11 @@ html.saw-live-modal-open { overflow: hidden; }
   outline: 2px solid var(--saw-primary);
   outline-offset: 2px;
 }
+
+/* Shared result page (/r/<token>/): layout only, the theme gives it its look. */
+.saw-share { margin: 24px 16px; }
+.saw-share__photo { margin: 0 0 16px; }
+.saw-share__photo img { display: block; width: 100%; height: auto; }
+.saw-share__stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.saw-share__stat dd { margin: 4px 0 0; font-size: 1.5em; font-weight: 700; }
+.saw-share__title { overflow-wrap: anywhere; }

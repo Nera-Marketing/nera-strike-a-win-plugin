@@ -113,6 +113,7 @@ class Nera_SAW_Draw_Prizes {
 			$out[] = array(
 				'id'              => $id,
 				'name'            => $name,
+				'name_ru'         => isset( $row['name_ru'] ) ? sanitize_text_field( (string) $row['name_ru'] ) : '',
 				'prize_type'      => $type,
 				'gift_product_id' => 'product' === $type ? (int) ( $row['gift_product_id'] ?? 0 ) : 0,
 				'coupon_amount'   => 'coupon' === $type ? (float) ( $row['coupon_amount'] ?? 0 ) : 0.0,
@@ -390,6 +391,7 @@ class Nera_SAW_Draw_Prizes {
 	 */
 	public static function my_wins( array $prizes, array $my_ticket_numbers ) {
 		$mine = array_flip( array_map( 'strval', $my_ticket_numbers ) );
+		$ru   = class_exists( 'Nera_SAW_Language' ) && 'ru' === Nera_SAW_Language::current();
 		$wins = array();
 		foreach ( $prizes as $row ) {
 			$matched = array();
@@ -400,7 +402,7 @@ class Nera_SAW_Draw_Prizes {
 			}
 			if ( $matched ) {
 				$wins[] = array(
-					'name'           => (string) $row['name'],
+					'name'           => $ru && ! empty( $row['name_ru'] ) ? (string) $row['name_ru'] : (string) $row['name'],
 					'ticket_numbers' => $matched,
 				);
 			}

@@ -90,8 +90,8 @@ class Nera_SAW_Frontend {
 			return self::wrap_page_shell(
 				$inner,
 				array(
-					'title' => __( 'Play [BRAND]', 'nera-strikeawin' ),
-					'intro' => __( 'Log in to play the quiz and earn tickets for the draw.', 'nera-strikeawin' ),
+					'title' => Nera_SAW_I18n::t( 'Play [BRAND]' ),
+					'intro' => Nera_SAW_I18n::t( 'Log in to play the quiz and earn tickets for the draw.' ),
 				)
 			);
 		}
@@ -128,8 +128,8 @@ class Nera_SAW_Frontend {
 		return self::wrap_page_shell(
 			self::render_hub(),
 			array(
-				'title' => __( 'Your [BRAND] entries', 'nera-strikeawin' ),
-				'intro' => __( 'Each run is one quiz. Correct answers earn tickets in the draw.', 'nera-strikeawin' ),
+				'title' => Nera_SAW_I18n::t( 'Your [BRAND] entries' ),
+				'intro' => Nera_SAW_I18n::t( 'Each run is one quiz. Correct answers earn tickets in the draw.' ),
 			)
 		);
 	}
@@ -139,6 +139,31 @@ class Nera_SAW_Frontend {
 	 */
 	private static function enqueue_shell_styles() {
 		wp_enqueue_style( self::STYLE_HANDLE . '-shell', NERA_SAW_PLUGIN_URL . 'assets/css/quiz.css', array(), NERA_SAW_VERSION );
+	}
+
+	/**
+	 * Where the result screen's "Responsible play" link goes.
+	 *
+	 * @return string
+	 */
+	public static function responsible_play_url() {
+		$url = class_exists( 'Nera_SAW_Standalone_Pages' ) ? Nera_SAW_Standalone_Pages::url( 'player-protection' ) : '';
+		if ( ! $url && function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$url = wc_get_account_endpoint_url( Nera_SAW_Account_Pages::RESPONSIBLE_PLAY );
+		}
+		return (string) $url;
+	}
+
+	/**
+	 * A competition's page: the standalone section's own route when there is
+	 * one, else the product permalink.
+	 *
+	 * @param int $competition_id Competition product ID.
+	 * @return string
+	 */
+	public static function competition_permalink( $competition_id ) {
+		$url = (string) apply_filters( 'nera_saw_standalone_competition_url', '', (int) $competition_id );
+		return '' !== $url ? $url : (string) get_permalink( (int) $competition_id );
 	}
 
 	/**
@@ -158,7 +183,9 @@ class Nera_SAW_Frontend {
 		// competition — empty on a monolingual site, or when the Russian (etc.)
 		// bank is too thin for this competition's distribution. See
 		// Nera_SAW_Run::playable_languages() and CONTEXT.md "Bank health".
-		$languages = $competition_id ? Nera_SAW_Run::playable_languages( $competition_id ) : array();
+		// With the setting off the list stays empty, so no card shows and the run takes
+		// the page's current language.
+		$languages = ( $competition_id && Nera_SAW_Constants::ask_quiz_language() ) ? Nera_SAW_Run::playable_languages( $competition_id ) : array();
 		$language_names = array();
 		foreach ( $languages as $code ) {
 			$language_names[ $code ] = class_exists( 'Nera_SAW_Language' ) ? Nera_SAW_Language::name( $code ) : $code;
@@ -195,6 +222,35 @@ class Nera_SAW_Frontend {
 			}
 		}
 
+		// The quiz bar and the playing-for banner: the competition's name, prize
+		// photo and market value (already formatted, empty when not set), and each
+		// tier's label and multiplier keyed by tier key ("Quiz 1 of 3 · Premium ×10").
+		$quiz_competition = array(
+			'name'  => '',
+			'value' => '',
+			'photo' => '',
+			// Known at page load, so the result screen draws the free layout from the start.
+			'is_free' => $competition_id && class_exists( 'Nera_SAW_Competition_Config' ) && Nera_SAW_Competition_Config::is_free( $competition_id ),
+			'tiers' => array(),
+		);
+		$quiz_spec = ( $competition_id && class_exists( 'Nera_SAW_Competition_Spec' ) ) ? Nera_SAW_Competition_Spec::get( $competition_id ) : null;
+		if ( $quiz_spec ) {
+			$quiz_competition['name']  = (string) $quiz_spec['name'];
+			$quiz_competition['photo'] = (string) $quiz_spec['image']['url'];
+			$market_value              = (float) $quiz_spec['market_value'];
+			if ( $market_value > 0 ) {
+				$quiz_competition['value'] = function_exists( 'wc_price' )
+					? html_entity_decode( wp_strip_all_tags( wc_price( $market_value, array( 'decimals' => 0 ) ) ), ENT_QUOTES, 'UTF-8' )
+					: number_format_i18n( $market_value );
+			}
+			foreach ( (array) $quiz_spec['tiers'] as $quiz_tier ) {
+				$quiz_competition['tiers'][ (string) $quiz_tier['key'] ] = array(
+					'label'      => (string) $quiz_tier['label'],
+					'multiplier' => (int) $quiz_tier['multiplier'],
+				);
+			}
+		}
+
 		$data = array(
 			'root'               => esc_url_raw( rest_url( Nera_SAW_Rest::NS ) ),
 			'nonce'              => wp_create_nonce( 'wp_rest' ),
@@ -216,6 +272,10 @@ class Nera_SAW_Frontend {
 			'stageCount'         => $stage_count,
 			'firstStageLabel'    => $first_stage_label,
 			'firstStageColor'    => $first_stage_color,
+			'competition'        => $quiz_competition,
+			// The free result's follow box (each link only when set) and its Back to home.
+			'social'             => Nera_SAW_Constants::social_urls(),
+			'homeUrl'            => esc_url_raw( class_exists( 'Nera_SAW_Router' ) && Nera_SAW_Mode::is_standalone() ? Nera_SAW_Router::url() : home_url( '/' ) ),
 			// "Back to competitions" on the results screen — the section's own list
 			// in standalone; the main shop page in mix, where there is no equivalent
 			// dedicated list. Never the empty string, so the button is never dead.
@@ -224,6 +284,17 @@ class Nera_SAW_Frontend {
 					? Nera_SAW_Standalone_Pages::url( 'competitions' )
 					: ( function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/' ) )
 			),
+			// The results screen: which optional blocks show, and where its links go.
+			'resultDisplay'      => Nera_SAW_Constants::result_display( $competition_id ),
+			'competitionPermalink' => $competition_id ? esc_url_raw( self::competition_permalink( $competition_id ) ) : '',
+			'myTicketsUrl'       => function_exists( 'wc_get_account_endpoint_url' ) ? esc_url_raw( wc_get_account_endpoint_url( 'my-runs-tickets' ) ) : '',
+			// A run with no tickets links to responsible play: the section's player
+			// protection page when it exists, else the account's responsible-play tab.
+			'responsiblePlayUrl' => esc_url_raw( self::responsible_play_url() ),
+			// The share sheet's story card: the brand logo (a theme can supply a
+			// version made for the card's dark background) and the brand name, shown
+			// as text when there is no logo.
+			'shareCard'          => self::share_card(),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
@@ -239,7 +310,7 @@ class Nera_SAW_Frontend {
 				'seeResults'         => __( 'See my results', 'nera-strikeawin' ),
 				// Screen-reader-only announcements for the Answer reveal (the visual
 				// reveal is colour alone, which assistive tech cannot convey).
-				'revealCorrect'      => __( 'Correct. %d tickets earned.', 'nera-strikeawin' ),
+				'revealCorrect'      => Nera_SAW_I18n::n_template( 'Correct. %d ticket earned.', 'Correct. %d tickets earned.' ),
 				'revealWrong'        => __( 'Wrong. The correct answer was: %s', 'nera-strikeawin' ),
 				'revealTimeout'      => __( 'Time up, no answer counted. The correct answer was: %s', 'nera-strikeawin' ),
 				'revealWrongBare'    => __( 'Wrong. No tickets.', 'nera-strikeawin' ),
@@ -294,6 +365,13 @@ class Nera_SAW_Frontend {
 				// count-dependent string here (pickPluralForm() in App.vue).
 				'worthTicket'        => Nera_SAW_I18n::n_template( 'Worth {k} ticket', 'Worth {k} tickets' ),
 				'ticketsLabel'       => Nera_SAW_I18n::t( 'Tickets' ),
+				// The quiz bar, the playing-for banner and the answer feedback line.
+				'quizOf'             => Nera_SAW_I18n::t( 'Quiz {n} of {total}' ),
+				'leaveLabel'         => Nera_SAW_I18n::t( 'Leave' ),
+				'playingFor'         => Nera_SAW_I18n::t( 'Playing for' ),
+				'feedbackRight'      => Nera_SAW_I18n::n_template( 'Right: +{k} ticket', 'Right: +{k} tickets' ),
+				'feedbackWrong'      => Nera_SAW_I18n::t( 'Wrong: 0 tickets' ),
+				'feedbackTimeout'    => Nera_SAW_I18n::t( 'Time’s up: 0 tickets' ),
 				// Pre-run fallback only now (see stagePillLabel in App.vue) — the
 				// in-game stage bar pill and stage-break subtitle read the server's
 				// own combined, plural-aware sentence instead (slot.stage_label /
@@ -322,11 +400,11 @@ class Nera_SAW_Frontend {
 				// only the Russian side needs the real one/few/many distinction.
 				'inTheDrawSubtitle'  => Nera_SAW_I18n::n_template( '{t} tickets banked from {c} correct answers.', '{t} tickets banked from {c} correct answers.' ),
 				'zeroTicketsTitle'   => Nera_SAW_I18n::t( 'No tickets this run' ),
-				'zeroCorrectSubtitle' => __( 'None of the %d answers landed in time.', 'nera-strikeawin' ),
+				'zeroCorrectSubtitle' => __( 'No tickets this run. No answer was correct before the clock ran out.', 'nera-strikeawin' ),
 				'zeroSomeCorrectSubtitle' => __( '%1$d of %2$d correct, but not enough to bank a ticket.', 'nera-strikeawin' ),
-				'scoreLabel'         => Nera_SAW_I18n::t( 'Score' ),
+				'scoreLabel'         => self::t_as( 'Score (result)', 'Score' ),
 				'scoreValue'         => Nera_SAW_I18n::t( '{c} of {total} correct' ),
-				'ticketsEarnedLabel' => Nera_SAW_I18n::t( 'Tickets earned' ),
+				'ticketsEarnedLabel' => self::t_as( 'Tickets earned (result)', 'Tickets earned' ),
 				'yourEntryNumbers'   => Nera_SAW_I18n::t( 'Your entry numbers' ),
 				'moreNumbers'        => Nera_SAW_I18n::t( '+{n} more' ),
 				'showLess'           => Nera_SAW_I18n::t( 'Show less' ),
@@ -356,6 +434,60 @@ class Nera_SAW_Frontend {
 				'playAnotherRun'     => Nera_SAW_I18n::t( 'Play your next run' ),
 				'buyAnotherRun'      => Nera_SAW_I18n::t( 'Buy another run' ),
 				'backToCompetitions' => Nera_SAW_I18n::t( 'Back to competitions' ),
+				'resultKicker'       => Nera_SAW_I18n::t( 'Challenge completed' ),
+				'resultHeadNone'     => Nera_SAW_I18n::t( 'No correct answers this time.' ),
+				'resultHeadLow'      => Nera_SAW_I18n::t( 'Challenge done.' ),
+				'resultHeadMid'      => Nera_SAW_I18n::t( 'Nice work.' ),
+				'resultHeadHigh'     => Nera_SAW_I18n::t( 'Great score!' ),
+				'resultHeadPerfect'  => Nera_SAW_I18n::t( 'Perfect score!' ),
+				'correctAnswers'     => Nera_SAW_I18n::t( 'correct answers' ),
+				'inThisDraw'         => Nera_SAW_I18n::t( 'in this draw' ),
+				'ticketsInDraw'      => Nera_SAW_I18n::t( 'Your tickets in this draw' ),
+				'ticketsCount'       => Nera_SAW_I18n::n_template( '{n} ticket', '{n} tickets' ),
+				'noTicketsThisQuiz'  => Nera_SAW_I18n::t( 'No tickets from this quiz.' ),
+				'resultDrawLine'     => Nera_SAW_I18n::t( 'Your tickets are entered in this prize draw · Live draw: {d}' ),
+				'drawDateTbc'        => Nera_SAW_I18n::t( 'date to be confirmed' ),
+				'playQuizOf'         => Nera_SAW_I18n::t( 'Play quiz {i} of {n}' ),
+				'myTickets'          => Nera_SAW_I18n::t( 'My tickets' ),
+				'backToCompetition'  => Nera_SAW_I18n::t( 'Back to the competition' ),
+				'responsiblePlay'    => Nera_SAW_I18n::t( 'Responsible play' ),
+				// Share my score sheet and its story card.
+				'shareMyScore'       => Nera_SAW_I18n::t( 'Share my score' ),
+				'shareStory'         => Nera_SAW_I18n::t( 'Story format · 9:16' ),
+				'shareGo'            => Nera_SAW_I18n::t( 'Share' ),
+				'shareCopy'          => Nera_SAW_I18n::t( 'Copy link' ),
+				'shareCopied'        => Nera_SAW_I18n::t( 'Copied to clipboard' ),
+				'shareCopyFail'      => Nera_SAW_I18n::t( 'Copy this: {x}' ),
+				'shareClose'         => Nera_SAW_I18n::t( 'Close' ),
+				'shareMaking'        => Nera_SAW_I18n::t( 'Making your link…' ),
+				'shareError'         => Nera_SAW_I18n::t( "We couldn't make your link. Close this and try again." ),
+				'shareKicker'        => Nera_SAW_I18n::t( 'Prize quiz' ),
+				'shareMy'            => Nera_SAW_I18n::t( 'My score' ),
+				'shareTixEarned'     => Nera_SAW_I18n::n_template( 'ticket earned', 'tickets earned' ),
+				// Same English as the quiz bar's "Playing for", first person in Russian.
+				'sharePlayingFor'    => self::t_as( 'Playing for (share card)', 'Playing for' ),
+				// One line break, kept on the card.
+				'shareChallenge'     => Nera_SAW_I18n::t( "Can you beat\nmy score?" ),
+				'sharePlayFree'      => Nera_SAW_I18n::t( 'Play free at' ),
+				'shareAge'           => Nera_SAW_I18n::t( '18+ · Skill-based prize competitions' ),
+				'shareText'          => Nera_SAW_I18n::t( 'I scored {r}/{n} on [BRAND]. Can you beat my score?' ),
+				// Free competition result and its story card.
+				'shareFreeKicker'    => Nera_SAW_I18n::t( 'Free quiz' ),
+				'shareFreeFor'       => Nera_SAW_I18n::t( 'Free competition' ),
+				'freeScore'          => Nera_SAW_I18n::t( 'Your score' ),
+				'freeTickets'        => self::t_as( 'Tickets earned (free result)', 'Tickets earned' ),
+				'freeAdded'          => Nera_SAW_I18n::t( 'Added to your account' ),
+				'freeNone'           => Nera_SAW_I18n::t( 'No quiz tickets this time, so no draw entries were added.' ),
+				'freeDrawLine'       => Nera_SAW_I18n::t( 'Entered in the prize draw · Live draw: {d}' ),
+				'freeShareTitle'     => Nera_SAW_I18n::t( 'Think your friends can beat your score?' ),
+				'freeShareSub'       => Nera_SAW_I18n::t( 'Challenge them. Your score link invites them to play free.' ),
+				'freePreview'        => Nera_SAW_I18n::t( 'Preview your story' ),
+				'freePreviewSub'     => Nera_SAW_I18n::t( 'Full 9:16 card for Stories and chats' ),
+				'freeFollowTitle'    => Nera_SAW_I18n::t( 'More free prizes are coming.' ),
+				'freeFollowSub'      => Nera_SAW_I18n::t( 'Follow [BRAND] so you don’t miss the next free competition.' ),
+				'followInstagram'    => Nera_SAW_I18n::t( 'Follow on Instagram' ),
+				'followTelegram'     => Nera_SAW_I18n::t( 'Join our Telegram channel' ),
+				'backToHome'         => Nera_SAW_I18n::t( 'Back to home' ),
 			),
 		);
 
@@ -369,6 +501,13 @@ class Nera_SAW_Frontend {
 		}
 
 		wp_localize_script( self::SCRIPT_HANDLE, self::DATA_OBJECT, $data );
+		// wp_localize_script turns scalars into strings; this flag is set as a real boolean
+		// (the localized data prints before 'before' inline scripts).
+		wp_add_inline_script(
+			self::SCRIPT_HANDLE,
+			'window.' . self::DATA_OBJECT . '.revealNextButton = ' . ( Nera_SAW_Constants::reveal_next_button() ? 'true' : 'false' ) . ';',
+			'before'
+		);
 	}
 
 	/**
@@ -494,7 +633,7 @@ class Nera_SAW_Frontend {
 
 		if ( '' === $cards_html ) {
 			return self::notice(
-				__( 'You have no runs to play yet. Buy an entry on a competition page, then come back here.', 'nera-strikeawin' )
+				Nera_SAW_I18n::t( 'No runs to play yet. Buy a run on a competition page and it appears here.' )
 			);
 		}
 
@@ -528,11 +667,9 @@ class Nera_SAW_Frontend {
 		$play_base  = get_permalink();
 		$shop_url   = get_permalink( $competition_id );
 		$hub_url    = remove_query_arg( array( Nera_SAW_Play_Page::QV_COMPETITION, Nera_SAW_Play_Page::QV_TIER, 'saw_start' ), $play_base );
-		$timer      = Nera_SAW_Constants::clamp_timer(
-			isset( $config['timer_seconds'] ) ? $config['timer_seconds'] : Nera_SAW_Constants::TIMER_MAX_SECONDS
-		);
+		$timer      = Nera_SAW_Constants::timer_seconds();
 		$timer_note = sprintf(
-			/* translators: %d: seconds allowed per question (from competition config) */
+			/* translators: %d: seconds allowed per question (from Settings) */
 			_n(
 				'You have %d second per question. Wrong or too slow earns no tickets for that question.',
 				'You have %d seconds per question. Wrong or too slow earns no tickets for that question.',
@@ -754,6 +891,43 @@ class Nera_SAW_Frontend {
 		$html .= '</div></div></div>';
 
 		return $html;
+	}
+
+	/**
+	 * Logo and brand name for the share sheet's story card.
+	 *
+	 * @return array{logo:string,brand:string}
+	 */
+	private static function share_card() {
+		$logo = class_exists( 'Nera_SAW_Standalone_Fields' ) ? Nera_SAW_Standalone_Fields::shell( 'saw_logo' ) : null;
+		$card = array(
+			'logo'  => ( is_array( $logo ) && ! empty( $logo['url'] ) ) ? (string) $logo['url'] : '',
+			'brand' => Nera_SAW_Brand::name(),
+		);
+		/**
+		 * Filters the share card's logo URL and brand name.
+		 *
+		 * @param array{logo:string,brand:string} $card Logo URL ('' = brand name as text) and brand name.
+		 */
+		$card = (array) apply_filters( 'nera_saw_share_card', $card );
+
+		return array(
+			'logo'  => esc_url_raw( (string) ( $card['logo'] ?? '' ) ),
+			'brand' => (string) ( $card['brand'] ?? Nera_SAW_Brand::name() ),
+		);
+	}
+
+	/**
+	 * A string looked up by a key that differs from its English text: the
+	 * translation when there is one, else the English.
+	 *
+	 * @param string $key     Lookup key in the language files.
+	 * @param string $english English text.
+	 * @return string
+	 */
+	private static function t_as( $key, $english ) {
+		$value = Nera_SAW_I18n::t( $key );
+		return $value === $key ? $english : $value;
 	}
 
 	/**

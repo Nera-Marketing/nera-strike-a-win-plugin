@@ -27,7 +27,7 @@ $saw_heading   = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_heading',
 $saw_subtext   = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_subtext', __( 'Your entry is confirmed, fingers crossed!', 'nera-strikeawin' ) );
 $saw_good_luck = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_good_luck', __( 'Good luck!', 'nera-strikeawin' ) );
 $saw_button    = Nera_SAW_Standalone_Result_Screen::copy( 'lty_rs_draw_button', __( 'Got it!', 'nera-strikeawin' ) );
-$saw_draw_date = Nera_SAW_Standalone_Result_Screen::draw_date( $saw_product );
+$saw_draw_date = Nera_SAW_Standalone_Result_Screen::draw_text( $saw_product );
 ?>
 <div class="lty-rs-overlay saw-result" role="dialog" aria-modal="true" aria-labelledby="saw-result-heading">
 	<div class="saw-result__card">
@@ -44,7 +44,7 @@ $saw_draw_date = Nera_SAW_Standalone_Result_Screen::draw_date( $saw_product );
 			<p class="saw-result__badge">
 				<?php
 				printf(
-					/* translators: %s: formatted draw date */
+					/* translators: %s: live draw date, or "date to be confirmed" */
 					esc_html__( 'Draw: %s', 'nera-strikeawin' ),
 					esc_html( $saw_draw_date )
 				);
