@@ -90,6 +90,14 @@ class Nera_SAW_My_Tickets {
 			$by[ $cid ]['tickets'] = (int) $row->tickets;
 			$by[ $cid ]['played']  = (int) $row->played;
 		}
+		// Referral bonus tickets have no run: they add to the competition's count,
+		// and make its row when the player never played there.
+		if ( class_exists( 'Nera_SAW_Referral' ) ) {
+			foreach ( Nera_SAW_Referral::bonus_by_competition( $user_id ) as $cid => $n ) {
+				$at( $cid );
+				$by[ $cid ]['tickets'] += $n;
+			}
+		}
 		foreach ( (array) $active as $row ) {
 			$cid = (int) $row->competition_id;
 			$at( $cid );

@@ -45,6 +45,11 @@ class Nera_SAW_Ticket_Award {
 	const RUN_META = '_nera_saw_run_id';
 
 	/**
+	 * Ticket post meta: the friend a referral bonus ticket rewards (ADR 0040).
+	 */
+	const BONUS_META = '_nera_saw_ref_bonus';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -271,27 +276,7 @@ class Nera_SAW_Ticket_Award {
 			$missing  = $count - count( $existing );
 			$picked   = $missing > 0 ? self::pick_numbers( $product, $missing ) : array();
 			foreach ( $picked as $number ) {
-				$ticket_id = lty_create_new_lottery_ticket(
-					array(
-						'lty_user_id'       => (int) $user->ID,
-						'lty_product_id'    => (int) $product->get_id(),
-						'lty_amount'        => 0,
-						'lty_user_name'     => $user->user_login,
-						'lty_user_email'    => $user->user_email,
-						'lty_currency'      => get_woocommerce_currency(),
-						'lty_order_id'      => 0,
-						'lty_answer'        => '',
-						'lty_answers'       => array(),
-						'lty_valid_answer'  => 'no',
-						'lty_ip_address'    => '',
-						'lty_list_count'    => $product->get_lty_list_count(),
-						'lty_ticket_number' => (string) $number,
-					),
-					array(
-						'post_parent' => $product->get_lottery_id(),
-						'post_status' => 'lty_ticket_buyer',
-					)
-				);
+				$ticket_id = self::create_orderless_ticket( $product, $user, $number );
 				if ( $ticket_id && $run_id > 0 ) {
 					update_post_meta( (int) $ticket_id, self::RUN_META, (int) $run_id );
 				}
@@ -320,6 +305,119 @@ class Nera_SAW_Ticket_Award {
 		do_action( 'nera_saw_tickets_awarded', 0, $competition_id, $user_id, $picked );
 
 		return array_map( 'strval', array_merge( $existing, $picked ) );
+	}
+
+	/**
+	 * Mint one referral bonus ticket for a user on a free competition, with no order
+	 * and no run. The ticket carries the friend it rewards (BONUS_META), so a retry
+	 * finds it and never mints a second. The spin pool share is the caller's.
+	 *
+	 * @param int $competition_id Free competition ID.
+	 * @param int $user_id        Ticket owner (the friend or the referrer).
+	 * @param int $friend_id      The friend the reward is for.
+	 * @return string 'minted', 'held' (the user already has this bonus ticket) or '' (none minted).
+	 */
+	public static function award_bonus( $competition_id, $user_id, $friend_id ) {
+		$product = wc_get_product( $competition_id );
+		$user    = get_user_by( 'id', $user_id );
+		if ( ! $user || ! $product || ! function_exists( 'lty_is_lottery_product' ) || ! lty_is_lottery_product( $product ) || ! function_exists( 'lty_create_new_lottery_ticket' ) ) {
+			return '';
+		}
+
+		$lock_token = self::acquire_mint_lock( $competition_id );
+		if ( false === $lock_token ) {
+			Nera_SAW_Log::error(
+				'referral',
+				sprintf( 'Ticket mint lock busy for competition #%d — proceeding unlocked.', (int) $competition_id ),
+				array( 'competition_id' => (int) $competition_id, 'user_id' => (int) $user_id )
+			);
+		}
+
+		$result = '';
+		$picked = array();
+		try {
+			if ( self::has_bonus_ticket( $product, $user_id, $friend_id ) ) {
+				$result = 'held';
+			} else {
+				$picked    = self::pick_numbers( $product, 1 );
+				$ticket_id = $picked ? self::create_orderless_ticket( $product, $user, $picked[0] ) : 0;
+				if ( $ticket_id ) {
+					update_post_meta( (int) $ticket_id, self::BONUS_META, (int) $friend_id );
+					$product->update_post_meta( 'lty_ticket_count', (int) $product->get_lty_ticket_count() + 1 );
+					$result = 'minted';
+				}
+			}
+		} finally {
+			if ( false !== $lock_token ) {
+				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
+			}
+		}
+
+		if ( 'minted' === $result ) {
+			if ( class_exists( 'LTY_Transient_Handler' ) ) {
+				LTY_Transient_Handler::delete_all_transients( $competition_id, $user_id );
+			}
+			/** This action is documented in award(). */
+			do_action( 'nera_saw_tickets_awarded', 0, $competition_id, $user_id, $picked );
+		}
+		return $result;
+	}
+
+	/**
+	 * Whether the user already holds the bonus ticket for this friend on the competition.
+	 *
+	 * @param WC_Product $product   Lottery product.
+	 * @param int        $user_id   Ticket owner.
+	 * @param int        $friend_id Friend the reward is for.
+	 * @return bool
+	 */
+	private static function has_bonus_ticket( $product, $user_id, $friend_id ) {
+		global $wpdb;
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} p
+				 JOIN {$wpdb->postmeta} b ON b.post_id = p.ID AND b.meta_key = %s AND b.meta_value = %s
+				 JOIN {$wpdb->postmeta} u ON u.post_id = p.ID AND u.meta_key = 'lty_user_id' AND u.meta_value = %s
+				 WHERE p.post_type = 'lty_lottery_ticket' AND p.post_parent = %d
+				   AND p.post_status IN ( 'lty_ticket_buyer', 'lty_ticket_winner' )",
+				self::BONUS_META,
+				(string) (int) $friend_id,
+				(string) (int) $user_id,
+				(int) $product->get_lottery_id()
+			)
+		) > 0;
+	}
+
+	/**
+	 * Create a confirmed LTY ticket with no order.
+	 *
+	 * @param WC_Product $product Lottery product.
+	 * @param WP_User    $user    Owner.
+	 * @param string     $number  Ticket number.
+	 * @return int Ticket post ID (0 on failure).
+	 */
+	private static function create_orderless_ticket( $product, $user, $number ) {
+		return (int) lty_create_new_lottery_ticket(
+			array(
+				'lty_user_id'       => (int) $user->ID,
+				'lty_product_id'    => (int) $product->get_id(),
+				'lty_amount'        => 0,
+				'lty_user_name'     => $user->user_login,
+				'lty_user_email'    => $user->user_email,
+				'lty_currency'      => get_woocommerce_currency(),
+				'lty_order_id'      => 0,
+				'lty_answer'        => '',
+				'lty_answers'       => array(),
+				'lty_valid_answer'  => 'no',
+				'lty_ip_address'    => '',
+				'lty_list_count'    => $product->get_lty_list_count(),
+				'lty_ticket_number' => (string) $number,
+			),
+			array(
+				'post_parent' => $product->get_lottery_id(),
+				'post_status' => 'lty_ticket_buyer',
+			)
+		);
 	}
 
 	/**

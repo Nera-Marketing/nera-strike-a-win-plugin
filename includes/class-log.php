@@ -31,6 +31,7 @@ class Nera_SAW_Log {
 		'error',
 		'client_error',
 		'client_stall',
+		'referral',
 	);
 
 	const RETENTION_DAYS = 90;

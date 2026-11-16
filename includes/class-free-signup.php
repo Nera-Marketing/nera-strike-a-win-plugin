@@ -395,6 +395,14 @@ class Nera_SAW_Free_Signup {
 				}
 				$user = get_user_by( 'id', $id );
 				update_user_meta( $id, 'billing_email', $email );
+
+				/**
+				 * Fires when the free sign-up creates a new account (not when an
+				 * existing one logs in by code).
+				 *
+				 * @param int $user_id New user ID.
+				 */
+				do_action( 'nera_saw_free_account_created', (int) $id );
 			}
 		}
 
