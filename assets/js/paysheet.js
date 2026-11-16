@@ -82,6 +82,80 @@
 		}
 	} );
 
+	/* ---- Pay: the order placed from the sheet ------------------------------ */
+
+	function pay( form, post ) {
+		var button = form.querySelector( 'button[type="submit"]' );
+		var errors = form.querySelector( '[data-saw-pay-errors]' );
+		var panel = form.closest( '.saw-paysheet' ) || form;
+
+		// A disabled fieldset is left out of the form data; it stays disabled so the
+		// GET fallback to the checkout page carries none of it.
+		post.disabled = false;
+		var body = new FormData( form );
+		post.disabled = true;
+
+		if ( button ) {
+			button.disabled = true;
+		}
+		panel.setAttribute( 'aria-busy', 'true' );
+		if ( errors ) {
+			errors.hidden = true;
+			errors.innerHTML = '';
+		}
+
+		function fail( html ) {
+			panel.removeAttribute( 'aria-busy' );
+			if ( button ) {
+				button.disabled = false;
+			}
+			if ( errors ) {
+				errors.innerHTML = html || '';
+				if ( ! errors.textContent.trim() ) {
+					errors.textContent = errors.getAttribute( 'data-saw-fallback' ) || '';
+				}
+				errors.hidden = false;
+			}
+		}
+
+		fetch( post.getAttribute( 'data-saw-pay-post' ), { method: 'POST', credentials: 'same-origin', body: body } )
+			.then( function ( r ) {
+				return r.json();
+			} )
+			.then( function ( json ) {
+				if ( json && 'success' === json.result && json.redirect ) {
+					window.location.href = json.redirect;
+					return;
+				}
+				if ( json && json.reload ) {
+					window.location.reload();
+					return;
+				}
+				fail( json && json.messages );
+			} )
+			.catch( function () {
+				fail( '' );
+			} );
+	}
+
+	// Only a sheet that carries what the checkout needs (a signed-in player's nonce and
+	// billing values) pays from here; otherwise the form goes on to the checkout page.
+	document.addEventListener( 'submit', function ( event ) {
+		var form = event.target;
+		if ( event.defaultPrevented || ! form.matches || ! form.matches( '[data-saw-consent]' ) || ! window.fetch ) {
+			return;
+		}
+		var post = form.querySelector( '[data-saw-pay-post]' );
+		if ( ! post || ! post.getAttribute( 'data-saw-pay-post' ) || ! post.querySelector( '[name="woocommerce-process-checkout-nonce"]' ) || ! post.querySelector( '[name^="billing_"]' ) ) {
+			return;
+		}
+		event.preventDefault();
+		var button = form.querySelector( 'button[type="submit"]' );
+		if ( ! button || ! button.disabled ) {
+			pay( form, post );
+		}
+	} );
+
 	/* ---- the sheet ------------------------------------------------------- */
 
 	function sheet() {

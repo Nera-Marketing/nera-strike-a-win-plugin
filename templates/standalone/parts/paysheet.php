@@ -163,7 +163,10 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			// What placing the order from the sheet will send. Disabled, so the GET to
 			// checkout carries none of it (an email address does not belong in a URL).
 			?>
-			<fieldset class="saw-paysheet__post" data-saw-pay-post disabled hidden>
+			<fieldset class="saw-paysheet__post" data-saw-pay-post="<?php echo esc_url( WC_AJAX::get_endpoint( 'checkout' ) ); ?>" disabled hidden>
+				<input type="hidden" name="saw_basket" value="1">
+				<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_HASH ); ?>" value="<?php echo esc_attr( Nera_SAW_Checkout::basket_hash() ); ?>">
+				<?php if ( is_user_logged_in() ) { wp_nonce_field( 'woocommerce-process_checkout', 'woocommerce-process-checkout-nonce', false ); } ?>
 				<input type="hidden" name="payment_method" value="<?php echo esc_attr( Nera_SAW_Standalone_Basket::pay_sheet_gateway() ); ?>">
 				<?php foreach ( Nera_SAW_Standalone_Basket::pay_sheet_billing() as $saw_key => $saw_value ) : ?>
 					<input type="hidden" name="<?php echo esc_attr( $saw_key ); ?>" value="<?php echo esc_attr( $saw_value ); ?>">
@@ -188,6 +191,9 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 		?>
 		<button type="submit" class="saw-cta"><?php echo esc_html( $saw_label ); ?></button>
 		<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick the box to continue', 'nera-strikeawin' ); ?></p>
+		<?php if ( $saw_sheet ) : ?>
+			<div class="saw-paysheet__errors" data-saw-pay-errors data-saw-fallback="<?php esc_attr_e( 'Something went wrong. Please try again.', 'nera-strikeawin' ); ?>" role="alert" hidden></div>
+		<?php endif; ?>
 
 		<?php
 		/*

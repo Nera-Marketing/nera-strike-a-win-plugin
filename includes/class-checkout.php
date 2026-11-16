@@ -66,6 +66,9 @@ class Nera_SAW_Checkout {
 	/** Added to the address Before you pay is sent back to when a box was left unticked. */
 	const ARG_MISSING = 'saw_consent_missing';
 
+	/** Posted with the pay sheet's tick: the basket the sheet was drawn for. */
+	const ARG_HASH = 'saw_basket_hash';
+
 	/**
 	 * Whether this request is a split payment (set while the posted data is read).
 	 *
@@ -255,7 +258,7 @@ class Nera_SAW_Checkout {
 	 *
 	 * @return string
 	 */
-	private static function basket_hash() {
+	public static function basket_hash() {
 		return ( function_exists( 'WC' ) && WC()->cart ) ? (string) WC()->cart->get_cart_hash() : '';
 	}
 
@@ -344,9 +347,27 @@ class Nera_SAW_Checkout {
 		if ( ! self::is_entry_checkout() || self::is_topup_cart() || null === Nera_SAW_Standalone_Basket::current_entry() ) {
 			return;
 		}
-		if ( ! self::has_consent() ) {
+		if ( ! self::has_consent() && ! self::posted_consent() ) {
 			$errors->add( 'saw_consent', __( 'Please confirm your age and the rules on the previous screen before you pay.', 'nera-strikeawin' ) );
 		}
+	}
+
+	/**
+	 * The tick posted from the pay sheet, for the basket the sheet showed. A basket
+	 * changed since then (another tab, another add) is not the one agreed to.
+	 *
+	 * WooCommerce has checked the checkout nonce before validation runs.
+	 *
+	 * @return bool
+	 */
+	private static function posted_consent() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$ticked = isset( $_POST[ self::ARG_AGE ] ) && '1' === (string) wp_unslash( $_POST[ self::ARG_AGE ] );
+		$hash   = isset( $_POST[ self::ARG_HASH ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::ARG_HASH ] ) ) : '';
+		// phpcs:enable
+		$now = self::basket_hash();
+
+		return $ticked && '' !== $hash && '' !== $now && hash_equals( $now, $hash );
 	}
 
 	/* ---------------------------------------------------------------------
