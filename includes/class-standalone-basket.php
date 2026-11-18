@@ -982,6 +982,12 @@ class Nera_SAW_Standalone_Basket {
 			),
 		);
 
+		if ( ! Nera_SAW_Checkout::show_last_name( $competition_id ) ) {
+			$fields = array_values( array_filter( $fields, function ( $field ) {
+				return 'billing_last_name' !== $field['name'];
+			} ) );
+		}
+
 		if ( Nera_SAW_Checkout::show_country( $competition_id ) && function_exists( 'WC' ) && WC()->countries ) {
 			$fields[] = array(
 				'name'         => 'billing_country',

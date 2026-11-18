@@ -36,11 +36,12 @@ class Nera_SAW_Checkout {
 	/**
 	 * Settings keys.
 	 */
-	const SETTING_GATEWAYS = 'checkout_gateways';
-	const SETTING_COUPON   = 'checkout_show_coupon';
-	const SETTING_COUNTRY  = 'checkout_show_country';
-	const SETTING_LAST     = 'checkout_last_name_required';
-	const SETTING_FACTS    = 'checkout_show_summary_facts';
+	const SETTING_GATEWAYS  = 'checkout_gateways';
+	const SETTING_COUPON    = 'checkout_show_coupon';
+	const SETTING_COUNTRY   = 'checkout_show_country';
+	const SETTING_SHOW_LAST = 'checkout_show_last_name';
+	const SETTING_LAST      = 'checkout_last_name_required';
+	const SETTING_FACTS     = 'checkout_show_summary_facts';
 
 	/** The billing country when the checkout does not ask for one. */
 	const DEFAULT_COUNTRY = 'GB';
@@ -160,7 +161,17 @@ class Nera_SAW_Checkout {
 	}
 
 	/**
-	 * Is the last name a required field?
+	 * Does the checkout have a last name field? Off: no field, the order's billing last name is empty.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_last_name( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_SHOW_LAST, 'nera_saw_checkout_show_last_name', $competition_id );
+	}
+
+	/**
+	 * Is the last name a required field? Ignored while show_last_name() is off.
 	 *
 	 * @param int $competition_id Competition product ID (0 = global setting).
 	 * @return bool
@@ -205,7 +216,7 @@ class Nera_SAW_Checkout {
 	}
 
 	/**
-	 * First name, last name, email and, when asked for, country. Nothing else.
+	 * First name, email and, when switched on, last name and country. Nothing else.
 	 *
 	 * @param array $fields Checkout fields.
 	 * @return array
@@ -241,6 +252,10 @@ class Nera_SAW_Checkout {
 
 		if ( ! self::show_country( $competition_id ) ) {
 			unset( $fields['billing']['billing_country'] );
+		}
+		// Undeclared, WooCommerce neither reads a posted last name nor writes it to the customer.
+		if ( ! self::show_last_name( $competition_id ) ) {
+			unset( $fields['billing']['billing_last_name'] );
 		}
 
 		unset( $fields['shipping'], $fields['order'] );

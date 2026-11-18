@@ -233,6 +233,7 @@ class Nera_SAW_Competition_Admin {
 				$saw_on_off   = array( __( 'On', 'nera-strikeawin' ), __( 'Off', 'nera-strikeawin' ) );
 				$saw_switches = array(
 					'checkout_show_country'       => array_merge( array( __( 'Ask for country', 'nera-strikeawin' ), Nera_SAW_Checkout::show_country() ), $saw_on_off ),
+					'checkout_show_last_name'     => array( __( 'Last name field', 'nera-strikeawin' ), Nera_SAW_Checkout::show_last_name(), __( 'Show', 'nera-strikeawin' ), __( 'Hide', 'nera-strikeawin' ) ),
 					'checkout_last_name_required' => array_merge( array( __( 'Last name required', 'nera-strikeawin' ), Nera_SAW_Checkout::last_name_required() ), $saw_on_off ),
 					'checkout_show_summary_facts' => array( __( 'Pay sheet facts list', 'nera-strikeawin' ), Nera_SAW_Checkout::show_summary_facts(), __( 'Show', 'nera-strikeawin' ), __( 'Hide', 'nera-strikeawin' ) ),
 				);
@@ -607,6 +608,7 @@ class Nera_SAW_Competition_Admin {
 				: '',
 			'share_link_days' => isset( $_POST['saw_share_link_days'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_share_link_days'] ) ) : '',
 			'checkout_show_country'       => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_country'] ) ? wp_unslash( $_POST['saw_checkout_show_country'] ) : '' ),
+			'checkout_show_last_name'     => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_last_name'] ) ? wp_unslash( $_POST['saw_checkout_show_last_name'] ) : '' ),
 			'checkout_last_name_required' => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_last_name_required'] ) ? wp_unslash( $_POST['saw_checkout_last_name_required'] ) : '' ),
 			'checkout_show_summary_facts' => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_summary_facts'] ) ? wp_unslash( $_POST['saw_checkout_show_summary_facts'] ) : '' ),
 			'total_time'     => $total_time,

@@ -117,6 +117,7 @@ class Nera_SAW_Settings_Admin {
 		}
 		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
 		$checkout_country   = ! empty( $_POST['checkout_show_country'] );
+		$checkout_show_last = ! empty( $_POST['checkout_show_last_name'] );
 		$checkout_last_name = ! empty( $_POST['checkout_last_name_required'] );
 		$checkout_facts     = ! empty( $_POST['checkout_show_summary_facts'] );
 
@@ -165,6 +166,7 @@ class Nera_SAW_Settings_Admin {
 				'checkout_gateways'                => $checkout_gateways,
 				'checkout_show_coupon'             => $checkout_coupon,
 				'checkout_show_country'            => $checkout_country,
+				'checkout_show_last_name'          => $checkout_show_last,
 				'checkout_last_name_required'      => $checkout_last_name,
 				'checkout_show_summary_facts'      => $checkout_facts,
 				// Unticking every box posts nothing: that is an empty list, not the default.
@@ -485,9 +487,14 @@ class Nera_SAW_Settings_Admin {
 			esc_html__( 'Ask for the country (United Kingdom or Ireland). Off by default: no country field, and the billing country is the United Kingdom. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
 		);
 		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_last_name" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::show_last_name(), true, false ),
+			esc_html__( 'Show the last name field. On by default. Off: no last name field, and the order\'s billing last name is left empty (the player\'s saved last name is not changed). A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+		);
+		printf(
 			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_last_name_required" value="1"%1$s> <span>%2$s</span></label>',
 			checked( Nera_SAW_Checkout::last_name_required(), true, false ),
-			esc_html__( 'Require the last name. Off by default: the last name is optional. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+			esc_html__( 'Require the last name. Off by default: the last name is optional. Has no effect while the last name field is hidden. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
 		);
 		printf(
 			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_summary_facts" value="1"%1$s> <span>%2$s</span></label>',
