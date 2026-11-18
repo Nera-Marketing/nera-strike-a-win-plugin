@@ -739,6 +739,9 @@ class Nera_SAW_Free_Signup {
 		if ( 'free-join' !== $route && 'free-verify' !== $route ) {
 			return;
 		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
 		nocache_headers();
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which competition the link is for.

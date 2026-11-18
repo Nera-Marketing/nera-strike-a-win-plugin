@@ -75,6 +75,7 @@ class Nera_SAW_Referral {
 	 */
 	public static function init() {
 		// Ahead of the free sign-up screens, which redirect and exit.
+		add_action( 'template_redirect', array( __CLASS__, 'keep_links_out_of_page_cache' ), 0 );
 		add_action( 'template_redirect', array( __CLASS__, 'capture' ), 4 );
 		add_action( 'template_redirect', array( __CLASS__, 'keep_invite_out_of_page_cache' ), 5 );
 		add_action( 'nera_saw_free_account_created', array( __CLASS__, 'attribute' ) );
@@ -281,6 +282,22 @@ class Nera_SAW_Referral {
 			return true;
 		}
 		return is_page() && class_exists( 'Nera_SAW_Standalone_Pages' ) && 'free' === Nera_SAW_Standalone_Pages::route_of( get_queried_object_id() );
+	}
+
+	/**
+	 * A referral link must always reach capture(), and the message fetch must always get a live
+	 * render: neither may be stored by a page cache, whatever the setting, the code or the route.
+	 * Runs first, ahead of the redirects on template_redirect.
+	 */
+	public static function keep_links_out_of_page_cache() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only checks the keys are present.
+		if ( ! isset( $_GET['ref'] ) && ! isset( $_GET['saw_refinv'] ) ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
 	}
 
 	/**
