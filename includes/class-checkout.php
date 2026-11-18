@@ -57,6 +57,15 @@ class Nera_SAW_Checkout {
 	const CARD = 'cashflows_card';
 
 	/**
+	 * How Pay in the sheet takes a method: posted from the sheet, or on the checkout page.
+	 */
+	const MODE_POST     = 'post';
+	const MODE_CHECKOUT = 'checkout';
+
+	/** Query arg the sheet sends to the checkout page: the method chosen there. */
+	const ARG_METHOD = 'payment_method';
+
+	/**
 	 * Session key holding the consent given on Before you pay.
 	 */
 	const CONSENT_KEY = 'saw_checkout_consent';
@@ -407,9 +416,16 @@ class Nera_SAW_Checkout {
 		if ( $ticked ) {
 			if ( WC()->session ) {
 				WC()->session->set( self::CONSENT_KEY, array( 'hash' => self::basket_hash(), 'at' => time() ) );
+
+				// The method chosen in the pay sheet is the one this page opens with.
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$chosen = isset( $_GET[ self::ARG_METHOD ] ) ? sanitize_key( wp_unslash( $_GET[ self::ARG_METHOD ] ) ) : '';
+				if ( '' !== $chosen && in_array( $chosen, self::enabled_gateways(), true ) ) {
+					WC()->session->set( 'chosen_payment_method', $chosen );
+				}
 			}
 			// Back to a clean address: the tick need not sit in the URL.
-			wp_safe_redirect( remove_query_arg( array( self::ARG_AGE, self::ARG_RULES, self::ARG_CHECKED ) ) );
+			wp_safe_redirect( remove_query_arg( array( self::ARG_AGE, self::ARG_RULES, self::ARG_CHECKED, self::ARG_METHOD ) ) );
 			exit;
 		}
 
@@ -503,6 +519,60 @@ class Nera_SAW_Checkout {
 	public static function split_enabled() {
 		$ids = self::enabled_gateways();
 		return in_array( self::SPLIT, $ids, true ) && in_array( self::CARD, $ids, true );
+	}
+
+	/**
+	 * How Pay in the sheet takes this method: `post` (the sheet posts the order and follows
+	 * WooCommerce's redirect) or `checkout` (the player goes on to the checkout page with it).
+	 *
+	 * A gateway whose payment fields hold form controls needs them filled on the page; any
+	 * other is posted. The split's wallet share is chosen on the checkout page, and an id
+	 * WooCommerce does not know cannot be posted.
+	 *
+	 * @param string $gateway_id Gateway id, or the split pseudo-id.
+	 * @return string self::MODE_POST or self::MODE_CHECKOUT.
+	 */
+	public static function pay_sheet_mode( $gateway_id ) {
+		$gateway_id = sanitize_key( $gateway_id );
+		$gateways   = function_exists( 'WC' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
+		$gateway    = isset( $gateways[ $gateway_id ] ) ? $gateways[ $gateway_id ] : null;
+
+		if ( self::SPLIT === $gateway_id || ! $gateway ) {
+			$mode = self::MODE_CHECKOUT;
+		} else {
+			$mode = self::asks_for_fields( $gateway ) ? self::MODE_CHECKOUT : self::MODE_POST;
+		}
+
+		/**
+		 * Filters how the pay sheet takes a payment method.
+		 *
+		 * @param string                  $mode       'post' or 'checkout'.
+		 * @param string                  $gateway_id Gateway id.
+		 * @param WC_Payment_Gateway|null $gateway    The gateway; null for the split.
+		 */
+		$mode = apply_filters( 'nera_saw_pay_sheet_method_mode', $mode, $gateway_id, $gateway );
+
+		return self::MODE_CHECKOUT === $mode ? self::MODE_CHECKOUT : self::MODE_POST;
+	}
+
+	/**
+	 * Does the gateway print form controls of its own (card number, bank pick, …)?
+	 * `has_fields` is no guide: some gateways set it and print only a description.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway.
+	 * @return bool
+	 */
+	private static function asks_for_fields( $gateway ) {
+		ob_start();
+		try {
+			$gateway->payment_fields();
+		} catch ( Throwable $e ) {
+			ob_end_clean();
+			return true;
+		}
+		$html = (string) ob_get_clean();
+
+		return (bool) preg_match( '/<(input|select|textarea)\b/i', $html );
 	}
 
 	/**
@@ -606,6 +676,12 @@ class Nera_SAW_Checkout {
 				'$1' . self::SPLIT . '$2',
 				$html
 			);
+
+			// Chosen in the pay sheet: the split opens selected. It is printed after the gateways,
+			// so its tick wins over the one WooCommerce gives the first of them.
+			if ( WC()->session && self::SPLIT === WC()->session->get( 'chosen_payment_method' ) ) {
+				$html = (string) preg_replace( '/(<input\b[^>]*data-nera-wallet-radio)\b(?![^>]*\schecked)/s', '$1 checked', $html, 1 );
+			}
 		}
 
 		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the theme's own markup, with one attribute value replaced.

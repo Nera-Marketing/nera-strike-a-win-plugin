@@ -1967,6 +1967,7 @@ class Nera_SAW_Language {
 				'Wallet'                                  => 'Кошелёк',
 				'Card'                     => 'Карта',
 				'Part wallet, part card'                  => 'Часть кошельком, часть картой',
+				'Pay with'                                => 'Способ оплаты',
 				'Please confirm your age and the rules on the previous screen before you pay.' => 'Прежде чем платить, подтвердите возраст и правила на предыдущем экране.',
 				'You can top up at most %s at a time.'    => 'За один раз можно пополнить не более %s.',
 				'You have reached the daily top-up limit of %s. Please try again tomorrow.' => 'Вы достигли дневного лимита пополнения: %s. Попробуйте завтра.',

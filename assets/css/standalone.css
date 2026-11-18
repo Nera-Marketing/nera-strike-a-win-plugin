@@ -4581,6 +4581,9 @@ html.saw-live-modal-open { overflow: hidden; }
 .saw-paysheet__fields { margin: 0; padding: 0; border: 0; min-width: 0; }
 .saw-paysheet__fields .saw-field { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .saw-paysheet__fields .saw-field__err { margin: 0; }
+/* Pay sheet method picker: a radio per method, one per line. */
+.saw-paysheet__methods { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+.saw-paysheet__methods .saw-method { display: flex; align-items: center; gap: 8px; }
 .saw-paysheet__close { flex: none; width: 44px; height: 44px; padding: 0; font: inherit; font-size: 22px; cursor: pointer; }
 html.saw-sheet-open { overflow: hidden; }
 .saw-scrim > .saw-paidsheet { width: 100%; max-width: 470px; max-height: 100%; overflow: auto; padding: 20px; border-radius: 16px; background: Canvas; color: CanvasText; text-align: center; }

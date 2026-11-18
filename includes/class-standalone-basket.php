@@ -903,13 +903,51 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
-	 * The gateway the pay sheet pays with: the first the section checkout offers.
+	 * The gateway the pay sheet preselects: the first method it offers.
 	 *
 	 * @return string
 	 */
 	public static function pay_sheet_gateway() {
-		$ids = array_values( array_diff( Nera_SAW_Checkout::enabled_gateways(), array( 'nera_wallet_split' ) ) );
-		return $ids ? $ids[0] : '';
+		$ids = array_keys( self::pay_sheet_methods() );
+		return $ids ? (string) $ids[0] : '';
+	}
+
+	/**
+	 * The methods the pay sheet offers: every method ticked for the section checkout that
+	 * WooCommerce has switched on, in the settings' order, with "Part wallet, part card"
+	 * only while the split is on.
+	 *
+	 * Switched on rather than available: availability depends on the basket and balance at
+	 * the moment, and the checkout reports that when Pay is pressed.
+	 *
+	 * @return array Method id => plain label.
+	 */
+	public static function pay_sheet_methods() {
+		if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+			return array();
+		}
+
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		$methods  = array();
+		foreach ( Nera_SAW_Checkout::enabled_gateways() as $id ) {
+			if ( Nera_SAW_Checkout::SPLIT === $id ) {
+				if ( Nera_SAW_Checkout::split_enabled() ) {
+					$methods[ $id ] = __( 'Part wallet, part card', 'nera-strikeawin' );
+				}
+				continue;
+			}
+			if ( ! isset( $gateways[ $id ] ) || 'yes' !== $gateways[ $id ]->enabled ) {
+				continue;
+			}
+
+			$title = self::plain_label( $gateways[ $id ]->get_title() );
+			if ( '' === $title ) {
+				$title = trim( wp_strip_all_tags( (string) $gateways[ $id ]->get_method_title() ) );
+			}
+			$methods[ $id ] = '' !== $title ? $title : $id;
+		}
+
+		return $methods;
 	}
 
 	/**

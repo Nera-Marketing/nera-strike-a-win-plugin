@@ -130,6 +130,12 @@
 					window.location.href = json.redirect;
 					return;
 				}
+				// Taken, but with nowhere to go from here: the checkout page finishes it.
+				if ( json && 'success' === json.result ) {
+					toCheckout( form );
+					form.submit();
+					return;
+				}
 				if ( json && json.reload ) {
 					window.location.reload();
 					return;
@@ -184,20 +190,31 @@
 		} );
 	}
 
+	// The chosen method's mode, set by the server: 'post' (from here) or 'checkout' (on the checkout page).
+	function mode( form ) {
+		var method = form.querySelector( 'input[name="payment_method"]:checked' ) || form.querySelector( 'input[type="hidden"][name="payment_method"]' );
+		return method ? method.getAttribute( 'data-saw-pay-mode' ) : '';
+	}
+
+	// The checkout page asks for the billing fields itself, and an email address does not belong in the URL the GET builds.
+	function toCheckout( form ) {
+		var fields = form.querySelector( '[data-saw-pay-fields]' );
+		if ( fields ) {
+			fields.disabled = true;
+		}
+	}
+
 	// Only a sheet that carries what the checkout needs (a signed-in player's nonce and
-	// billing fields) pays from here; otherwise the form goes on to the checkout page.
+	// billing fields) pays from here, with a method that can be posted; otherwise the form
+	// goes on to the checkout page with the chosen method.
 	document.addEventListener( 'submit', function ( event ) {
 		var form = event.target;
 		if ( event.defaultPrevented || ! form.matches || ! form.matches( '[data-saw-consent]' ) ) {
 			return;
 		}
 		var post = form.querySelector( '[data-saw-pay-post]' );
-		if ( ! window.fetch || ! post || ! post.getAttribute( 'data-saw-pay-post' ) || ! post.querySelector( '[name="woocommerce-process-checkout-nonce"]' ) || ! form.querySelector( '[name^="billing_"]' ) ) {
-			// The checkout page asks for these itself, and an email address does not belong in the URL this GET builds.
-			var fields = form.querySelector( '[data-saw-pay-fields]' );
-			if ( fields ) {
-				fields.disabled = true;
-			}
+		if ( ! window.fetch || ! post || ! post.getAttribute( 'data-saw-pay-post' ) || ! post.querySelector( '[name="woocommerce-process-checkout-nonce"]' ) || ! form.querySelector( '[name^="billing_"]' ) || 'checkout' === mode( form ) ) {
+			toCheckout( form );
 			return;
 		}
 		event.preventDefault();

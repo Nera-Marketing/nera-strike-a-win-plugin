@@ -169,7 +169,6 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<input type="hidden" name="saw_basket" value="1">
 				<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_HASH ); ?>" value="<?php echo esc_attr( Nera_SAW_Checkout::basket_hash() ); ?>">
 				<?php if ( is_user_logged_in() ) { wp_nonce_field( 'woocommerce-process_checkout', 'woocommerce-process-checkout-nonce', false ); } ?>
-				<input type="hidden" name="payment_method" value="<?php echo esc_attr( Nera_SAW_Standalone_Basket::pay_sheet_gateway() ); ?>">
 			</fieldset>
 			<?php // The billing fields Pay sends, prefilled from the account; WooCommerce saves what is typed to it. ?>
 			<fieldset class="saw-paysheet__fields" data-saw-pay-fields>
@@ -189,6 +188,25 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 					</div>
 				<?php endforeach; ?>
 			</fieldset>
+			<?php
+			// The methods ticked for the section checkout. Each says how Pay takes it: posted from
+			// here, or on the checkout page (Nera_SAW_Checkout::pay_sheet_mode()).
+			$saw_pay_methods = Nera_SAW_Standalone_Basket::pay_sheet_methods();
+			$saw_pay_first   = Nera_SAW_Standalone_Basket::pay_sheet_gateway();
+			?>
+			<?php if ( count( $saw_pay_methods ) > 1 ) : ?>
+				<fieldset class="saw-paysheet__methods" data-saw-pay-methods>
+					<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
+					<?php foreach ( $saw_pay_methods as $saw_pm_id => $saw_pm_label ) : ?>
+						<label class="saw-method">
+							<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm_id ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pm_id ) ); ?>"<?php checked( (string) $saw_pm_id, $saw_pay_first ); ?>>
+							<span><?php echo esc_html( $saw_pm_label ); ?></span>
+						</label>
+					<?php endforeach; ?>
+				</fieldset>
+			<?php elseif ( $saw_pay_first ) : ?>
+				<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pay_first ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pay_first ) ); ?>">
+			<?php endif; ?>
 		<?php endif; ?>
 
 		<label class="saw-check">
@@ -221,7 +239,8 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 		 * Names only -- see method_labels() for why a gateway title cannot simply
 		 * be escaped and printed.
 		 */
-		$saw_methods = Nera_SAW_Standalone_Basket::method_labels();
+		// In the sheet, a choice of methods replaces the names.
+		$saw_methods = ( $saw_sheet && isset( $saw_pay_methods ) && count( $saw_pay_methods ) > 1 ) ? array() : Nera_SAW_Standalone_Basket::method_labels();
 		?>
 		<?php if ( $saw_methods ) : ?>
 			<ul class="saw-methods">
