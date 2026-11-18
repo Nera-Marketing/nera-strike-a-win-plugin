@@ -216,6 +216,9 @@ class Nera_SAW_Constants {
 			// Kingdom) and an optional last name. A competition may override either.
 			'checkout_show_country'            => false,
 			'checkout_last_name_required'      => false,
+			// The pay sheet summary's facts list (questions, timer, most this run, closes).
+			// A competition may override it.
+			'checkout_show_summary_facts'      => true,
 			// Optional blocks on the quiz results screen (keys of result_blocks()).
 			'result_display'                   => array( 'draw_line' ),
 			// Days a shared result link stays live (Nera_SAW_Share::days()); the draw ends it sooner.

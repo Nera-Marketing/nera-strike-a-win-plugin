@@ -40,6 +40,7 @@ class Nera_SAW_Checkout {
 	const SETTING_COUPON   = 'checkout_show_coupon';
 	const SETTING_COUNTRY  = 'checkout_show_country';
 	const SETTING_LAST     = 'checkout_last_name_required';
+	const SETTING_FACTS    = 'checkout_show_summary_facts';
 
 	/** The billing country when the checkout does not ask for one. */
 	const DEFAULT_COUNTRY = 'GB';
@@ -166,6 +167,16 @@ class Nera_SAW_Checkout {
 	 */
 	public static function last_name_required( $competition_id = 0 ) {
 		return self::switch_setting( self::SETTING_LAST, 'nera_saw_checkout_last_name_required', $competition_id );
+	}
+
+	/**
+	 * Does the pay sheet summary show its facts list (questions, timer, most this run, closes)?
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_summary_facts( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_FACTS, 'nera_saw_checkout_show_summary_facts', $competition_id );
 	}
 
 	/**

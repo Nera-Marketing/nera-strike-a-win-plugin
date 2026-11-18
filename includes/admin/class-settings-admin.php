@@ -118,6 +118,7 @@ class Nera_SAW_Settings_Admin {
 		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
 		$checkout_country   = ! empty( $_POST['checkout_show_country'] );
 		$checkout_last_name = ! empty( $_POST['checkout_last_name_required'] );
+		$checkout_facts     = ! empty( $_POST['checkout_show_summary_facts'] );
 
 		// Whole days, at least one; blank or nonsense falls back to the default.
 		$share_link_days = isset( $_POST['share_link_days'] ) ? (int) $_POST['share_link_days'] : Nera_SAW_Share::DEFAULT_DAYS;
@@ -165,6 +166,7 @@ class Nera_SAW_Settings_Admin {
 				'checkout_show_coupon'             => $checkout_coupon,
 				'checkout_show_country'            => $checkout_country,
 				'checkout_last_name_required'      => $checkout_last_name,
+				'checkout_show_summary_facts'      => $checkout_facts,
 				// Unticking every box posts nothing: that is an empty list, not the default.
 				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
 				'share_link_days'                  => $share_link_days,
@@ -486,6 +488,11 @@ class Nera_SAW_Settings_Admin {
 			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_last_name_required" value="1"%1$s> <span>%2$s</span></label>',
 			checked( Nera_SAW_Checkout::last_name_required(), true, false ),
 			esc_html__( 'Require the last name. Off by default: the last name is optional. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+		);
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_summary_facts" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::show_summary_facts(), true, false ),
+			esc_html__( 'Show the facts list in the pay sheet summary (questions, timer, most this run, closes). On by default. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
 		);
 		echo '</div>';
 

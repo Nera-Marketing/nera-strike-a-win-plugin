@@ -127,14 +127,16 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			);
 		}
 		?>
-		<dl class="saw-summary__facts">
-			<?php foreach ( $saw_facts as $saw_fact ) : ?>
-				<div class="saw-fact">
-					<dt><?php echo esc_html( $saw_fact['label'] ); ?></dt>
-					<dd><?php echo esc_html( $saw_fact['value'] ); ?></dd>
-				</div>
-			<?php endforeach; ?>
-		</dl>
+		<?php if ( Nera_SAW_Checkout::show_summary_facts( (int) $saw_spec['id'] ) ) : ?>
+			<dl class="saw-summary__facts">
+				<?php foreach ( $saw_facts as $saw_fact ) : ?>
+					<div class="saw-fact">
+						<dt><?php echo esc_html( $saw_fact['label'] ); ?></dt>
+						<dd><?php echo esc_html( $saw_fact['value'] ); ?></dd>
+					</div>
+				<?php endforeach; ?>
+			</dl>
+		<?php endif; ?>
 
 		<div class="saw-summary__rule"></div>
 

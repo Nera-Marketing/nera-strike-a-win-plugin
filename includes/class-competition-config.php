@@ -46,6 +46,9 @@ class Nera_SAW_Competition_Config {
 			// through Nera_SAW_Checkout::show_country() / last_name_required().
 			'checkout_show_country'       => '',
 			'checkout_last_name_required' => '',
+			// Pay sheet facts list: '' = inherit, '1' show, '0' hide. Resolve through
+			// Nera_SAW_Checkout::show_summary_facts().
+			'checkout_show_summary_facts' => '',
 			// Free text, not a number: the prototype prints it verbatim ("£28,000")
 			// and different competitions word it differently. Formatting it here
 			// would take that choice away from whoever writes the competition.
@@ -264,7 +267,7 @@ class Nera_SAW_Competition_Config {
 		$share_days                = isset( $config['share_link_days'] ) ? trim( (string) $config['share_link_days'] ) : '';
 		$config['share_link_days'] = ( '' !== $share_days && (int) $share_days >= 1 ) ? (string) (int) $share_days : '';
 
-		foreach ( array( 'checkout_show_country', 'checkout_last_name_required' ) as $key ) {
+		foreach ( array( 'checkout_show_country', 'checkout_last_name_required', 'checkout_show_summary_facts' ) as $key ) {
 			$config[ $key ] = self::sanitize_switch_override( $config[ $key ] );
 		}
 

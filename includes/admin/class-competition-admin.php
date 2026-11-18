@@ -228,10 +228,13 @@ class Nera_SAW_Competition_Admin {
 					<span class="description"><?php esc_html_e( 'Ladder runs the levels in stages, easy to hard, and the competition page shows a stage for each. Random mixes them across the run, so there are no stages to show — only how many questions come from each level.', 'nera-strikeawin' ); ?></span>
 				</p>
 				<?php
-				// Pay sheet billing switches: blank inherits Settings > Checkout, named in the label.
+				// Pay sheet switches: blank inherits Settings > Checkout, named in the label.
+				// Each row: label, global value, then the words for on and off.
+				$saw_on_off   = array( __( 'On', 'nera-strikeawin' ), __( 'Off', 'nera-strikeawin' ) );
 				$saw_switches = array(
-					'checkout_show_country'       => array( __( 'Ask for country', 'nera-strikeawin' ), Nera_SAW_Checkout::show_country() ),
-					'checkout_last_name_required' => array( __( 'Last name required', 'nera-strikeawin' ), Nera_SAW_Checkout::last_name_required() ),
+					'checkout_show_country'       => array_merge( array( __( 'Ask for country', 'nera-strikeawin' ), Nera_SAW_Checkout::show_country() ), $saw_on_off ),
+					'checkout_last_name_required' => array_merge( array( __( 'Last name required', 'nera-strikeawin' ), Nera_SAW_Checkout::last_name_required() ), $saw_on_off ),
+					'checkout_show_summary_facts' => array( __( 'Pay sheet facts list', 'nera-strikeawin' ), Nera_SAW_Checkout::show_summary_facts(), __( 'Show', 'nera-strikeawin' ), __( 'Hide', 'nera-strikeawin' ) ),
 				);
 				foreach ( $saw_switches as $saw_key => $saw_switch ) :
 					$saw_own = isset( $config[ $saw_key ] ) ? (string) $config[ $saw_key ] : '';
@@ -241,12 +244,12 @@ class Nera_SAW_Competition_Admin {
 						<select name="saw_<?php echo esc_attr( $saw_key ); ?>" id="saw_<?php echo esc_attr( $saw_key ); ?>" class="short" style="width:260px">
 							<option value="" <?php selected( $saw_own, '' ); ?>>
 								<?php
-								/* translators: %s: the global value, On or Off. */
-								echo esc_html( sprintf( __( 'Inherit global — %s', 'nera-strikeawin' ), $saw_switch[1] ? __( 'On', 'nera-strikeawin' ) : __( 'Off', 'nera-strikeawin' ) ) );
+								/* translators: %s: the global value, e.g. On or Off. */
+								echo esc_html( sprintf( __( 'Inherit global — %s', 'nera-strikeawin' ), $saw_switch[1] ? $saw_switch[2] : $saw_switch[3] ) );
 								?>
 							</option>
-							<option value="1" <?php selected( $saw_own, '1' ); ?>><?php esc_html_e( 'On', 'nera-strikeawin' ); ?></option>
-							<option value="0" <?php selected( $saw_own, '0' ); ?>><?php esc_html_e( 'Off', 'nera-strikeawin' ); ?></option>
+							<option value="1" <?php selected( $saw_own, '1' ); ?>><?php echo esc_html( $saw_switch[2] ); ?></option>
+							<option value="0" <?php selected( $saw_own, '0' ); ?>><?php echo esc_html( $saw_switch[3] ); ?></option>
 						</select>
 					</p>
 				<?php endforeach; ?>
@@ -605,6 +608,7 @@ class Nera_SAW_Competition_Admin {
 			'share_link_days' => isset( $_POST['saw_share_link_days'] ) ? sanitize_text_field( wp_unslash( $_POST['saw_share_link_days'] ) ) : '',
 			'checkout_show_country'       => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_country'] ) ? wp_unslash( $_POST['saw_checkout_show_country'] ) : '' ),
 			'checkout_last_name_required' => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_last_name_required'] ) ? wp_unslash( $_POST['saw_checkout_last_name_required'] ) : '' ),
+			'checkout_show_summary_facts' => Nera_SAW_Competition_Config::sanitize_switch_override( isset( $_POST['saw_checkout_show_summary_facts'] ) ? wp_unslash( $_POST['saw_checkout_show_summary_facts'] ) : '' ),
 			'total_time'     => $total_time,
 			'distribution'   => $dist,
 			'level_rewards'  => $rewards,
