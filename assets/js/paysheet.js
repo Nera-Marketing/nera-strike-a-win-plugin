@@ -442,4 +442,51 @@
 			close();
 		}
 	} );
+
+	/* ---- opened by a link (?saw_pay=1) ----------------------------------- */
+
+	// The competition page is cached without the sheet, which carries the basket and
+	// billing values: it is fetched from the basket before it can open.
+	( function () {
+		var OPEN = 'saw_pay';
+		var cfg = window.neraSawBasket || {};
+		if ( ! window.URL || ! window.history || ! window.history.replaceState || ! sheet() ) {
+			return;
+		}
+		var url = new URL( window.location.href );
+		if ( ! url.searchParams.has( OPEN ) ) {
+			return;
+		}
+		url.searchParams.delete( OPEN );
+		window.history.replaceState( window.history.state, '', url.pathname + url.search + url.hash );
+
+		// Before you pay as a page still takes the payment without the sheet.
+		function fallback() {
+			if ( cfg.next ) {
+				window.location.href = cfg.next;
+			}
+		}
+
+		if ( ! window.fetch || ! window.FormData || ! cfg.refresh || ! cfg.sheet ) {
+			fallback();
+			return;
+		}
+
+		var body = new FormData();
+		body.append( 'saw_basket', '1' );
+		fetch( cfg.refresh, { method: 'POST', credentials: 'same-origin', body: body } )
+			.then( function ( r ) {
+				return r.ok ? r.json() : Promise.reject( new Error( r.status ) );
+			} )
+			.then( function ( json ) {
+				var html = json && json.fragments ? json.fragments[ cfg.sheet ] : '';
+				var slot = html ? document.querySelector( cfg.sheet ) : null;
+				if ( ! slot ) {
+					throw new Error( 'no sheet' );
+				}
+				slot.outerHTML = html;
+				document.dispatchEvent( new CustomEvent( 'saw:paysheet' ) );
+			} )
+			.catch( fallback );
+	}() );
 }() );

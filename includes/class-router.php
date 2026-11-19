@@ -497,8 +497,9 @@ class Nera_SAW_Router {
 						? WC_AJAX::get_endpoint( 'add_to_cart' )
 						: '',
 					'next'    => class_exists( 'Nera_SAW_Standalone_Basket' )
-						? Nera_SAW_Standalone_Basket::pre_payment_url()
+						? Nera_SAW_Standalone_Basket::fallback_url()
 						: '',
+					'refresh' => class_exists( 'WC_AJAX' ) ? WC_AJAX::get_endpoint( 'get_refreshed_fragments' ) : '',
 					'sheet'   => class_exists( 'Nera_SAW_Standalone_Basket' ) ? Nera_SAW_Standalone_Basket::SHEET : '',
 				)
 			);

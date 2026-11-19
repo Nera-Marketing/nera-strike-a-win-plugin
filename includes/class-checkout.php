@@ -149,7 +149,7 @@ class Nera_SAW_Checkout {
 	 *
 	 * @return bool
 	 */
-	private static function is_topup_cart() {
+	public static function is_topup_cart() {
 		return function_exists( 'is_wallet_rechargeable_cart' ) && is_wallet_rechargeable_cart();
 	}
 
@@ -456,12 +456,20 @@ class Nera_SAW_Checkout {
 
 		if ( ! self::has_consent() ) {
 			$to = Nera_SAW_Standalone_Basket::pre_payment_url();
-			if ( $to ) {
-				// A form submitted with a box unticked says why; a direct visit does not.
-				// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				if ( isset( $_GET[ self::ARG_CHECKED ] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( isset( $_GET[ self::ARG_CHECKED ] ) ) {
+				// A form submitted with a box unticked says why, on the page that has no script to.
+				if ( $to ) {
 					$to = add_query_arg( self::ARG_MISSING, '1', $to );
 				}
+			} else {
+				// A direct visit (an old link) opens the pay sheet, which takes the tick.
+				$sheet = Nera_SAW_Standalone_Basket::sheet_url();
+				if ( $sheet ) {
+					$to = $sheet;
+				}
+			}
+			if ( $to ) {
 				wp_safe_redirect( $to );
 				exit;
 			}

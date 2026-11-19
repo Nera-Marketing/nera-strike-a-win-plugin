@@ -45,12 +45,26 @@ class Nera_SAW_Standalone_Basket {
 	const SHEET = 'div[data-saw-sheet]';
 
 	/**
+	 * Query flag that opens the pay sheet when the competition page loads.
+	 */
+	const OPEN = 'saw_pay';
+
+	/**
+	 * Query flag that keeps Before you pay as a page: the sheet needs script, and
+	 * this is where a player without it (or whose sheet failed to load) pays.
+	 */
+	const NO_SCRIPT = 'saw_nojs';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
 		if ( ! Nera_SAW_Mode::is_standalone() ) {
 			return;
 		}
+
+		// Same priority as the checkout's consent check, which sends here too.
+		add_action( 'template_redirect', array( __CLASS__, 'open_sheet_instead' ), 15 );
 
 		/*
 		 * The two baskets. Priority 1 on wp_loaded, because WC_Cart_Session hydrates
@@ -575,7 +589,8 @@ class Nera_SAW_Standalone_Basket {
 	 * @return string
 	 */
 	public static function redirect_after_add( $url ) {
-		$to = self::pre_payment_url();
+		// Only a real form post lands here, so the sheet's script did not run.
+		$to = self::fallback_url();
 		return $to ? $to : $url;
 	}
 
@@ -708,7 +723,12 @@ class Nera_SAW_Standalone_Basket {
 		$ajax = ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() )
 			|| ! empty( $_GET['wc-ajax'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		return $ajax && null !== self::current_entry() && self::basket_is_only_entries();
+		// Without script the checkout form posts to the page itself, and WooCommerce
+		// takes the order on wp_loaded, before the page is known.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$placing = isset( $_POST['woocommerce_checkout_place_order'] ) && 'saw' === self::context();
+
+		return ( $ajax || $placing ) && null !== self::current_entry() && self::basket_is_only_entries();
 	}
 
 	/**
@@ -867,6 +887,59 @@ class Nera_SAW_Standalone_Basket {
 	 */
 	public static function pre_payment_url() {
 		return Nera_SAW_Standalone_Pages::url( self::ROUTE );
+	}
+
+	/**
+	 * Before you pay as a page, for a player the sheet cannot open for.
+	 *
+	 * @return string '' while the page is missing.
+	 */
+	public static function fallback_url() {
+		$url = self::pre_payment_url();
+		return $url ? add_query_arg( self::NO_SCRIPT, '1', $url ) : '';
+	}
+
+	/**
+	 * The entry's competition page with the pay sheet open, or '' when the basket
+	 * holds no entry (empty, or a wallet top-up).
+	 *
+	 * @return string
+	 */
+	public static function sheet_url() {
+		if ( Nera_SAW_Checkout::is_topup_cart() ) {
+			return '';
+		}
+		$entry = self::current_entry();
+		if ( ! $entry || empty( $entry['spec']['id'] ) ) {
+			return '';
+		}
+		$url = Nera_SAW_Router::competition_url( '', $entry['spec']['id'] );
+		return $url ? add_query_arg( self::OPEN, '1', $url ) : '';
+	}
+
+	/**
+	 * Before you pay is not a step of the pay flow: links to it (the header
+	 * basket, emails, bookmarks) open the sheet over the competition instead.
+	 *
+	 * Not for a visit sent back for a missing tick, nor the no-script fallback.
+	 */
+	public static function open_sheet_instead() {
+		if ( is_admin() || ! function_exists( 'is_page' ) || ! is_page() ) {
+			return;
+		}
+		$id = Nera_SAW_Standalone_Pages::page_id( self::ROUTE );
+		if ( ! $id || (int) $id !== (int) get_queried_object_id() ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET[ self::NO_SCRIPT ] ) || isset( $_GET[ Nera_SAW_Checkout::ARG_MISSING ] ) ) {
+			return;
+		}
+		$to = self::sheet_url();
+		if ( $to ) {
+			wp_safe_redirect( $to );
+			exit;
+		}
 	}
 
 	/**
