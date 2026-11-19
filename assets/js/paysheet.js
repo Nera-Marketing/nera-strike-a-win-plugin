@@ -292,11 +292,92 @@
 					window.location.reload();
 					return;
 				}
+				if ( json && json.messages && -1 !== String( json.messages ).indexOf( STALE ) ) {
+					redraw( form, json.messages );
+					return;
+				}
 				fail( json && json.messages );
 			} )
 			.catch( function () {
 				fail( '' );
 			} );
+	}
+
+	// The server's answer when the sheet was drawn for a basket that has changed since
+	// (another tab, another add): the sheet is drawn again for the basket as it is now,
+	// on the methods step with what was typed and the method chosen, and says why. The
+	// sheet stays busy until then, so it cannot be closed half way.
+	var STALE = 'data-id="saw_basket_changed"';
+
+	function redraw( form, messages ) {
+		var cfg = window.neraSawBasket || {};
+		var slot = form.closest( SHEET );
+
+		function away() {
+			if ( cfg.next ) {
+				window.location.href = cfg.next;
+			} else {
+				window.location.reload();
+			}
+		}
+
+		if ( ! slot || ! cfg.refresh || ! cfg.sheet ) {
+			away();
+			return;
+		}
+
+		var typed = [];
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-fields] [name]' ), function ( input ) {
+			if ( 'checkbox' !== input.type && 'radio' !== input.type ) {
+				typed.push( [ input.name, input.value ] );
+			}
+		} );
+		var method = form.querySelector( 'input[type="radio"][name="payment_method"]:checked' );
+		var chosen = method ? method.value : '';
+
+		var body = new FormData();
+		body.append( 'saw_basket', '1' );
+		fetch( cfg.refresh, { method: 'POST', credentials: 'same-origin', body: body } )
+			.then( function ( r ) {
+				return r.ok ? r.json() : Promise.reject( new Error( r.status ) );
+			} )
+			.then( function ( json ) {
+				var html = json && json.fragments ? json.fragments[ cfg.sheet ] : '';
+				// An emptied basket draws no form to pay from.
+				if ( ! html || -1 === html.indexOf( 'data-saw-consent' ) ) {
+					throw new Error( 'no sheet' );
+				}
+				slot.outerHTML = html;
+				var el = sheet();
+				var next = el ? el.querySelector( '[data-saw-consent]' ) : null;
+				if ( ! next ) {
+					throw new Error( 'no sheet' );
+				}
+				el.hidden = false;
+				typed.forEach( function ( pair ) {
+					var input = fieldFor( next, pair[ 0 ] );
+					if ( input ) {
+						input.value = pair[ 1 ];
+					}
+				} );
+				Array.prototype.forEach.call( next.querySelectorAll( 'input[type="radio"][name="payment_method"]' ), function ( radio ) {
+					if ( chosen && radio.value === chosen && ! radio.disabled && ! radio.checked ) {
+						radio.checked = true;
+						radio.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+					}
+				} );
+				if ( next.hasAttribute( STEP ) ) {
+					step( next, 2, false );
+				}
+				var errors = next.querySelector( '[data-saw-pay-errors]' );
+				if ( errors ) {
+					errors.innerHTML = messages;
+					errors.hidden = false;
+					errors.setAttribute( 'tabindex', '-1' );
+					errors.focus();
+				}
+			} )
+			.catch( away );
 	}
 
 	// WooCommerce tags a field's error with the field's name (data-id): each such error moves

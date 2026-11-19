@@ -15,7 +15,7 @@
  *    back to Before you pay, and a submitted one is refused.
  *  - PAYMENT METHODS: Wallet only, until a provider is agreed. Which gateways show is a
  *    setting (Strike And Win -> Settings -> Checkout), so adding one later is ticking a box.
- *    The card gateway reads "Card" when it returns.
+ *    Each gateway keeps the title set for it in WooCommerce.
  *  - SPLIT PAYMENT: "Part wallet, part card" is its own value, `nera_wallet_split`, not the
  *    card gateway's `cashflows_card`, so the server can tell the two apart. It is mapped
  *    back to the card gateway for WooCommerce, and the order records that it was a split.
@@ -497,9 +497,31 @@ class Nera_SAW_Checkout {
 		if ( ! self::is_entry_checkout() || self::is_topup_cart() || null === Nera_SAW_Standalone_Basket::current_entry() ) {
 			return;
 		}
-		if ( ! self::has_consent() && ! self::posted_consent() ) {
-			$errors->add( 'saw_consent', __( 'Please confirm your age and the rules on the previous screen before you pay.', 'nera-strikeawin' ) );
+		if ( self::has_consent() || self::posted_consent() ) {
+			return;
 		}
+		// The sheet was drawn for a basket that has changed since: the sheet redraws itself
+		// for the new one (WooCommerce prints the id as the message's data-id).
+		if ( self::posted_stale_basket() ) {
+			$errors->add( 'saw_basket_changed', __( 'Your basket has changed since this was opened. Check the new total, tick the box and pay again.', 'nera-strikeawin' ), array( 'id' => 'saw_basket_changed' ) );
+			return;
+		}
+		$errors->add( 'saw_consent', __( 'Please confirm your age and the rules on the previous screen before you pay.', 'nera-strikeawin' ) );
+	}
+
+	/**
+	 * The pay sheet's tick, posted for a basket other than the one being bought now.
+	 *
+	 * @return bool
+	 */
+	private static function posted_stale_basket() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$ticked = isset( $_POST[ self::ARG_AGE ] ) && '1' === (string) wp_unslash( $_POST[ self::ARG_AGE ] );
+		$hash   = isset( $_POST[ self::ARG_HASH ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::ARG_HASH ] ) ) : '';
+		// phpcs:enable
+		$now = self::basket_hash();
+
+		return $ticked && '' !== $hash && ! hash_equals( $now, $hash );
 	}
 
 	/**
