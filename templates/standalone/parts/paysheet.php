@@ -155,7 +155,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$saw_missing = ! $saw_sheet && isset( $_GET[ Nera_SAW_Checkout::ARG_MISSING ] );
 	?>
-	<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent>
+	<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent<?php echo $saw_sheet ? ' data-saw-pay-step-current="1"' : ''; ?>>
 
 		<?php if ( class_exists( 'Nera_SAW_Language' ) ) { Nera_SAW_Language::hidden_field(); } ?>
 		<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_CHECKED ); ?>" value="1">
@@ -171,19 +171,23 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<?php if ( is_user_logged_in() ) { wp_nonce_field( 'woocommerce-process_checkout', 'woocommerce-process-checkout-nonce', false ); } ?>
 			</fieldset>
 			<?php // The billing fields Pay sends, prefilled from the account; WooCommerce saves what is typed to it. ?>
-			<fieldset class="saw-paysheet__fields" data-saw-pay-fields>
+			<fieldset class="saw-paysheet__fields" data-saw-pay-fields data-saw-pay-step="1">
 				<?php foreach ( Nera_SAW_Standalone_Basket::pay_sheet_fields( (int) $saw_spec['id'] ) as $saw_field ) : ?>
-					<?php $saw_fid = 'saw-pay-' . str_replace( '_', '-', $saw_field['name'] ); ?>
+					<?php
+					$saw_fid = 'saw-pay-' . str_replace( '_', '-', $saw_field['name'] );
+					// WooCommerce's messages for this field, shown when Pay on step 1 finds it wrong.
+					$saw_ferr = ' data-saw-err-required="' . esc_attr( $saw_field['errors']['required'] ) . '"' . ( '' !== $saw_field['errors']['email'] ? ' data-saw-err-email="' . esc_attr( $saw_field['errors']['email'] ) . '"' : '' );
+					?>
 					<div class="saw-field">
 						<label for="<?php echo esc_attr( $saw_fid ); ?>"><?php echo esc_html( $saw_field['label'] ); ?></label>
 						<?php if ( 'select' === $saw_field['type'] ) : ?>
-							<select id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo $saw_field['required'] ? ' required' : ''; ?>>
+							<select id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo $saw_field['required'] ? ' required' : ''; ?><?php echo $saw_ferr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>>
 								<?php foreach ( $saw_field['options'] as $saw_code => $saw_name ) : ?>
 									<option value="<?php echo esc_attr( $saw_code ); ?>"<?php selected( $saw_field['value'], (string) $saw_code ); ?>><?php echo esc_html( html_entity_decode( $saw_name, ENT_QUOTES, 'UTF-8' ) ); ?></option>
 								<?php endforeach; ?>
 							</select>
 						<?php else : ?>
-							<input type="<?php echo esc_attr( $saw_field['type'] ); ?>" id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" value="<?php echo esc_attr( $saw_field['value'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo 'email' === $saw_field['type'] ? ' inputmode="email"' : ''; ?><?php echo $saw_field['required'] ? ' required' : ''; ?>>
+							<input type="<?php echo esc_attr( $saw_field['type'] ); ?>" id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" value="<?php echo esc_attr( $saw_field['value'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo 'email' === $saw_field['type'] ? ' inputmode="email"' : ''; ?><?php echo $saw_field['required'] ? ' required' : ''; ?><?php echo $saw_ferr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>>
 						<?php endif; ?>
 					</div>
 				<?php endforeach; ?>
@@ -194,19 +198,28 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			$saw_pay_methods = Nera_SAW_Standalone_Basket::pay_sheet_methods();
 			$saw_pay_first   = Nera_SAW_Standalone_Basket::pay_sheet_gateway();
 			?>
-			<?php if ( count( $saw_pay_methods ) > 1 ) : ?>
-				<fieldset class="saw-paysheet__methods" data-saw-pay-methods>
-					<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
-					<?php foreach ( $saw_pay_methods as $saw_pm_id => $saw_pm_label ) : ?>
-						<label class="saw-method">
-							<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm_id ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pm_id ) ); ?>"<?php checked( (string) $saw_pm_id, $saw_pay_first ); ?>>
-							<span><?php echo esc_html( $saw_pm_label ); ?></span>
-						</label>
-					<?php endforeach; ?>
-				</fieldset>
-			<?php elseif ( $saw_pay_first ) : ?>
-				<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pay_first ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pay_first ) ); ?>">
-			<?php endif; ?>
+			<?php // Step 2, in the fields' place once Pay on step 1 finds them complete. ?>
+			<div class="saw-paysheet__step" data-saw-pay-step="2" hidden>
+				<?php if ( count( $saw_pay_methods ) > 1 ) : ?>
+					<fieldset class="saw-paysheet__methods" data-saw-pay-methods>
+						<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
+						<?php foreach ( $saw_pay_methods as $saw_pm_id => $saw_pm_label ) : ?>
+							<label class="saw-method">
+								<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm_id ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pm_id ) ); ?>"<?php checked( (string) $saw_pm_id, $saw_pay_first ); ?>>
+								<span><?php echo esc_html( $saw_pm_label ); ?></span>
+							</label>
+						<?php endforeach; ?>
+					</fieldset>
+				<?php elseif ( $saw_pay_first ) : ?>
+					<?php // One method: its name where the choice would be, nothing to pick. ?>
+					<div class="saw-paysheet__methods" data-saw-pay-methods tabindex="-1">
+						<p class="saw-paysheet__legend"><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></p>
+						<p class="saw-method saw-method--only"><?php echo esc_html( $saw_pay_methods[ $saw_pay_first ] ); ?></p>
+						<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pay_first ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pay_first ) ); ?>">
+					</div>
+				<?php endif; ?>
+				<button type="button" class="saw-paysheet__back" data-saw-pay-back><?php esc_html_e( 'Back', 'nera-strikeawin' ); ?></button>
+			</div>
 		<?php endif; ?>
 
 		<label class="saw-check">
@@ -239,8 +252,8 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 		 * Names only -- see method_labels() for why a gateway title cannot simply
 		 * be escaped and printed.
 		 */
-		// In the sheet, a choice of methods replaces the names.
-		$saw_methods = ( $saw_sheet && isset( $saw_pay_methods ) && count( $saw_pay_methods ) > 1 ) ? array() : Nera_SAW_Standalone_Basket::method_labels();
+		// In the sheet, step 2 names the methods.
+		$saw_methods = ( $saw_sheet && ! empty( $saw_pay_methods ) ) ? array() : Nera_SAW_Standalone_Basket::method_labels();
 		?>
 		<?php if ( $saw_methods ) : ?>
 			<ul class="saw-methods">

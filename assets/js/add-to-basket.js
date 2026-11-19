@@ -132,7 +132,18 @@
 					return;
 				}
 
+				// The new sheet keeps what the player typed in the last one.
+				var typed = {};
+				Array.prototype.forEach.call( slot.querySelectorAll( '[data-saw-pay-fields] [name]' ), function ( field ) {
+					typed[ field.name ] = field.value;
+				} );
 				slot.outerHTML = sheet;
+				var fresh = document.querySelector( cfg.sheet );
+				Array.prototype.forEach.call( fresh ? fresh.querySelectorAll( '[data-saw-pay-fields] [name]' ) : [], function ( field ) {
+					if ( Object.prototype.hasOwnProperty.call( typed, field.name ) ) {
+						field.value = typed[ field.name ];
+					}
+				} );
 				release();
 				document.dispatchEvent( new CustomEvent( 'saw:paysheet' ) );
 			} )

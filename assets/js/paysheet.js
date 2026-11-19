@@ -9,6 +9,7 @@
 	'use strict';
 
 	var SHEET = '[data-saw-sheet]';
+	var STEP = 'data-saw-pay-step-current';
 	var opener = null;
 
 	/* ---- the consent tick ----------------------------------------------- */
@@ -70,6 +71,70 @@
 		}
 	} );
 
+	/* ---- the two steps: billing fields, then the payment method ------------ */
+
+	// The form's step attribute is the one place the step lives; the panels follow it.
+	function step( form, n, focus ) {
+		form.setAttribute( STEP, String( n ) );
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-step]' ), function ( panel ) {
+			panel.hidden = panel.getAttribute( 'data-saw-pay-step' ) !== String( n );
+		} );
+		if ( ! focus ) {
+			return;
+		}
+		var target = 1 === n
+			? form.querySelector( '[data-saw-pay-fields] [name]' )
+			: form.querySelector( '[data-saw-pay-methods] input[type="radio"]' ) || form.querySelector( '[data-saw-pay-methods]' );
+		if ( target ) {
+			target.focus();
+		}
+	}
+
+	// The faults WooCommerce would refuse, in its own words (printed on each field by the server).
+	function fieldsValid( form ) {
+		var first = null;
+		clearFieldErrors( form );
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-fields] [name]' ), function ( input ) {
+			var empty = '' === input.value.trim();
+			var text = '';
+			if ( empty && input.required ) {
+				text = input.getAttribute( 'data-saw-err-required' ) || input.validationMessage;
+			} else if ( ! empty && 'email' === input.type && ! input.checkValidity() ) {
+				text = input.getAttribute( 'data-saw-err-email' ) || input.validationMessage;
+			}
+			if ( text ) {
+				mark( input, text );
+				first = first || input;
+			}
+		} );
+		if ( first ) {
+			first.focus();
+		}
+		return ! first;
+	}
+
+	// Registered before the tick's handler: Pay on step 1 sends nothing and asks for no tick.
+	document.addEventListener( 'submit', function ( event ) {
+		var form = event.target;
+		if ( ! form.matches || ! form.matches( '[data-saw-consent]' ) || '1' !== form.getAttribute( STEP ) ) {
+			return;
+		}
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		if ( fieldsValid( form ) ) {
+			step( form, 2, true );
+		}
+	} );
+
+	document.addEventListener( 'click', function ( event ) {
+		var back = event.target.closest ? event.target.closest( '[data-saw-pay-back]' ) : null;
+		var form = back ? back.closest( '[data-saw-consent]' ) : null;
+		if ( form ) {
+			clearFieldErrors( form );
+			step( form, 1, true );
+		}
+	} );
+
 	document.addEventListener( 'submit', function ( event ) {
 		var form = event.target;
 		if ( ! form.matches || ! form.matches( '[data-saw-consent]' ) ) {
@@ -113,6 +178,10 @@
 			}
 			if ( errors ) {
 				errors.innerHTML = html || '';
+				// A billing field WooCommerce names is fixed on step 1, where it can be seen.
+				if ( namesField( form, errors ) && form.hasAttribute( STEP ) ) {
+					step( form, 1, false );
+				}
 				var placed = fieldErrors( form, errors );
 				if ( ! errors.textContent.trim() && ! placed ) {
 					errors.textContent = errors.getAttribute( 'data-saw-fallback' ) || '';
@@ -149,27 +218,41 @@
 
 	// WooCommerce tags a field's error with the field's name (data-id): each such error moves
 	// under its field; the rest stay in the errors box. Returns how many moved.
-	function fieldErrors( form, box ) {
+	function fieldFor( form, name ) {
 		var inputs = form.querySelectorAll( '[data-saw-pay-fields] [name]' );
+		for ( var i = 0; i < inputs.length; i++ ) {
+			if ( inputs[ i ].name === name ) {
+				return inputs[ i ];
+			}
+		}
+		return null;
+	}
+
+	function namesField( form, box ) {
+		return Array.prototype.some.call( box.querySelectorAll( '[data-id]' ), function ( item ) {
+			return !! fieldFor( form, item.getAttribute( 'data-id' ) );
+		} );
+	}
+
+	function mark( input, text ) {
+		var msg = document.createElement( 'p' );
+		msg.className = 'saw-field__err';
+		msg.id = input.id + '-err';
+		msg.textContent = text;
+		input.insertAdjacentElement( 'afterend', msg );
+		input.setAttribute( 'aria-invalid', 'true' );
+		input.setAttribute( 'aria-describedby', msg.id );
+	}
+
+	function fieldErrors( form, box ) {
 		var placed = 0;
 		var first = null;
 		Array.prototype.forEach.call( box.querySelectorAll( '[data-id]' ), function ( item ) {
-			var input = null;
-			for ( var i = 0; i < inputs.length; i++ ) {
-				if ( inputs[ i ].name === item.getAttribute( 'data-id' ) ) {
-					input = inputs[ i ];
-				}
-			}
+			var input = fieldFor( form, item.getAttribute( 'data-id' ) );
 			if ( ! input ) {
 				return;
 			}
-			var msg = document.createElement( 'p' );
-			msg.className = 'saw-field__err';
-			msg.id = input.id + '-err';
-			msg.textContent = item.textContent.trim();
-			input.insertAdjacentElement( 'afterend', msg );
-			input.setAttribute( 'aria-invalid', 'true' );
-			input.setAttribute( 'aria-describedby', msg.id );
+			mark( input, item.textContent.trim() );
 			item.parentNode.removeChild( item );
 			first = first || input;
 			placed++;
@@ -236,6 +319,11 @@
 			return;
 		}
 		opener = document.activeElement;
+		// Every opening starts on the fields, with what was typed so far.
+		var form = el.querySelector( '[' + STEP + ']' );
+		if ( form ) {
+			step( form, 1, false );
+		}
 		el.hidden = false;
 		document.documentElement.classList.add( 'saw-sheet-open' );
 		var close = el.querySelector( '[data-saw-sheet-close]' );

@@ -1037,11 +1037,29 @@ class Nera_SAW_Standalone_Basket {
 			);
 		}
 
+		// The sheet checks the fields before anything is sent, so it shows WooCommerce's own
+		// words for the same faults, built the way WC_Checkout::validate_posted_data() builds them.
+		$wc_fields = ( function_exists( 'WC' ) && WC()->checkout() ) ? WC()->checkout()->get_checkout_fields( 'billing' ) : array();
+
 		foreach ( $fields as $i => $field ) {
 			$fields[ $i ]['value'] = isset( $values[ $field['name'] ] ) ? (string) $values[ $field['name'] ] : '';
 			if ( 'select' === $field['type'] && ! isset( $field['options'][ $fields[ $i ]['value'] ] ) ) {
 				$fields[ $i ]['value'] = Nera_SAW_Checkout::DEFAULT_COUNTRY;
 			}
+
+			/* translators: %s: field name */
+			$label = sprintf( _x( 'Billing %s', 'checkout-validation', 'woocommerce' ), isset( $wc_fields[ $field['name'] ]['label'] ) ? $wc_fields[ $field['name'] ]['label'] : $field['label'] );
+			$bold  = '<strong>' . esc_html( $label ) . '</strong>';
+			$plain = function ( $html ) {
+				return html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' );
+			};
+
+			$fields[ $i ]['errors'] = array(
+				/* translators: %s: field name */
+				'required' => $plain( apply_filters( 'woocommerce_checkout_required_field_notice', sprintf( __( '%s is a required field.', 'woocommerce' ), $bold ), $label, $field['name'] ) ),
+				/* translators: %s: email address */
+				'email'    => 'email' === $field['type'] ? $plain( sprintf( __( '%s is not a valid email address.', 'woocommerce' ), $bold ) ) : '',
+			);
 		}
 
 		return $fields;
