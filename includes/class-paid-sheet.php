@@ -49,7 +49,7 @@ class Nera_SAW_Paid_Sheet {
 	}
 
 	/**
-	 * Signed-in owner of a section entry order, with the right key.
+	 * Signed-in owner of a section entry order (entry lines only), with the right key.
 	 *
 	 * @param WC_Order|false $order Order.
 	 * @param string|null    $key   Key from the URL; null skips the key.
@@ -65,7 +65,7 @@ class Nera_SAW_Paid_Sheet {
 		if ( null !== $key && ! hash_equals( (string) $order->get_order_key(), (string) $key ) ) {
 			return false;
 		}
-		return 0 !== self::competition( $order );
+		return self::entries_only( $order );
 	}
 
 	/**
@@ -80,6 +80,38 @@ class Nera_SAW_Paid_Sheet {
 	}
 
 	/**
+	 * Every line of the order is a competition entry line. A mixed basket goes
+	 * through the main checkout, so it keeps the main order-received page.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return bool
+	 */
+	private static function entries_only( $order ) {
+		$items = $order->get_items();
+		if ( ! $items ) {
+			return false;
+		}
+		foreach ( $items as $item ) {
+			if ( ! self::is_entry_line( $item ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * A line bought through the section: an entry tier on a competition.
+	 *
+	 * @param WC_Order_Item $item Order line.
+	 * @return bool
+	 */
+	private static function is_entry_line( $item ) {
+		return $item instanceof WC_Order_Item_Product
+			&& '' !== (string) $item->get_meta( Nera_SAW_Reservations::ITEM_TIER )
+			&& Nera_SAW_Competition_Config::is_competition( (int) $item->get_product_id() );
+	}
+
+	/**
 	 * The competition of the order's first entry line, or 0 when the order holds none.
 	 *
 	 * @param WC_Order $order Order.
@@ -87,12 +119,8 @@ class Nera_SAW_Paid_Sheet {
 	 */
 	public static function competition( $order ) {
 		foreach ( $order->get_items() as $item ) {
-			if ( ! $item instanceof WC_Order_Item_Product || '' === (string) $item->get_meta( Nera_SAW_Reservations::ITEM_TIER ) ) {
-				continue;
-			}
-			$id = (int) $item->get_product_id();
-			if ( Nera_SAW_Competition_Config::is_competition( $id ) ) {
-				return $id;
+			if ( self::is_entry_line( $item ) ) {
+				return (int) $item->get_product_id();
 			}
 		}
 		return 0;
@@ -206,7 +234,7 @@ class Nera_SAW_Paid_Sheet {
 	}
 
 	/**
-	 * What the sheet says: every run on the order, and the quiz facts when the
+	 * What the sheet says: the runs on the order still left to play, and the quiz facts when the
 	 * order is for one competition only.
 	 *
 	 * @param WC_Order $order Order.
@@ -226,7 +254,7 @@ class Nera_SAW_Paid_Sheet {
 			if ( ! $stats ) {
 				continue;
 			}
-			$runs += (int) $stats['total'];
+			$runs += (int) $stats['remaining'];
 			$competitions[ (int) $item->get_product_id() ] = true;
 		}
 
