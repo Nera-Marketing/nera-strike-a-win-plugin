@@ -473,6 +473,7 @@ class Nera_SAW_Frontend {
 				'sharePlayFree'      => Nera_SAW_I18n::t( 'Play free at' ),
 				'shareAge'           => Nera_SAW_I18n::t( '18+ · Skill-based prize competitions' ),
 				'shareText'          => Nera_SAW_I18n::t( 'I scored {r}/{n} on [BRAND]. Can you beat my score?' ),
+				'inviteText'         => Nera_SAW_I18n::t( 'I scored {r}/10 on the free Strike & Win quiz. Can you beat my score?' ),
 				// Free competition result and its story card.
 				'shareFreeKicker'    => Nera_SAW_I18n::t( 'Free quiz' ),
 				'shareFreeFor'       => Nera_SAW_I18n::t( 'Free competition' ),

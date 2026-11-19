@@ -1831,11 +1831,17 @@ const inviteLeftText = computed( () => {
 	}
 	return fmt( 'invLeft', '{n} bonus tickets still available', inviteLeft, { n: inviteLeft } );
 } );
-const inviteWhatsApp = computed( () => 'https://wa.me/?text=' + encodeURIComponent( shareText.value + ' ' + inviteLink ) );
-const inviteTelegram = computed( () => 'https://t.me/share/url?url=' + encodeURIComponent( inviteLink ) + '&text=' + encodeURIComponent( shareText.value ) );
+const inviteText = computed( () => fmt(
+	'inviteText',
+	'I scored {r}/10 on the free Strike & Win quiz. Can you beat my score?',
+	correctCount.value,
+	{ r: correctCount.value }
+) );
+const inviteWhatsApp = computed( () => 'https://wa.me/?text=' + encodeURIComponent( inviteText.value + ' ' + inviteLink ) );
+const inviteTelegram = computed( () => 'https://t.me/share/url?url=' + encodeURIComponent( inviteLink ) + '&text=' + encodeURIComponent( inviteText.value ) );
 
 function inviteShare() {
-	navigator.share( { text: shareText.value, url: inviteLink } ).catch( () => {} );
+	navigator.share( { text: inviteText.value, url: inviteLink } ).catch( () => {} );
 }
 
 function inviteCopy() {
