@@ -6,7 +6,8 @@
  * A friend qualifies when their account was created by the free sign-up while
  * this browser held a valid link code, their email is verified and they complete
  * a free quiz. Both bonus tickets go into the free competition the friend just
- * played, once per friend ever, up to the cap of rewarded friends per player.
+ * played, once per friend ever, up to the cap of rewarded friends per player in
+ * each free competition.
  * See ADR 0040.
  *
  * @package Nera_Strikeawin
@@ -51,9 +52,10 @@ class Nera_SAW_Referral {
 	const META_REWARDED = '_nera_saw_ref_rewarded';
 
 	/**
-	 * User meta on a referrer: IDs of the friends already rewarded.
+	 * User meta on a referrer: IDs of the friends already rewarded, per free
+	 * competition the bonus tickets landed in (competition ID => friend IDs).
 	 */
-	const META_FRIENDS = '_nera_saw_ref_friends';
+	const META_FRIENDS = '_nera_saw_ref_friends_by_competition';
 
 	/**
 	 * Review reason on a friend's free grant: same IP as the referrer.
@@ -66,7 +68,7 @@ class Nera_SAW_Referral {
 	const CODE_PATTERN = '/^SW[0-9A-Z]{5}$/';
 
 	/**
-	 * Rewarded friends per referrer when the setting is blank.
+	 * Rewarded friends per referrer per free competition when the setting is blank.
 	 */
 	const CAP_DEFAULT = 5;
 
@@ -99,7 +101,7 @@ class Nera_SAW_Referral {
 	}
 
 	/**
-	 * Most friends a player can be rewarded for, over their lifetime.
+	 * Most friends a player can be rewarded for in each free competition.
 	 *
 	 * @return int At least 1.
 	 */
@@ -108,7 +110,7 @@ class Nera_SAW_Referral {
 		$cap = isset( $s['referral_cap'] ) && '' !== $s['referral_cap'] ? (int) $s['referral_cap'] : self::CAP_DEFAULT;
 
 		/**
-		 * Filter the number of rewarded friends per referrer.
+		 * Filter the number of rewarded friends per referrer per free competition.
 		 *
 		 * @param int $cap Value from Settings.
 		 */
@@ -244,7 +246,8 @@ class Nera_SAW_Referral {
 	 * Whether this visitor arrived through a player's link and may be shown the
 	 * friend message, which promises a bonus: only when reward() could still pay
 	 * it. Referral on, a cookie code that belongs to a player who is under the
-	 * cap; a logged-in visitor must be that player's referred friend, not yet
+	 * cap in the open free competition (with none open there is no cap to check);
+	 * a logged-in visitor must be that player's referred friend, not yet
 	 * rewarded, with no free grant of their own on the open free competition.
 	 *
 	 * @return bool
@@ -255,7 +258,8 @@ class Nera_SAW_Referral {
 		}
 		$code     = isset( $_COOKIE[ self::COOKIE ] ) ? (string) wp_unslash( $_COOKIE[ self::COOKIE ] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- matched against the code pattern.
 		$referrer = self::user_by_code( $code );
-		if ( ! $referrer || count( self::friends( $referrer ) ) >= self::cap() ) {
+		$free_id  = class_exists( 'Nera_SAW_Free' ) ? (int) Nera_SAW_Free::current() : 0;
+		if ( ! $referrer || ( $free_id && self::rewarded_count( $referrer, $free_id ) >= self::cap() ) ) {
 			return false;
 		}
 		$user_id = get_current_user_id();
@@ -268,7 +272,6 @@ class Nera_SAW_Referral {
 		if ( (int) get_user_meta( $user_id, self::META_BY, true ) !== $referrer || '' !== (string) get_user_meta( $user_id, self::META_REWARDED, true ) ) {
 			return false;
 		}
-		$free_id = class_exists( 'Nera_SAW_Free' ) ? (int) Nera_SAW_Free::current() : 0;
 		return ! ( $free_id && Nera_SAW_Run_Grants::free_grant( $user_id, $free_id ) );
 	}
 
@@ -456,9 +459,9 @@ class Nera_SAW_Referral {
 			if ( '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) ) {
 				return;
 			}
-			$friends = self::friends( $referrer );
+			$friends = self::friends( $referrer, $cid );
 			if ( count( $friends ) >= self::cap() ) {
-				Nera_SAW_Log::add( 'referral', $log + array( 'message' => sprintf( 'Referral bonus not minted: referrer #%1$d already has %2$d rewarded friends. Friend #%3$d.', $referrer, count( $friends ), $friend ) ) );
+				Nera_SAW_Log::add( 'referral', $log + array( 'message' => sprintf( 'Referral bonus not minted: referrer #%1$d already has %2$d rewarded friends in free competition #%3$d. Friend #%4$d.', $referrer, count( $friends ), $cid, $friend ) ) );
 				return;
 			}
 			if ( ! self::draw_open( $cid ) || ! Nera_SAW_Spin_Pool::try_reserve( $cid, 2 ) ) {
@@ -490,10 +493,12 @@ class Nera_SAW_Referral {
 				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 1 of 2 tickets exist, the %2$s ticket is missing. Friend #%3$d, referrer #%4$d. Friend marked rewarded; add the missing ticket by hand.', $cid, $got[ $friend ] ? 'referrer\'s' : 'friend\'s', $friend, $referrer ), $log );
 			}
 			update_user_meta( $friend, self::META_REWARDED, $cid );
-			// The friends list counts the referrer's bonus tickets, so it only grows when the referrer's ticket exists.
+			// The friends list counts the referrer's bonus tickets in this competition, so it only grows when the referrer's ticket exists.
 			if ( $got[ $referrer ] ) {
-				$friends[] = $friend;
-				update_user_meta( $referrer, self::META_FRIENDS, array_values( array_unique( $friends ) ) );
+				$map         = self::friends_map( $referrer );
+				$friends[]   = $friend;
+				$map[ $cid ] = array_values( array_unique( $friends ) );
+				update_user_meta( $referrer, self::META_FRIENDS, $map );
 			}
 			self::flag_same_ip( $friend, $referrer, $cid );
 		} finally {
@@ -562,24 +567,43 @@ class Nera_SAW_Referral {
 	}
 
 	/**
-	 * IDs of the friends a referrer has been rewarded for.
+	 * The friends a referrer has been rewarded for, per free competition.
 	 *
 	 * @param int $user_id Referrer's user ID.
-	 * @return int[]
+	 * @return array<int, int[]> Competition ID => friend IDs.
 	 */
-	public static function friends( $user_id ) {
-		$list = get_user_meta( (int) $user_id, self::META_FRIENDS, true );
-		return is_array( $list ) ? array_values( array_filter( array_map( 'intval', $list ) ) ) : array();
+	private static function friends_map( $user_id ) {
+		$map = get_user_meta( (int) $user_id, self::META_FRIENDS, true );
+		$out = array();
+		foreach ( is_array( $map ) ? $map : array() as $cid => $ids ) {
+			if ( (int) $cid > 0 && is_array( $ids ) ) {
+				$out[ (int) $cid ] = array_values( array_filter( array_map( 'intval', $ids ) ) );
+			}
+		}
+		return $out;
 	}
 
 	/**
-	 * How many friends a referrer has been rewarded for.
+	 * IDs of the friends a referrer has been rewarded for in one free competition.
 	 *
-	 * @param int $user_id Referrer's user ID.
+	 * @param int $user_id        Referrer's user ID.
+	 * @param int $competition_id Free competition ID.
+	 * @return int[]
+	 */
+	public static function friends( $user_id, $competition_id ) {
+		$map = self::friends_map( $user_id );
+		return isset( $map[ (int) $competition_id ] ) ? $map[ (int) $competition_id ] : array();
+	}
+
+	/**
+	 * How many friends a referrer has been rewarded for in one free competition.
+	 *
+	 * @param int $user_id        Referrer's user ID.
+	 * @param int $competition_id Free competition ID.
 	 * @return int
 	 */
-	public static function rewarded_count( $user_id ) {
-		return count( self::friends( $user_id ) );
+	public static function rewarded_count( $user_id, $competition_id ) {
+		return count( self::friends( $user_id, $competition_id ) );
 	}
 
 	/**

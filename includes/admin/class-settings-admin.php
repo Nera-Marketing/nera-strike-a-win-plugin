@@ -554,7 +554,7 @@ class Nera_SAW_Settings_Admin {
 		echo '<div class="saw-field-row">';
 		printf(
 			'<label class="saw-field"><span>%s</span><input type="number" name="referral_cap" min="1" step="1" value="%d"></label>',
-			esc_html__( 'Most friends rewarded per player', 'nera-strikeawin' ),
+			esc_html__( 'Most friends rewarded per player in each free competition', 'nera-strikeawin' ),
 			(int) Nera_SAW_Referral::cap()
 		);
 		echo '</div>';

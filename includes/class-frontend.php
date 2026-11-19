@@ -276,7 +276,7 @@ class Nera_SAW_Frontend {
 			// The free result's follow box (each link only when set) and its Back to home.
 			'social'             => Nera_SAW_Constants::social_urls(),
 			// The free result's bonus challenge card: the player's personal link and rewarded friends.
-			'referral'           => self::referral_data( ! empty( $quiz_competition['is_free'] ) ),
+			'referral'           => self::referral_data( ! empty( $quiz_competition['is_free'] ), $competition_id ),
 			'homeUrl'            => esc_url_raw( class_exists( 'Nera_SAW_Router' ) && Nera_SAW_Mode::is_standalone() ? Nera_SAW_Router::url() : home_url( '/' ) ),
 			// "Back to competitions" on the results screen — the section's own list
 			// in standalone; the main shop page in mix, where there is no equivalent
@@ -941,10 +941,11 @@ class Nera_SAW_Frontend {
 	/**
 	 * Data for the free result's bonus challenge card; `enabled` 0 hides it.
 	 *
-	 * @param bool $is_free Whether the competition is the free one.
+	 * @param bool $is_free        Whether the competition is the free one.
+	 * @param int  $competition_id The free competition just played; `rewarded` counts there.
 	 * @return array{enabled:int,cap?:int,rewarded?:int,link?:string}
 	 */
-	private static function referral_data( $is_free ) {
+	private static function referral_data( $is_free, $competition_id ) {
 		$user_id = get_current_user_id();
 		if ( ! $is_free || ! $user_id || ! class_exists( 'Nera_SAW_Referral' ) || ! Nera_SAW_Referral::enabled() ) {
 			return array( 'enabled' => 0 );
@@ -958,7 +959,7 @@ class Nera_SAW_Frontend {
 		return array(
 			'enabled'  => 1,
 			'cap'      => $cap,
-			'rewarded' => min( $cap, Nera_SAW_Referral::rewarded_count( $user_id ) ),
+			'rewarded' => min( $cap, Nera_SAW_Referral::rewarded_count( $user_id, (int) $competition_id ) ),
 			'link'     => esc_url_raw( $link ),
 		);
 	}
