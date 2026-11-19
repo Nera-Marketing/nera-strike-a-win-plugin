@@ -178,8 +178,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 					// WooCommerce's messages for this field, shown when Pay on step 1 finds it wrong.
 					$saw_ferr = ' data-saw-err-required="' . esc_attr( $saw_field['errors']['required'] ) . '"' . ( '' !== $saw_field['errors']['email'] ? ' data-saw-err-email="' . esc_attr( $saw_field['errors']['email'] ) . '"' : '' );
 					?>
-					<div class="saw-field">
-						<label for="<?php echo esc_attr( $saw_fid ); ?>"><?php echo esc_html( $saw_field['label'] ); ?></label>
+					<label class="saw-field" for="<?php echo esc_attr( $saw_fid ); ?>"><?php echo esc_html( $saw_field['label'] ); ?>
 						<?php if ( 'select' === $saw_field['type'] ) : ?>
 							<select id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo $saw_field['required'] ? ' required' : ''; ?><?php echo $saw_ferr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>>
 								<?php foreach ( $saw_field['options'] as $saw_code => $saw_name ) : ?>
@@ -189,7 +188,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 						<?php else : ?>
 							<input type="<?php echo esc_attr( $saw_field['type'] ); ?>" id="<?php echo esc_attr( $saw_fid ); ?>" name="<?php echo esc_attr( $saw_field['name'] ); ?>" value="<?php echo esc_attr( $saw_field['value'] ); ?>" autocomplete="<?php echo esc_attr( $saw_field['autocomplete'] ); ?>"<?php echo 'email' === $saw_field['type'] ? ' inputmode="email"' : ''; ?><?php echo $saw_field['required'] ? ' required' : ''; ?><?php echo $saw_ferr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>>
 						<?php endif; ?>
-					</div>
+					</label>
 				<?php endforeach; ?>
 			</fieldset>
 			<?php

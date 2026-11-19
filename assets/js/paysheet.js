@@ -317,7 +317,8 @@
 		msg.className = 'saw-field__err';
 		msg.id = input.id + '-err';
 		msg.textContent = text;
-		input.insertAdjacentElement( 'afterend', msg );
+		// After the field, not inside its label: the label's text is the input's name.
+		( input.closest( '.saw-field' ) || input ).insertAdjacentElement( 'afterend', msg );
 		input.setAttribute( 'aria-invalid', 'true' );
 		input.setAttribute( 'aria-describedby', msg.id );
 	}
