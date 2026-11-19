@@ -7,7 +7,9 @@
  * this browser held a valid link code, their email is verified and they complete
  * a free quiz. Both bonus tickets go into the free competition the friend just
  * played, once per friend ever, up to the cap of rewarded friends per player in
- * each free competition.
+ * each free competition. When that draw is closed, full or at the cap, they go
+ * into the next open free competition that can take them, or wait as pending
+ * until one opens.
  * See ADR 0040.
  *
  * @package Nera_Strikeawin
@@ -58,6 +60,22 @@ class Nera_SAW_Referral {
 	const META_FRIENDS = '_nera_saw_ref_friends_by_competition';
 
 	/**
+	 * User meta on a friend who qualified while no free competition could take the
+	 * bonus: referrer, origin (competition played), run_id, qualified_at.
+	 */
+	const META_PENDING = '_nera_saw_ref_pending';
+
+	/**
+	 * Option: IDs of the pending friends.
+	 */
+	const OPTION_PENDING = 'nera_saw_ref_pending';
+
+	/**
+	 * Transient that spaces out the pending catch-up on page requests.
+	 */
+	const CATCH_UP = 'nera_saw_ref_catch_up';
+
+	/**
 	 * Review reason on a friend's free grant: same IP as the referrer.
 	 */
 	const REVIEW = 'ref';
@@ -82,6 +100,8 @@ class Nera_SAW_Referral {
 		add_action( 'template_redirect', array( __CLASS__, 'keep_invite_out_of_page_cache' ), 5 );
 		add_action( 'nera_saw_free_account_created', array( __CLASS__, 'attribute' ) );
 		add_action( 'nera_saw_free_run_finalized', array( __CLASS__, 'reward' ), 20, 4 );
+		add_action( 'wp_after_insert_post', array( __CLASS__, 'on_publish' ), 20, 4 );
+		add_action( 'wp_loaded', array( __CLASS__, 'maybe_catch_up' ), 20 );
 	}
 
 	/**
@@ -248,7 +268,7 @@ class Nera_SAW_Referral {
 	 * it. Referral on, a cookie code that belongs to a player who is under the
 	 * cap in the open free competition (with none open there is no cap to check);
 	 * a logged-in visitor must be that player's referred friend, not yet
-	 * rewarded, with no free grant of their own on the open free competition.
+	 * rewarded or pending, with no free grant of their own on the open free competition.
 	 *
 	 * @return bool
 	 */
@@ -269,7 +289,7 @@ class Nera_SAW_Referral {
 		if ( $user_id === $referrer ) {
 			return false;
 		}
-		if ( (int) get_user_meta( $user_id, self::META_BY, true ) !== $referrer || '' !== (string) get_user_meta( $user_id, self::META_REWARDED, true ) ) {
+		if ( (int) get_user_meta( $user_id, self::META_BY, true ) !== $referrer || '' !== (string) get_user_meta( $user_id, self::META_REWARDED, true ) || self::is_pending( $user_id ) ) {
 			return false;
 		}
 		return ! ( $free_id && Nera_SAW_Run_Grants::free_grant( $user_id, $free_id ) );
@@ -417,7 +437,10 @@ class Nera_SAW_Referral {
 
 	/**
 	 * A friend's free run finalized: on their first completed quiz, mint one bonus
-	 * ticket for them and one for their referrer in that free competition.
+	 * ticket for them and one for their referrer. The tickets go into the free
+	 * competition the friend just played when it is open, has room for both and the
+	 * referrer is under the cap there; otherwise into the next open free competition
+	 * that qualifies; with none, the friend is held as pending until one opens.
 	 *
 	 * @param int    $run_id         Run ID.
 	 * @param int    $user_id        Friend's user ID.
@@ -434,7 +457,7 @@ class Nera_SAW_Referral {
 		if ( $referrer < 1 || $referrer === $friend || ! get_userdata( $referrer ) || ! Nera_SAW_Free_Signup::is_verified( $friend ) ) {
 			return;
 		}
-		if ( '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) ) {
+		if ( '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) || self::is_pending( $friend ) ) {
 			return;
 		}
 
@@ -453,58 +476,338 @@ class Nera_SAW_Referral {
 			return;
 		}
 		try {
-			// Another request may have rewarded this friend, or filled the cap, while we waited.
+			// Another request may have rewarded or held this friend, or filled the cap, while we waited.
 			wp_cache_delete( $friend, 'user_meta' );
 			wp_cache_delete( $referrer, 'user_meta' );
-			if ( '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) ) {
+			if ( '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) || self::is_pending( $friend ) ) {
 				return;
 			}
-			$friends = self::friends( $referrer, $cid );
-			if ( count( $friends ) >= self::cap() ) {
-				Nera_SAW_Log::add( 'referral', $log + array( 'message' => sprintf( 'Referral bonus not minted: referrer #%1$d already has %2$d rewarded friends in free competition #%3$d. Friend #%4$d.', $referrer, count( $friends ), $cid, $friend ) ) );
+			$target = self::reserve_target( $referrer, array_merge( array( $cid ), self::next_draws() ) );
+			if ( ! $target ) {
+				update_user_meta(
+					$friend,
+					self::META_PENDING,
+					array(
+						'referrer'     => $referrer,
+						'origin'       => $cid,
+						'run_id'       => (int) $run_id,
+						'qualified_at' => time(),
+					)
+				);
+				self::index_pending( $friend, true );
+				Nera_SAW_Log::add( 'referral', $log + array( 'message' => sprintf( 'Referral bonus pending: free competition #%1$d is closed, full or at the referrer\'s cap, and no other open free competition can take it. Friend #%2$d, referrer #%3$d. Minted when the next free competition opens.', $cid, $friend, $referrer ) ) );
 				return;
 			}
-			if ( ! self::draw_open( $cid ) || ! Nera_SAW_Spin_Pool::try_reserve( $cid, 2 ) ) {
-				Nera_SAW_Log::add( 'referral', $log + array( 'level' => 'warning', 'message' => sprintf( 'Referral bonus not minted: free competition #%1$d is closed or has no tickets left. Friend #%2$d, referrer #%3$d.', $cid, $friend, $referrer ) ) );
-				return;
+			if ( $target !== $cid ) {
+				Nera_SAW_Log::add( 'referral', array( 'competition_id' => $target ) + $log + array( 'message' => sprintf( 'Referral bonus moved from free competition #%1$d to #%2$d: #%1$d is closed, full or at the referrer\'s cap. Friend #%3$d, referrer #%4$d.', $cid, $target, $friend, $referrer ) ) );
 			}
+			self::pay( $friend, $referrer, $target, $cid, (int) $run_id );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
+		}
+	}
 
-			$minted = 0;
-			$got    = array();
-			foreach ( array( $friend, $referrer ) as $owner ) {
+	/**
+	 * The first of the competitions that can take a referral bonus for this referrer
+	 * (open, under the cap, room for two tickets), with the two tickets reserved from
+	 * its pool. Call under the referrer's lock.
+	 *
+	 * @param int   $referrer   Referrer's user ID.
+	 * @param int[] $candidates Competition IDs, in order of preference.
+	 * @return int Competition ID, or 0 when none can.
+	 */
+	private static function reserve_target( $referrer, array $candidates ) {
+		$cap = self::cap();
+		foreach ( array_unique( array_map( 'intval', $candidates ) ) as $cid ) {
+			if ( $cid > 0 && self::draw_open( $cid ) && self::rewarded_count( $referrer, $cid ) < $cap && Nera_SAW_Spin_Pool::try_reserve( $cid, 2 ) ) {
+				return $cid;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Mint the friend's and the referrer's bonus tickets into a competition whose pool
+	 * already holds two for them, mark the friend rewarded and count them for the
+	 * referrer there. Call under the referrer's lock.
+	 *
+	 * @param int $friend   Friend's user ID.
+	 * @param int $referrer Referrer's user ID.
+	 * @param int $cid      Competition the tickets go into.
+	 * @param int $origin   Free competition the friend played.
+	 * @param int $run_id   Friend's run ID.
+	 * @return int Tickets that exist after the mint (0-2).
+	 */
+	private static function pay( $friend, $referrer, $cid, $origin, $run_id ) {
+		$log    = array(
+			'run_id'         => (int) $run_id,
+			'competition_id' => (int) $cid,
+			'user_id'        => (int) $friend,
+			'context'        => array(
+				'referrer' => (int) $referrer,
+				'origin'   => (int) $origin,
+			),
+		);
+		$minted = 0;
+		$got    = array();
+		foreach ( array( $friend, $referrer ) as $owner ) {
+			$result = Nera_SAW_Ticket_Award::award_bonus( $cid, $owner, $friend );
+			// The friend's next free run is always another competition, so a missing ticket can only be finished here.
+			if ( '' === $result ) {
 				$result = Nera_SAW_Ticket_Award::award_bonus( $cid, $owner, $friend );
-				// The friend's next free run is always another competition, so a missing ticket can only be finished here.
-				if ( '' === $result ) {
-					$result = Nera_SAW_Ticket_Award::award_bonus( $cid, $owner, $friend );
-				}
-				if ( 'minted' === $result ) {
-					++$minted;
-				}
-				$got[ $owner ] = '' !== $result;
 			}
-			Nera_SAW_Spin_Pool::confirm( $cid, 2, $minted );
+			if ( 'minted' === $result ) {
+				++$minted;
+			}
+			$got[ $owner ] = '' !== $result;
+		}
+		Nera_SAW_Spin_Pool::confirm( $cid, 2, $minted );
 
-			$held = count( array_filter( $got ) );
-			if ( 0 === $held ) {
-				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 0 of 2 tickets exist. Friend #%2$d, referrer #%3$d.', $cid, $friend, $referrer ), $log );
-				return;
+		$held = count( array_filter( $got ) );
+		if ( 0 === $held ) {
+			Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 0 of 2 tickets exist. Friend #%2$d, referrer #%3$d.', $cid, $friend, $referrer ), $log );
+			return 0;
+		}
+		if ( 2 !== $held ) {
+			Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 1 of 2 tickets exist, the %2$s ticket is missing. Friend #%3$d, referrer #%4$d. Friend marked rewarded; add the missing ticket by hand.', $cid, $got[ $friend ] ? 'referrer\'s' : 'friend\'s', $friend, $referrer ), $log );
+		}
+		update_user_meta( $friend, self::META_REWARDED, $cid );
+		// The friends list counts the referrer's bonus tickets in this competition, so it only grows when the referrer's ticket exists.
+		if ( $got[ $referrer ] ) {
+			$map         = self::friends_map( $referrer );
+			$friends     = self::friends( $referrer, $cid );
+			$friends[]   = $friend;
+			$map[ $cid ] = array_values( array_unique( $friends ) );
+			update_user_meta( $referrer, self::META_FRIENDS, $map );
+		}
+		self::flag_same_ip( $friend, $referrer, $origin );
+		return $held;
+	}
+
+	/**
+	 * Whether a friend qualified but is still waiting for a free competition to take their bonus.
+	 *
+	 * @param int $user_id Friend's user ID.
+	 * @return bool
+	 */
+	public static function is_pending( $user_id ) {
+		$p = get_user_meta( (int) $user_id, self::META_PENDING, true );
+		return is_array( $p ) && ! empty( $p['referrer'] );
+	}
+
+	/**
+	 * IDs of the friends held as pending. Kept in one autoloaded option so the check on
+	 * every request costs nothing when it is empty.
+	 *
+	 * @return int[]
+	 */
+	public static function pending_friends() {
+		$ids = get_option( self::OPTION_PENDING, array() );
+		return is_array( $ids ) ? array_values( array_filter( array_map( 'intval', $ids ) ) ) : array();
+	}
+
+	/**
+	 * Add a friend to the pending list, or remove them.
+	 *
+	 * @param int  $friend Friend's user ID.
+	 * @param bool $add    Add (true) or remove (false).
+	 */
+	private static function index_pending( $friend, $add ) {
+		global $wpdb;
+		$lock   = 'nera_saw_ref_pending';
+		$locked = 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 5 )', $lock ) );
+		try {
+			// Straight from the table: the request's option cache may predate another request's change.
+			$raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::OPTION_PENDING ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$ids = null === $raw ? array() : maybe_unserialize( $raw );
+			$ids = is_array( $ids ) ? array_map( 'intval', $ids ) : array();
+			$ids = $add ? array_merge( $ids, array( (int) $friend ) ) : array_diff( $ids, array( (int) $friend ) );
+			$ids = array_values( array_unique( array_filter( $ids ) ) );
+			wp_cache_delete( self::OPTION_PENDING, 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+			if ( $ids ) {
+				update_option( self::OPTION_PENDING, $ids, true );
+			} else {
+				delete_option( self::OPTION_PENDING );
 			}
-			if ( 2 !== $held ) {
-				Nera_SAW_Log::error( 'referral', sprintf( 'Referral bonus incomplete on competition #%1$d: 1 of 2 tickets exist, the %2$s ticket is missing. Friend #%3$d, referrer #%4$d. Friend marked rewarded; add the missing ticket by hand.', $cid, $got[ $friend ] ? 'referrer\'s' : 'friend\'s', $friend, $referrer ), $log );
-			}
-			update_user_meta( $friend, self::META_REWARDED, $cid );
-			// The friends list counts the referrer's bonus tickets in this competition, so it only grows when the referrer's ticket exists.
-			if ( $got[ $referrer ] ) {
-				$map         = self::friends_map( $referrer );
-				$friends[]   = $friend;
-				$map[ $cid ] = array_values( array_unique( $friends ) );
-				update_user_meta( $referrer, self::META_FRIENDS, $map );
-			}
-			self::flag_same_ip( $friend, $referrer, $cid );
 		} finally {
 			if ( $locked ) {
 				$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
 			}
+		}
+	}
+
+	/**
+	 * The open free competitions a referral bonus can move to, closing soonest first.
+	 * Read fresh on every call: Nera_SAW_Free::current() keeps one answer per request
+	 * and does not check the draw or the pool.
+	 *
+	 * @return int[]
+	 */
+	public static function next_draws() {
+		$query = new WP_Query(
+			array(
+				'post_type'                           => 'product',
+				'post_status'                         => 'publish',
+				'posts_per_page'                      => 10,
+				'no_found_rows'                       => true,
+				'fields'                              => 'ids',
+				'meta_key'                            => '_lty_end_date_gmt', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'orderby'                             => 'meta_value',
+				'order'                               => 'ASC',
+				Nera_SAW_Catalogue_Isolation::OPT_OUT => true,
+				'meta_query'                          => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'relation' => 'AND',
+					array(
+						'key'   => Nera_SAW_Competition_Config::META_IS_COMP,
+						'value' => '1',
+					),
+					array(
+						'key'   => Nera_SAW_Competition_Config::META_IS_FREE,
+						'value' => '1',
+					),
+					array(
+						'key'     => '_lty_end_date_gmt',
+						'value'   => gmdate( 'Y-m-d H:i:s' ),
+						'compare' => '>=',
+						'type'    => 'DATETIME',
+					),
+				),
+			)
+		);
+		$ids = array_values( array_filter( array_map( 'intval', $query->posts ), array( __CLASS__, 'draw_open' ) ) );
+
+		/**
+		 * Filter the free competitions a referral bonus can move to, in order of preference.
+		 *
+		 * @param int[] $ids Open free competitions, closing soonest first.
+		 */
+		return array_values( array_map( 'intval', (array) apply_filters( 'nera_saw_referral_next_draws', $ids ) ) );
+	}
+
+	/**
+	 * A free competition was published (by hand or on its schedule): pay the pending
+	 * friends into it. Runs after the post's meta is saved; a pool row created later
+	 * is picked up by the catch-up.
+	 *
+	 * @param int          $post_id     Post ID.
+	 * @param WP_Post      $post        Post.
+	 * @param bool         $update      Whether an existing post was updated.
+	 * @param WP_Post|null $post_before The post before the update.
+	 */
+	public static function on_publish( $post_id, $post, $update, $post_before ) {
+		if ( ! $post || 'product' !== $post->post_type || 'publish' !== $post->post_status ) {
+			return;
+		}
+		if ( $post_before && 'publish' === $post_before->post_status ) {
+			return;
+		}
+		if ( ! self::pending_friends() || ! Nera_SAW_Competition_Config::is_free( (int) $post_id ) ) {
+			return;
+		}
+		self::catch_up( array( (int) $post_id ) );
+	}
+
+	/**
+	 * On front-end requests, at most every few minutes and only while friends are
+	 * pending: pay them into an open free competition. Covers a publish whose hook
+	 * did not pay (pool row saved later, missed hook); wp-cron is not relied on.
+	 */
+	public static function maybe_catch_up() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return;
+		}
+		if ( ! self::pending_friends() || ! self::enabled() || get_transient( self::CATCH_UP ) ) {
+			return;
+		}
+		set_transient( self::CATCH_UP, 1, 5 * MINUTE_IN_SECONDS );
+		self::catch_up();
+	}
+
+	/**
+	 * Pay pending friends, oldest qualification first so each referrer's cap fills
+	 * in order. A friend whose referrer's lock is busy, or for whom no competition
+	 * can take the bonus yet, stays pending.
+	 *
+	 * @param int[]|null $only Competitions to pay into; null for the open free competitions.
+	 */
+	public static function catch_up( $only = null ) {
+		if ( ! self::enabled() ) {
+			return;
+		}
+		$ids = self::pending_friends();
+		if ( ! $ids ) {
+			return;
+		}
+		$candidates = null === $only ? self::next_draws() : array_map( 'intval', (array) $only );
+		if ( ! $candidates ) {
+			return;
+		}
+		$queue = array();
+		foreach ( $ids as $friend ) {
+			wp_cache_delete( $friend, 'user_meta' );
+			if ( ! self::is_pending( $friend ) ) {
+				self::index_pending( $friend, false );
+				continue;
+			}
+			$queue[ $friend ] = (int) get_user_meta( $friend, self::META_PENDING, true )['qualified_at'];
+		}
+		asort( $queue );
+		foreach ( array_keys( $queue ) as $friend ) {
+			self::pay_pending( (int) $friend, $candidates );
+		}
+	}
+
+	/**
+	 * Pay one pending friend into the first candidate that can take the bonus.
+	 *
+	 * @param int   $friend     Friend's user ID.
+	 * @param int[] $candidates Competition IDs, in order of preference.
+	 */
+	private static function pay_pending( $friend, array $candidates ) {
+		global $wpdb;
+		$p        = get_user_meta( $friend, self::META_PENDING, true );
+		$referrer = (int) $p['referrer'];
+		$origin   = (int) ( $p['origin'] ?? 0 );
+		$log      = array(
+			'run_id'         => (int) ( $p['run_id'] ?? 0 ),
+			'competition_id' => $origin,
+			'user_id'        => $friend,
+			'context'        => array( 'referrer' => $referrer ),
+		);
+		if ( ! get_userdata( $friend ) || ! get_userdata( $referrer ) ) {
+			delete_user_meta( $friend, self::META_PENDING );
+			self::index_pending( $friend, false );
+			Nera_SAW_Log::add( 'referral', $log + array( 'level' => 'warning', 'message' => sprintf( 'Referral bonus pending dropped: friend #%1$d or referrer #%2$d no longer exists.', $friend, $referrer ) ) );
+			return;
+		}
+		$lock = 'nera_saw_ref_' . $referrer;
+		// No wait on a page request: a busy lock means the referrer's reward is being decided elsewhere; try next time.
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 0 )', $lock ) ) ) {
+			return;
+		}
+		try {
+			wp_cache_delete( $friend, 'user_meta' );
+			wp_cache_delete( $referrer, 'user_meta' );
+			if ( ! self::is_pending( $friend ) || '' !== (string) get_user_meta( $friend, self::META_REWARDED, true ) ) {
+				delete_user_meta( $friend, self::META_PENDING );
+				self::index_pending( $friend, false );
+				return;
+			}
+			$target = self::reserve_target( $referrer, $candidates );
+			if ( ! $target ) {
+				return;
+			}
+			$held = self::pay( $friend, $referrer, $target, $origin, $log['run_id'] );
+			if ( $held < 1 ) {
+				return;
+			}
+			delete_user_meta( $friend, self::META_PENDING );
+			self::index_pending( $friend, false );
+			Nera_SAW_Log::add( 'referral', array( 'competition_id' => $target ) + $log + array( 'message' => sprintf( 'Referral bonus pending since %1$s minted in free competition #%2$d (friend played #%3$d). Friend #%4$d, referrer #%5$d.', gmdate( 'Y-m-d H:i', (int) ( $p['qualified_at'] ?? 0 ) ), $target, $origin, $friend, $referrer ) ) );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
 		}
 	}
 
