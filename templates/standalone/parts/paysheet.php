@@ -193,30 +193,51 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<?php endforeach; ?>
 			</fieldset>
 			<?php
-			// The methods ticked for the section checkout. Each says how Pay takes it: posted from
-			// here, or on the checkout page (Nera_SAW_Checkout::pay_sheet_mode()).
-			$saw_pay_methods = Nera_SAW_Standalone_Basket::pay_sheet_methods();
-			$saw_pay_first   = Nera_SAW_Standalone_Basket::pay_sheet_gateway();
+			// The methods ticked for the section checkout, as rows: which can be chosen, the wallet
+			// figures and each one's info all come from Nera_SAW_Standalone_Basket::pay_sheet_rows().
+			// Each says how Pay takes it: posted from here, or on the checkout page.
+			$saw_pay_rows   = Nera_SAW_Standalone_Basket::pay_sheet_rows();
+			$saw_pay_first  = Nera_SAW_Standalone_Basket::pay_sheet_gateway( $saw_pay_rows );
+			$saw_pay_notice = Nera_SAW_Standalone_Basket::pay_sheet_notice();
+			$saw_pay_methods = wp_list_pluck( $saw_pay_rows, 'title', 'id' );
 			?>
 			<?php // Step 2, in the fields' place once Pay on step 1 finds them complete. ?>
 			<div class="saw-paysheet__step" data-saw-pay-step="2" hidden>
-				<?php if ( count( $saw_pay_methods ) > 1 ) : ?>
-					<fieldset class="saw-paysheet__methods" data-saw-pay-methods>
-						<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
-						<?php foreach ( $saw_pay_methods as $saw_pm_id => $saw_pm_label ) : ?>
-							<label class="saw-method">
-								<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm_id ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pm_id ) ); ?>"<?php checked( (string) $saw_pm_id, $saw_pay_first ); ?>>
-								<span><?php echo esc_html( $saw_pm_label ); ?></span>
-							</label>
+				<?php if ( $saw_pay_rows ) : ?>
+					<?php $saw_pay_choice = count( $saw_pay_rows ) > 1; ?>
+					<<?php echo $saw_pay_choice ? 'fieldset' : 'div tabindex="-1"'; ?> class="saw-paysheet__methods" data-saw-pay-methods>
+						<?php if ( $saw_pay_choice ) : ?>
+							<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
+						<?php else : ?>
+							<p class="saw-paysheet__legend"><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></p>
+						<?php endif; ?>
+						<?php if ( '' !== $saw_pay_notice ) : ?>
+							<div class="saw-paysheet__notice" data-saw-pay-notice><?php echo wp_kses_post( $saw_pay_notice ); ?></div>
+						<?php endif; ?>
+						<?php foreach ( $saw_pay_rows as $saw_pm ) : ?>
+							<?php $saw_pm_on = $saw_pm['id'] === $saw_pay_first; ?>
+							<div class="saw-method<?php echo $saw_pay_choice ? '' : ' saw-method--only'; ?><?php echo $saw_pm['disabled'] ? ' is-off' : ''; ?>" data-saw-method="<?php echo esc_attr( $saw_pm['id'] ); ?>">
+								<<?php echo $saw_pay_choice ? 'label' : 'div'; ?> class="saw-method__row">
+									<?php if ( $saw_pay_choice ) : ?>
+										<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm['id'] ); ?>" data-saw-pay-mode="<?php echo esc_attr( $saw_pm['mode'] ); ?>"<?php checked( $saw_pm_on ); ?><?php disabled( $saw_pm['disabled'] ); ?>>
+									<?php else : ?>
+										<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pm['id'] ); ?>" data-saw-pay-mode="<?php echo esc_attr( $saw_pm['mode'] ); ?>">
+									<?php endif; ?>
+									<span class="saw-method__icon"><?php echo $saw_pm['icon']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed SVG from the builder. ?></span>
+									<span class="saw-method__title"><?php echo esc_html( $saw_pm['title'] ); ?></span>
+									<?php if ( '' !== $saw_pm['brand'] ) : ?>
+										<span class="saw-method__brand"><?php echo wp_kses_post( $saw_pm['brand'] ); ?></span>
+									<?php endif; ?>
+								</<?php echo $saw_pay_choice ? 'label' : 'div'; ?>>
+								<?php if ( '' !== $saw_pm['note'] ) : ?>
+									<div class="saw-method__note"><?php echo wp_kses_post( $saw_pm['note'] ); ?></div>
+								<?php endif; ?>
+								<?php if ( '' !== $saw_pm['info'] ) : ?>
+									<div class="saw-method__info" data-saw-method-info<?php echo $saw_pm_on ? '' : ' hidden'; ?>><?php echo wp_kses_post( $saw_pm['info'] ); ?></div>
+								<?php endif; ?>
+							</div>
 						<?php endforeach; ?>
-					</fieldset>
-				<?php elseif ( $saw_pay_first ) : ?>
-					<?php // One method: its name where the choice would be, nothing to pick. ?>
-					<div class="saw-paysheet__methods" data-saw-pay-methods tabindex="-1">
-						<p class="saw-paysheet__legend"><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></p>
-						<p class="saw-method saw-method--only"><?php echo esc_html( $saw_pay_methods[ $saw_pay_first ] ); ?></p>
-						<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pay_first ); ?>" data-saw-pay-mode="<?php echo esc_attr( Nera_SAW_Checkout::pay_sheet_mode( $saw_pay_first ) ); ?>">
-					</div>
+					</<?php echo $saw_pay_choice ? 'fieldset' : 'div'; ?>>
 				<?php endif; ?>
 				<button type="button" class="saw-paysheet__back" data-saw-pay-back><?php esc_html_e( 'Back', 'nera-strikeawin' ); ?></button>
 			</div>

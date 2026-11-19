@@ -903,13 +903,19 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
-	 * The gateway the pay sheet preselects: the first method it offers.
+	 * The gateway the pay sheet preselects: the first method it offers that can be used.
 	 *
+	 * @param array[]|null $rows pay_sheet_rows(), when the caller has them already.
 	 * @return string
 	 */
-	public static function pay_sheet_gateway() {
-		$ids = array_keys( self::pay_sheet_methods() );
-		return $ids ? (string) $ids[0] : '';
+	public static function pay_sheet_gateway( $rows = null ) {
+		$rows = null === $rows ? self::pay_sheet_rows() : $rows;
+		foreach ( $rows as $row ) {
+			if ( ! $row['disabled'] ) {
+				return $row['id'];
+			}
+		}
+		return $rows ? $rows[0]['id'] : '';
 	}
 
 	/**
@@ -948,6 +954,180 @@ class Nera_SAW_Standalone_Basket {
 		}
 
 		return $methods;
+	}
+
+	/**
+	 * The pay sheet's method rows, in pay_sheet_methods() order. The one place that decides
+	 * which method can be chosen and the wallet figures the rows show; the sheet part and its
+	 * script only draw and follow it.
+	 *
+	 * @return array[] Each: id, title (plain), icon (SVG), brand (gateway icon HTML), info (HTML,
+	 *                 shown under the chosen row), disabled (bool), note (HTML, why it cannot be
+	 *                 chosen), mode (Nera_SAW_Checkout::pay_sheet_mode()).
+	 */
+	public static function pay_sheet_rows() {
+		$methods = self::pay_sheet_methods();
+		if ( ! $methods ) {
+			return array();
+		}
+
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		$wallet   = self::pay_sheet_wallet();
+		$rows     = array();
+		foreach ( $methods as $id => $title ) {
+			$gateway = isset( $gateways[ $id ] ) ? $gateways[ $id ] : null;
+			$row     = array(
+				'id'       => (string) $id,
+				'title'    => $title,
+				'icon'     => self::method_icon( 'card' ),
+				'brand'    => $gateway ? wp_kses_post( (string) $gateway->get_icon() ) : '',
+				'info'     => '',
+				'disabled' => false,
+				'note'     => '',
+				'mode'     => Nera_SAW_Checkout::pay_sheet_mode( $id ),
+			);
+
+			if ( Nera_SAW_Checkout::SPLIT === $id ) {
+				// The parent offers the split only while the balance covers the basket; with the
+				// parent absent the split stays as the settings have it.
+				if ( '' !== $wallet['state'] && 'optional' !== $wallet['state'] ) {
+					continue;
+				}
+				$row['icon'] = self::method_icon( 'wallet' );
+				$row['info'] = self::wallet_line( $wallet['balance'] );
+				if ( '' !== $wallet['state'] ) {
+					// The amount the parent's checkout suggests first: half of what the wallet can cover.
+					$part         = floor( $wallet['max'] * 50 ) / 100;
+					$row['info'] .= '<p>' . sprintf(
+						/* translators: 1: amount from the wallet, 2: amount charged to the card */
+						esc_html__( '%1$s from wallet, %2$s by card', 'nera-strikeawin' ),
+						'<strong>' . wc_price( $part ) . '</strong>',
+						'<strong>' . wc_price( max( 0, $wallet['basket'] - $part ) ) . '</strong>'
+					) . '</p>';
+				}
+			} elseif ( 'wallet' === $id ) {
+				$row['icon'] = self::method_icon( 'wallet' );
+				if ( $wallet['balance'] < $wallet['basket'] || $wallet['balance'] <= 0 ) {
+					$row['disabled'] = true;
+					$row['note']     = '<p>' . ( $wallet['balance'] <= 0
+						? esc_html__( 'Insufficient balance — your wallet is empty, so Wallet payment cannot be used for this order.', 'nera-strikeawin' )
+						: sprintf(
+							/* translators: 1: wallet balance, 2: basket total */
+							esc_html__( 'Insufficient balance — your Wallet Balance of %1$s does not cover this Basket Total of %2$s.', 'nera-strikeawin' ),
+							'<strong>' . wc_price( $wallet['balance'] ) . '</strong>',
+							'<strong>' . wc_price( $wallet['basket'] ) . '</strong>'
+						) ) . '</p>';
+					$topup = self::wallet_topup_url();
+					if ( '' !== $topup ) {
+						$row['note'] .= '<p><a href="' . esc_url( $topup ) . '">' . esc_html__( 'Top Up Wallet', 'nera-strikeawin' ) . '</a></p>';
+					}
+				} else {
+					$row['info'] = self::wallet_line( $wallet['balance'] ) . '<p>' . sprintf(
+						/* translators: %s: wallet balance left once this order is paid */
+						esc_html__( 'Balance after this order: %s', 'nera-strikeawin' ),
+						'<strong>' . wc_price( $wallet['balance'] - $wallet['basket'] ) . '</strong>'
+					) . '</p>';
+				}
+			} elseif ( $gateway ) {
+				$custom = function_exists( 'nera_cashflow_card_gateway_ids' ) && function_exists( 'nera_cashflow_use_custom_info' ) && function_exists( 'nera_cashflow_card_description' )
+					&& in_array( $id, (array) nera_cashflow_card_gateway_ids(), true ) && nera_cashflow_use_custom_info();
+				$row['info'] = $custom
+					? wpautop( esc_html( nera_cashflow_card_description() ) )
+					: wpautop( wp_kses_post( (string) $gateway->get_description() ) );
+			}
+
+			$rows[] = $row;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * What the sheet says above the methods when the wallet pays first whatever is chosen
+	 * (the parent's auto-deduct state), else ''.
+	 *
+	 * @return string HTML.
+	 */
+	public static function pay_sheet_notice() {
+		$wallet = self::pay_sheet_wallet();
+		if ( 'forced' !== $wallet['state'] ) {
+			return '';
+		}
+
+		return '<p>' . sprintf(
+			/* translators: 1: amount from the wallet, 2: amount charged to the card */
+			esc_html__( 'Your wallet credit will be used first: %1$s from wallet, %2$s to your card', 'nera-strikeawin' ),
+			'<strong>' . wc_price( $wallet['contribution'] ) . '</strong>',
+			'<strong>' . wc_price( $wallet['remainder'] ) . '</strong>'
+		) . '</p>';
+	}
+
+	/**
+	 * The wallet figures for this basket: the parent theme's state when it is there, else the
+	 * wallet plugin's balance against the basket ('' state).
+	 *
+	 * @return array{state:string, balance:float, basket:float, max:float, contribution:float, remainder:float}
+	 */
+	public static function pay_sheet_wallet() {
+		if ( function_exists( 'nera_wallet_partial_state' ) ) {
+			$s = nera_wallet_partial_state();
+			return array(
+				'state'        => (string) $s['state'],
+				'balance'      => (float) $s['balance'],
+				'basket'       => (float) $s['basket'],
+				'max'          => (float) $s['max'],
+				'contribution' => (float) $s['contribution'],
+				'remainder'    => (float) $s['remainder'],
+			);
+		}
+
+		$balance = function_exists( 'woo_wallet' ) && is_user_logged_in() ? (float) woo_wallet()->wallet->get_wallet_balance( get_current_user_id(), 'edit' ) : 0.0;
+		$basket  = function_exists( 'get_woowallet_cart_total' ) ? (float) get_woowallet_cart_total() : (float) WC()->cart->get_total( 'edit' );
+
+		return array(
+			'state'        => '',
+			'balance'      => $balance,
+			'basket'       => $basket,
+			'max'          => (float) min( max( 0, $balance ), $basket ),
+			'contribution' => 0.0,
+			'remainder'    => $basket,
+		);
+	}
+
+	/**
+	 * Where the player tops up the wallet, as the parent's checkout links it; '' when top-ups are off.
+	 *
+	 * @return string
+	 */
+	public static function wallet_topup_url() {
+		if ( ! apply_filters( 'woo_wallet_is_enable_top_up', true ) ) {
+			return '';
+		}
+		return add_query_arg( 'action', 'add', wc_get_account_endpoint_url( 'woo-wallet' ) );
+	}
+
+	/**
+	 * "Your Wallet Balance £x".
+	 *
+	 * @param float $balance Balance.
+	 * @return string HTML.
+	 */
+	private static function wallet_line( $balance ) {
+		return '<p>' . esc_html__( 'Your Wallet Balance', 'nera-strikeawin' ) . ' <strong>' . wc_price( $balance ) . '</strong></p>';
+	}
+
+	/**
+	 * A method row's icon. Inline: the sheet loads no icon font.
+	 *
+	 * @param string $kind 'wallet' or 'card'.
+	 * @return string SVG.
+	 */
+	private static function method_icon( $kind ) {
+		$path = 'wallet' === $kind
+			? '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18v3"/><path d="M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H5.5A2.5 2.5 0 0 1 3 7.5z"/><circle cx="16" cy="13.5" r="1.2"/>'
+			: '<rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 15h4"/>';
+
+		return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . $path . '</svg>';
 	}
 
 	/**

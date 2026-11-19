@@ -108,7 +108,6 @@ class Nera_SAW_Checkout {
 		add_filter( 'woocommerce_checkout_show_terms', array( __CLASS__, 'hide_terms_tick' ), 99 );
 
 		add_filter( 'woocommerce_available_payment_gateways', array( __CLASS__, 'gateways' ), 99 );
-		add_filter( 'woocommerce_gateway_title', array( __CLASS__, 'card_title' ), 99, 2 );
 		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'map_split_payment' ), 5 );
 		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'default_country' ), 10 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'record_split' ), 10, 1 );
@@ -633,21 +632,6 @@ class Nera_SAW_Checkout {
 		if ( self::is_entry_checkout() && ! self::is_topup_cart() && ! self::paypal_offered() ) {
 			echo '<style>.ppcp-messages,[id^="ppc-button-"],[class*="ppcp-button"]{display:none!important}</style>' . "\n";
 		}
-	}
-
-	/**
-	 * The card gateway says what it is.
-	 *
-	 * @param string $title      Title so far.
-	 * @param string $gateway_id Gateway ID.
-	 * @return string
-	 */
-	public static function card_title( $title, $gateway_id ) {
-		if ( self::CARD !== $gateway_id || is_admin() ) {
-			return $title;
-		}
-
-		return __( 'Card', 'nera-strikeawin' );
 	}
 
 	/**

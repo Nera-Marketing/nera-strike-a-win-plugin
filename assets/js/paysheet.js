@@ -84,11 +84,26 @@
 		}
 		var target = 1 === n
 			? form.querySelector( '[data-saw-pay-fields] [name]' )
-			: form.querySelector( '[data-saw-pay-methods] input[type="radio"]' ) || form.querySelector( '[data-saw-pay-methods]' );
+			: form.querySelector( '[data-saw-pay-methods] input[type="radio"]:checked' ) || form.querySelector( '[data-saw-pay-methods] input[type="radio"]:enabled' ) || form.querySelector( '[data-saw-pay-methods]' );
 		if ( target ) {
 			target.focus();
 		}
 	}
+
+	// Only the chosen method's info shows. A row that cannot be chosen has a disabled radio.
+	document.addEventListener( 'change', function ( event ) {
+		var list = event.target.closest ? event.target.closest( '[data-saw-pay-methods]' ) : null;
+		if ( ! list || 'payment_method' !== event.target.name ) {
+			return;
+		}
+		Array.prototype.forEach.call( list.querySelectorAll( '[data-saw-method]' ), function ( row ) {
+			var radio = row.querySelector( 'input[name="payment_method"]' );
+			var info = row.querySelector( '[data-saw-method-info]' );
+			if ( info ) {
+				info.hidden = ! ( radio && radio.checked );
+			}
+		} );
+	} );
 
 	// The faults WooCommerce would refuse, in its own words (printed on each field by the server).
 	function fieldsValid( form ) {
