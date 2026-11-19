@@ -583,14 +583,22 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
-	 * Send an add-to-cart to Before you pay.
+	 * Where an add-to-cart that left the page goes: the pay sheet when the add asked
+	 * for it, else Before you pay.
 	 *
 	 * @param string $url Where WooCommerce was going.
 	 * @return string
 	 */
 	public static function redirect_after_add( $url ) {
-		// Only a real form post lands here, so the sheet's script did not run.
-		$to = self::fallback_url();
+		// The competition form reaches here only when the sheet's script did not run, so
+		// it gets the no-script page. An add link (the play page's Buy a run) is followed
+		// the same way with or without script; it carries the sheet flag and opens the
+		// sheet like the competition page's Continue.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$to = isset( $_GET[ self::OPEN ] ) ? self::sheet_url() : '';
+		if ( ! $to ) {
+			$to = self::fallback_url();
+		}
 		return $to ? $to : $url;
 	}
 
