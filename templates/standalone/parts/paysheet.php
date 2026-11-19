@@ -154,8 +154,16 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 	// Sent back from checkout because a box was not ticked (no script, or script failed).
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$saw_missing = ! $saw_sheet && isset( $_GET[ Nera_SAW_Checkout::ARG_MISSING ] );
+
+	// A guest's sheet carries no checkout nonce, so Pay always goes on to the checkout page, which
+	// asks for the billing details itself: the sheet opens on the methods and asks for none of them.
+	$saw_pay_guest = $saw_sheet && ! is_user_logged_in();
+
+	// The sheet's only method cannot be chosen (Wallet with too little in it): there is nothing to
+	// send, so Pay stays off while the methods show.
+	$saw_pay_off = false;
 	?>
-	<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent<?php echo $saw_sheet ? ' data-saw-pay-step-current="1"' : ''; ?>>
+	<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent<?php echo $saw_sheet ? ' data-saw-pay-step-current="' . ( $saw_pay_guest ? '2' : '1' ) . '"' : ''; ?>>
 
 		<?php if ( class_exists( 'Nera_SAW_Language' ) ) { Nera_SAW_Language::hidden_field(); } ?>
 		<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_CHECKED ); ?>" value="1">
@@ -170,6 +178,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<input type="hidden" name="<?php echo esc_attr( Nera_SAW_Checkout::ARG_HASH ); ?>" value="<?php echo esc_attr( Nera_SAW_Checkout::basket_hash() ); ?>">
 				<?php if ( is_user_logged_in() ) { wp_nonce_field( 'woocommerce-process_checkout', 'woocommerce-process-checkout-nonce', false ); } ?>
 			</fieldset>
+			<?php if ( ! $saw_pay_guest ) : ?>
 			<?php // The billing fields Pay sends, prefilled from the account; WooCommerce saves what is typed to it. ?>
 			<fieldset class="saw-paysheet__fields" data-saw-pay-fields data-saw-pay-step="1">
 				<?php foreach ( Nera_SAW_Standalone_Basket::pay_sheet_fields( (int) $saw_spec['id'] ) as $saw_field ) : ?>
@@ -191,6 +200,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 					</label>
 				<?php endforeach; ?>
 			</fieldset>
+			<?php endif; ?>
 			<?php
 			// The methods ticked for the section checkout, as rows: which can be chosen, the wallet
 			// figures and each one's info all come from Nera_SAW_Standalone_Basket::pay_sheet_rows().
@@ -201,10 +211,13 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			$saw_pay_methods = wp_list_pluck( $saw_pay_rows, 'title', 'id' );
 			?>
 			<?php // Step 2, in the fields' place once Pay on step 1 finds them complete. ?>
-			<div class="saw-paysheet__step" data-saw-pay-step="2" hidden>
+			<div class="saw-paysheet__step" data-saw-pay-step="2"<?php echo $saw_pay_guest ? '' : ' hidden'; ?>>
 				<?php if ( $saw_pay_rows ) : ?>
-					<?php $saw_pay_choice = count( $saw_pay_rows ) > 1; ?>
-					<<?php echo $saw_pay_choice ? 'fieldset' : 'div tabindex="-1"'; ?> class="saw-paysheet__methods" data-saw-pay-methods>
+					<?php
+					$saw_pay_choice = count( $saw_pay_rows ) > 1;
+					$saw_pay_off    = ! $saw_pay_choice && $saw_pay_rows[0]['disabled'];
+					?>
+					<<?php echo $saw_pay_choice ? 'fieldset' : 'div tabindex="-1"'; ?> class="saw-paysheet__methods" data-saw-pay-methods<?php echo $saw_pay_off ? ' data-saw-pay-off' : ''; ?>>
 						<?php if ( $saw_pay_choice ) : ?>
 							<legend><?php esc_html_e( 'Pay with', 'nera-strikeawin' ); ?></legend>
 						<?php else : ?>
@@ -219,7 +232,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 								<<?php echo $saw_pay_choice ? 'label' : 'div'; ?> class="saw-method__row">
 									<?php if ( $saw_pay_choice ) : ?>
 										<input type="radio" name="payment_method" value="<?php echo esc_attr( $saw_pm['id'] ); ?>" data-saw-pay-mode="<?php echo esc_attr( $saw_pm['mode'] ); ?>"<?php checked( $saw_pm_on ); ?><?php disabled( $saw_pm['disabled'] ); ?>>
-									<?php else : ?>
+									<?php elseif ( ! $saw_pm['disabled'] ) : ?>
 										<input type="hidden" name="payment_method" value="<?php echo esc_attr( $saw_pm['id'] ); ?>" data-saw-pay-mode="<?php echo esc_attr( $saw_pm['mode'] ); ?>">
 									<?php endif; ?>
 									<span class="saw-method__icon"><?php echo $saw_pm['icon']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed SVG from the builder. ?></span>
@@ -256,7 +269,9 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 						<?php endforeach; ?>
 					</<?php echo $saw_pay_choice ? 'fieldset' : 'div'; ?>>
 				<?php endif; ?>
-				<button type="button" class="saw-paysheet__back" data-saw-pay-back><?php esc_html_e( 'Back', 'nera-strikeawin' ); ?></button>
+				<?php if ( ! $saw_pay_guest ) : ?>
+					<button type="button" class="saw-paysheet__back" data-saw-pay-back><?php esc_html_e( 'Back', 'nera-strikeawin' ); ?></button>
+				<?php endif; ?>
 			</div>
 		<?php endif; ?>
 
@@ -275,7 +290,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			? sprintf( $saw_cta, $saw_sum )
 			: trim( $saw_cta . ' ' . $saw_sum );
 		?>
-		<button type="submit" class="saw-cta"><?php echo esc_html( $saw_label ); ?></button>
+		<button type="submit" class="saw-cta"<?php disabled( $saw_pay_off && $saw_pay_guest ); ?>><?php echo esc_html( $saw_label ); ?></button>
 		<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick the box to continue', 'nera-strikeawin' ); ?></p>
 		<?php if ( $saw_sheet ) : ?>
 			<div class="saw-paysheet__errors" data-saw-pay-errors data-saw-fallback="<?php esc_attr_e( 'Something went wrong. Please try again.', 'nera-strikeawin' ); ?>" role="alert" hidden></div>

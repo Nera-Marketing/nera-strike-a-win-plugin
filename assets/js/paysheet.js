@@ -84,6 +84,11 @@
 		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-step]' ), function ( panel ) {
 			panel.hidden = panel.getAttribute( 'data-saw-pay-step' ) !== String( n );
 		} );
+		// With only an unavailable method there is nothing to pay with; Pay on the fields step still moves on.
+		var button = form.querySelector( 'button[type="submit"]' );
+		if ( button && form.querySelector( '[data-saw-pay-off]' ) ) {
+			button.disabled = 2 === n;
+		}
 		if ( ! focus ) {
 			return;
 		}
@@ -507,10 +512,10 @@
 		if ( consent ) {
 			reset( consent );
 		}
-		// Every opening starts on the fields, with what was typed so far.
+		// Every opening starts on the fields, with what was typed so far; a sheet without them (a guest's) on the methods.
 		var form = el.querySelector( '[' + STEP + ']' );
 		if ( form ) {
-			step( form, 1, false );
+			step( form, form.querySelector( '[data-saw-pay-fields]' ) ? 1 : 2, false );
 		}
 		el.hidden = false;
 		document.documentElement.classList.add( 'saw-sheet-open' );
