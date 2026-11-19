@@ -497,12 +497,12 @@
 		return document.querySelector( SHEET );
 	}
 
-	function open() {
+	function open( event ) {
 		var el = sheet();
 		if ( ! el ) {
 			return;
 		}
-		opener = document.activeElement;
+		opener = ( event && event.detail && event.detail.opener ) || document.activeElement;
 		var consent = el.querySelector( '[data-saw-consent]' );
 		if ( consent ) {
 			reset( consent );
@@ -547,9 +547,52 @@
 		}
 	} );
 
+	// What Tab can reach in the panel. Of a radio group only the checked radio takes a
+	// Tab stop, so the others are left out of the ends.
+	function stops( panel ) {
+		return Array.prototype.filter.call( panel.querySelectorAll( 'a[href], button, input, select, textarea, [tabindex]' ), function ( node ) {
+			if ( node.disabled || node.tabIndex < 0 || ! node.getClientRects().length ) {
+				return false;
+			}
+			if ( 'radio' === node.type && ! node.checked && node.form && node.name ) {
+				var group = node.form.querySelectorAll( 'input[type="radio"][name="' + node.name + '"]' );
+				return ! Array.prototype.some.call( group, function ( radio ) {
+					return radio.checked;
+				} );
+			}
+			return true;
+		} );
+	}
+
+	function panel() {
+		var el = sheet();
+		return el && ! el.hidden ? el.querySelector( '.saw-paysheet' ) || el : null;
+	}
+
+	// The sheet is modal: Tab and Shift+Tab wrap around inside it.
 	document.addEventListener( 'keydown', function ( event ) {
 		if ( 'Escape' === event.key ) {
 			close();
+			return;
+		}
+		var box = 'Tab' === event.key ? panel() : null;
+		if ( ! box ) {
+			return;
+		}
+		var list = stops( box );
+		if ( ! list.length ) {
+			event.preventDefault();
+			return;
+		}
+		var first = list[ 0 ];
+		var last = list[ list.length - 1 ];
+		var at = document.activeElement;
+		if ( event.shiftKey && ( at === first || ! box.contains( at ) ) ) {
+			event.preventDefault();
+			last.focus();
+		} else if ( ! event.shiftKey && ( at === last || ! box.contains( at ) ) ) {
+			event.preventDefault();
+			first.focus();
 		}
 	} );
 

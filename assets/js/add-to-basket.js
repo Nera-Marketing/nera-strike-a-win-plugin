@@ -86,6 +86,9 @@
 
 		e.preventDefault();
 		busy = true;
+		// Captured before the buttons are disabled: a disabled button loses focus, and
+		// the sheet hands focus back to this one when it closes.
+		var opener = e.submitter || document.activeElement;
 
 		// Every Continue button (the form's and the phone bar's), not the first
 		// .saw-cta: that can be a tier's Play quiz link.
@@ -145,7 +148,7 @@
 					}
 				} );
 				release();
-				document.dispatchEvent( new CustomEvent( 'saw:paysheet' ) );
+				document.dispatchEvent( new CustomEvent( 'saw:paysheet', { detail: { opener: opener } } ) );
 			} )
 			.catch( function () {
 				// Anything at all — submit the form for real and let the server answer.
