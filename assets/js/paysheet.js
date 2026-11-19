@@ -56,6 +56,11 @@
 	window.addEventListener( 'pageshow', function ( event ) {
 		if ( event.persisted ) {
 			clear( true );
+			Array.prototype.forEach.call( document.querySelectorAll( '[data-saw-consent]' ), function ( form ) {
+				if ( form.querySelector( '[data-saw-pay-fields]' ) ) {
+					reset( form );
+				}
+			} );
 		}
 	} );
 
@@ -352,6 +357,25 @@
 		} );
 	}
 
+	// A page left for a payment page or the checkout comes back busy, with Pay and perhaps the
+	// fields disabled: whoever sees it again (Back, or the sheet opened anew) can pay again.
+	function reset( form ) {
+		var panel = form.closest( '.saw-paysheet' ) || form;
+		var fields = form.querySelector( '[data-saw-pay-fields]' );
+		var button = form.querySelector( 'button[type="submit"]' );
+		var errors = form.querySelector( '[data-saw-pay-errors]' );
+		if ( fields ) {
+			fields.disabled = false;
+		}
+		if ( button ) {
+			button.disabled = false;
+		}
+		panel.removeAttribute( 'aria-busy' );
+		if ( errors ) {
+			errors.hidden = true;
+		}
+	}
+
 	// The chosen method's mode, set by the server: 'post' (from here) or 'checkout' (on the checkout page).
 	function mode( form ) {
 		var method = form.querySelector( 'input[name="payment_method"]:checked' ) || form.querySelector( 'input[type="hidden"][name="payment_method"]' );
@@ -398,6 +422,10 @@
 			return;
 		}
 		opener = document.activeElement;
+		var consent = el.querySelector( '[data-saw-consent]' );
+		if ( consent ) {
+			reset( consent );
+		}
 		// Every opening starts on the fields, with what was typed so far.
 		var form = el.querySelector( '[' + STEP + ']' );
 		if ( form ) {
@@ -413,7 +441,8 @@
 
 	function close() {
 		var el = sheet();
-		if ( ! el || el.hidden ) {
+		// While Pay is being sent the sheet stays: its answer, an error included, shows there.
+		if ( ! el || el.hidden || el.querySelector( '.saw-paysheet[aria-busy="true"]' ) ) {
 			return;
 		}
 		el.hidden = true;
