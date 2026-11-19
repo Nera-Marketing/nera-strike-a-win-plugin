@@ -963,7 +963,9 @@ class Nera_SAW_Standalone_Basket {
 	 *
 	 * @return array[] Each: id, title (plain), icon (SVG), brand (gateway icon HTML), info (HTML,
 	 *                 shown under the chosen row), disabled (bool), note (HTML, why it cannot be
-	 *                 chosen), mode (Nera_SAW_Checkout::pay_sheet_mode()).
+	 *                 chosen), mode (Nera_SAW_Checkout::pay_sheet_mode()), amount (split only, with
+	 *                 the parent theme: the wallet share's value, max, basket, money format and the
+	 *                 parent's two amount errors; else null).
 	 */
 	public static function pay_sheet_rows() {
 		$methods = self::pay_sheet_methods();
@@ -985,6 +987,7 @@ class Nera_SAW_Standalone_Basket {
 				'disabled' => false,
 				'note'     => '',
 				'mode'     => Nera_SAW_Checkout::pay_sheet_mode( $id ),
+				'amount'   => null,
 			);
 
 			if ( Nera_SAW_Checkout::SPLIT === $id ) {
@@ -998,12 +1001,29 @@ class Nera_SAW_Standalone_Basket {
 				if ( '' !== $wallet['state'] ) {
 					// The amount the parent's checkout suggests first: half of what the wallet can cover.
 					$part         = floor( $wallet['max'] * 50 ) / 100;
-					$row['info'] .= '<p>' . sprintf(
+					$row['info'] .= '<p data-saw-split="line">' . sprintf(
 						/* translators: 1: amount from the wallet, 2: amount charged to the card */
 						esc_html__( '%1$s from wallet, %2$s by card', 'nera-strikeawin' ),
-						'<strong>' . wc_price( $part ) . '</strong>',
-						'<strong>' . wc_price( max( 0, $wallet['basket'] - $part ) ) . '</strong>'
+						'<strong data-saw-split="part">' . wc_price( $part ) . '</strong>',
+						'<strong data-saw-split="rest">' . wc_price( max( 0, $wallet['basket'] - $part ) ) . '</strong>'
 					) . '</p>';
+					// The errors are the parent's notices word for word, so the sheet can tell them apart.
+					$row['amount'] = array(
+						'value'  => $part,
+						'max'    => $wallet['max'],
+						'basket' => $wallet['basket'],
+						'money'  => array(
+							'symbol'   => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+							'format'   => html_entity_decode( get_woocommerce_price_format(), ENT_QUOTES, 'UTF-8' ),
+							'decimals' => (int) wc_get_price_decimals(),
+							'dsep'     => wc_get_price_decimal_separator(),
+							'tsep'     => wc_get_price_thousand_separator(),
+						),
+						'errors' => array(
+							'zero'  => __( 'Choose a wallet amount greater than zero, or pay by card.', 'nera-competitions' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+							'whole' => __( 'That covers the whole order — please select Wallet payment instead.', 'nera-competitions' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+						),
+					);
 				}
 			} elseif ( 'wallet' === $id ) {
 				$row['icon'] = self::method_icon( 'wallet' );

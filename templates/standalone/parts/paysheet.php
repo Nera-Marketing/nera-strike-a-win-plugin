@@ -235,6 +235,24 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 								<?php if ( '' !== $saw_pm['info'] ) : ?>
 									<div class="saw-method__info" data-saw-method-info<?php echo $saw_pm_on ? '' : ' hidden'; ?>><?php echo wp_kses_post( $saw_pm['info'] ); ?></div>
 								<?php endif; ?>
+								<?php if ( ! empty( $saw_pm['amount'] ) ) : ?>
+									<?php // The wallet share, posted with the split as the parent theme's checkout posts it; disabled while another row is chosen. ?>
+									<?php $saw_amt = $saw_pm['amount']; ?>
+									<div class="saw-method__amount" data-saw-split-box data-saw-money="<?php echo esc_attr( wp_json_encode( $saw_amt['money'] ) ); ?>"<?php echo $saw_pm_on ? '' : ' hidden'; ?>>
+										<input type="hidden" name="nera_wallet_partial" value="1"<?php disabled( ! $saw_pm_on ); ?>>
+										<label for="saw-split-amount"><?php esc_html_e( 'Amount to take from wallet', 'nera-strikeawin' ); ?></label>
+										<span class="saw-method__amount-row">
+											<span aria-hidden="true"><?php echo esc_html( $saw_amt['money']['symbol'] ); ?></span>
+											<input type="number" id="saw-split-amount" name="nera_wallet_amount" inputmode="decimal" step="0.01" min="0" max="<?php echo esc_attr( number_format( $saw_amt['max'], 2, '.', '' ) ); ?>" value="<?php echo esc_attr( number_format( $saw_amt['value'], 2, '.', '' ) ); ?>" data-saw-split-amount data-saw-basket="<?php echo esc_attr( number_format( $saw_amt['basket'], 2, '.', '' ) ); ?>" data-saw-err-zero="<?php echo esc_attr( $saw_amt['errors']['zero'] ); ?>" data-saw-err-whole="<?php echo esc_attr( $saw_amt['errors']['whole'] ); ?>"<?php disabled( ! $saw_pm_on ); ?>>
+											<span>
+												<?php
+												/* translators: %s: basket total */
+												echo wp_kses_post( sprintf( __( 'of %s', 'nera-strikeawin' ), wc_price( $saw_amt['basket'] ) ) );
+												?>
+											</span>
+										</span>
+									</div>
+								<?php endif; ?>
 							</div>
 						<?php endforeach; ?>
 					</<?php echo $saw_pay_choice ? 'fieldset' : 'div'; ?>>

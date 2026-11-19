@@ -91,6 +91,7 @@
 	}
 
 	// Only the chosen method's info shows. A row that cannot be chosen has a disabled radio.
+	// The split's amount controls are enabled only while it is chosen: the post takes every enabled control.
 	document.addEventListener( 'change', function ( event ) {
 		var list = event.target.closest ? event.target.closest( '[data-saw-pay-methods]' ) : null;
 		if ( ! list || 'payment_method' !== event.target.name ) {
@@ -98,11 +99,63 @@
 		}
 		Array.prototype.forEach.call( list.querySelectorAll( '[data-saw-method]' ), function ( row ) {
 			var radio = row.querySelector( 'input[name="payment_method"]' );
+			var on = !! ( radio && radio.checked );
 			var info = row.querySelector( '[data-saw-method-info]' );
+			var box = row.querySelector( '[data-saw-split-box]' );
 			if ( info ) {
-				info.hidden = ! ( radio && radio.checked );
+				info.hidden = ! on;
+			}
+			if ( box ) {
+				box.hidden = ! on;
+				Array.prototype.forEach.call( box.querySelectorAll( 'input' ), function ( input ) {
+					input.disabled = ! on;
+				} );
 			}
 		} );
+	} );
+
+	/* ---- the split's wallet share ------------------------------------------ */
+
+	// Read as the parent theme's checkout reads it: symbols dropped, a lone comma is the
+	// decimal point, then clamped to 0..max.
+	function splitAmount( raw, max ) {
+		var clean = String( raw ).replace( /[^0-9.,-]/g, '' );
+		clean = -1 !== clean.indexOf( ',' ) && -1 !== clean.indexOf( '.' ) ? clean.replace( /,/g, '' ) : clean.replace( /,/g, '.' );
+		var n = parseFloat( clean );
+		return Math.max( 0, Math.min( isNaN( n ) ? 0 : n, max ) );
+	}
+
+	// The store's price format, as wc_price() prints it.
+	function money( n, cfg ) {
+		var d = parseInt( cfg.decimals, 10 );
+		d = isNaN( d ) ? 2 : d;
+		var parts = n.toFixed( d ).split( '.' );
+		var num = parts[ 0 ].replace( /\B(?=(\d{3})+(?!\d))/g, cfg.tsep || '' ) + ( parts[ 1 ] ? ( cfg.dsep || '.' ) + parts[ 1 ] : '' );
+		return String( cfg.format || '%1$s%2$s' ).replace( '%1$s', cfg.symbol || '' ).replace( '%2$s', num );
+	}
+
+	document.addEventListener( 'input', function ( event ) {
+		var input = event.target;
+		if ( ! input.matches || ! input.matches( '[data-saw-split-amount]' ) ) {
+			return;
+		}
+		var row = input.closest( '[data-saw-method]' );
+		var box = input.closest( '[data-saw-split-box]' );
+		var cfg = {};
+		try {
+			cfg = JSON.parse( box.getAttribute( 'data-saw-money' ) || '{}' );
+		} catch ( e ) {}
+		var basket = parseFloat( input.getAttribute( 'data-saw-basket' ) ) || 0;
+		var part = splitAmount( input.value, parseFloat( input.max ) || 0 );
+		var shown = row.querySelector( '[data-saw-split="part"]' );
+		var rest = row.querySelector( '[data-saw-split="rest"]' );
+		if ( shown ) {
+			shown.textContent = money( part, cfg );
+		}
+		if ( rest ) {
+			rest.textContent = money( Math.max( 0, basket - part ), cfg );
+		}
+		input.removeAttribute( 'aria-invalid' );
 	} );
 
 	// The faults WooCommerce would refuse, in its own words (printed on each field by the server).
@@ -202,6 +255,16 @@
 					errors.textContent = errors.getAttribute( 'data-saw-fallback' ) || '';
 				}
 				errors.hidden = ! errors.textContent.trim();
+				// The parent's amount errors carry no field name: matched by their words.
+				var amount = form.querySelector( '[data-saw-split-amount]:enabled' );
+				var text = errors.textContent;
+				if ( amount && [ 'data-saw-err-zero', 'data-saw-err-whole' ].some( function ( attr ) {
+					var words = amount.getAttribute( attr );
+					return words && -1 !== text.indexOf( words );
+				} ) ) {
+					amount.setAttribute( 'aria-invalid', 'true' );
+					amount.focus();
+				}
 			}
 		}
 
@@ -282,7 +345,7 @@
 		Array.prototype.forEach.call( form.querySelectorAll( '.saw-field__err' ), function ( msg ) {
 			msg.parentNode.removeChild( msg );
 		} );
-		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-fields] [aria-invalid]' ), function ( input ) {
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-pay-fields] [aria-invalid], [data-saw-split-amount][aria-invalid]' ), function ( input ) {
 			input.removeAttribute( 'aria-invalid' );
 			input.removeAttribute( 'aria-describedby' );
 		} );

@@ -94,6 +94,14 @@ class Nera_SAW_Checkout {
 	private static $split_posted = false;
 
 	/**
+	 * The basket's fingerprint as the checkout post found it, before the parent theme commits a
+	 * wallet share: that share changes the total, and so the cart hash, not what is bought.
+	 *
+	 * @var string|null
+	 */
+	private static $submitted_hash = null;
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -121,6 +129,7 @@ class Nera_SAW_Checkout {
 
 		add_action( 'template_redirect', array( __CLASS__, 'remove_coupon_prompt' ), 1 );
 		add_action( 'template_redirect', array( __CLASS__, 'require_consent' ), 15 );
+		add_action( 'woocommerce_checkout_process', array( __CLASS__, 'remember_submitted_basket' ), 1 );
 		add_action( 'woocommerce_after_checkout_validation', array( __CLASS__, 'validate_consent' ), 10, 2 );
 		add_action( 'woocommerce_checkout_order_processed', array( __CLASS__, 'forget_consent' ), 10, 0 );
 	}
@@ -375,7 +384,17 @@ class Nera_SAW_Checkout {
 	 * @return string
 	 */
 	public static function basket_hash() {
+		if ( null !== self::$submitted_hash ) {
+			return self::$submitted_hash;
+		}
 		return ( function_exists( 'WC' ) && WC()->cart ) ? (string) WC()->cart->get_cart_hash() : '';
+	}
+
+	/**
+	 * Keeps the basket's fingerprint for the rest of the checkout post.
+	 */
+	public static function remember_submitted_basket() {
+		self::$submitted_hash = self::basket_hash();
 	}
 
 	/**
@@ -525,8 +544,9 @@ class Nera_SAW_Checkout {
 	 * WooCommerce's redirect) or `checkout` (the player goes on to the checkout page with it).
 	 *
 	 * A gateway whose payment fields hold form controls needs them filled on the page; any
-	 * other is posted. The split's wallet share is chosen on the checkout page, and an id
-	 * WooCommerce does not know cannot be posted.
+	 * other is posted. The split is posted with its wallet share chosen in the sheet, which the
+	 * parent theme's checkout commits; without that theme there is nothing to commit it, and
+	 * any other id WooCommerce does not know cannot be posted.
 	 *
 	 * @param string $gateway_id Gateway id, or the split pseudo-id.
 	 * @return string self::MODE_POST or self::MODE_CHECKOUT.
@@ -536,7 +556,9 @@ class Nera_SAW_Checkout {
 		$gateways   = function_exists( 'WC' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
 		$gateway    = isset( $gateways[ $gateway_id ] ) ? $gateways[ $gateway_id ] : null;
 
-		if ( self::SPLIT === $gateway_id || ! $gateway ) {
+		if ( self::SPLIT === $gateway_id ) {
+			$mode = function_exists( 'nera_wallet_checkout_commit_contribution' ) ? self::MODE_POST : self::MODE_CHECKOUT;
+		} elseif ( ! $gateway ) {
 			$mode = self::MODE_CHECKOUT;
 		} else {
 			$mode = self::asks_for_fields( $gateway ) ? self::MODE_CHECKOUT : self::MODE_POST;
