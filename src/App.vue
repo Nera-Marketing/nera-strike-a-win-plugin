@@ -240,6 +240,8 @@ const slotResults = ref( [] ); // [{ slot_no, outcome, spins_awarded }] — the 
 const drawDate = ref( '' );
 const drawCloses = ref( '' );
 const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
+const drawCap = ref( 0 ); // the draw's ticket cap (paid runs).
+const drawPool = ref( 0 ); // tickets earned or reserved so far in the draw (paid runs).
 const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
 const nextRunTotal = ref( 0 );
 const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
@@ -621,6 +623,23 @@ const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
 
 const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
 const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
+
+// The player's chance in a full draw and if entries closed now, as "1 in X" (X rounded up).
+// Shown only when the theme supplies the texts (window.NeraSAW.resultOdds).
+const oddsTexts = ( window.NeraSAW && window.NeraSAW.resultOdds && ! Array.isArray( window.NeraSAW.resultOdds ) ) ? window.NeraSAW.resultOdds : {};
+const fillVars = ( s, vars ) => String( s || '' ).replace( /\{(\w+)\}/g, ( m, k ) => ( k in vars ? vars[ k ] : m ) );
+const oddsRows = computed( () => {
+	const n = ticketsInDraw.value;
+	if ( ! oddsTexts.full || n < 1 || drawCap.value < 1 ) {
+		return [];
+	}
+	const oneIn = ( d ) => fillVars( oddsTexts.oneIn || '1 in {x}', { x: formatCount( Math.ceil( d / n ) ) } );
+	const rows = [ { key: 'full', label: fillVars( oddsTexts.full, { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
+	if ( oddsTexts.now && drawPool.value > 0 ) {
+		rows.push( { key: 'now', label: fillVars( oddsTexts.now, { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
+	}
+	return rows;
+} );
 
 const prefersReducedMotion = () =>
 	typeof window !== 'undefined' && window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
@@ -1781,6 +1800,8 @@ async function fetchRunComplete() {
 		drawDate.value = summary.draw_date || '';
 		drawCloses.value = summary.draw_closes || '';
 		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
+		drawCap.value = Number( summary.cap ) || 0;
+		drawPool.value = Number( summary.pool ) || 0;
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
@@ -2090,8 +2111,9 @@ onUnmounted( () => {
 			<template v-else-if="summaryReady">
 				<div v-if="hasTickets" class="saw-results__draw">
 					<div>{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div>
+					<template v-for="row in oddsRows" :key="row.key"><div class="saw-results__oddsk">{{ row.label }}</div><b class="saw-results__oddsv">{{ row.value }}</b></template><span v-if="oddsRows.length && oddsTexts.note" class="saw-results__oddsnote">{{ oddsTexts.note }}</span>
 				</div>
-				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div></div>
+				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div><template v-for="row in oddsRows" :key="row.key"><div class="saw-results__oddsk">{{ row.label }}</div><b class="saw-results__oddsv">{{ row.value }}</b></template><span v-if="oddsRows.length && oddsTexts.note" class="saw-results__oddsnote">{{ oddsTexts.note }}</span></div>
 			</template>
 
 			<p v-if="summaryReady && showBlock('draw_line')" class="saw-results__drawline">{{ fmt('resultDrawLine', 'Your tickets are entered in this prize draw · Live draw: {d}', drawDate || t('drawDateTbc', 'date to be confirmed')) }}</p>
@@ -2675,6 +2697,9 @@ onUnmounted( () => {
 .saw-results__draw { margin-top: 18px; padding: 14px; border-radius: 16px; border: 1px solid var(--saw-surface); font-size: 14px; line-height: 1.5; }
 .saw-results__draw b { font-size: 16px; }
 .saw-results__drawsub { margin-top: 6px; }
+.saw-results__oddsk { margin-top: 8px; }
+.saw-results__draw b.saw-results__oddsv { font-size: 22px; }
+.saw-results__oddsnote { display: block; margin-top: 8px; font-size: 12px; color: var(--saw-text-muted); }
 .saw-results__drawline { margin: 12px 0 0; font-size: 13px; color: var(--saw-text-muted); }
 .saw-results__entries, .saw-results__fine { margin-top: 16px; text-align: left; }
 .saw-results__label { margin: 0; font-size: 13px; color: var(--saw-text-muted); }
