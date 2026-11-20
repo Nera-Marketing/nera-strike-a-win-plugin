@@ -295,6 +295,9 @@ class Nera_SAW_Frontend {
 			// version made for the card's dark background) and the brand name, shown
 			// as text when there is no logo.
 			'shareCard'          => self::share_card(),
+			// Texts for a chance box on a paid result (keys full, now, note, oneIn; placeholders
+			// {cap}, {pool}, {x}). Empty by default: the box is a theme's to switch on.
+			'resultOdds'         => (array) apply_filters( 'nera_saw_result_odds', array(), (int) $competition_id ),
 			'strings'            => array(
 				'loading'            => __( 'Loading your entry…', 'nera-strikeawin' ),
 				'viewCompetition'    => Nera_SAW_I18n::t( 'View competition' ),
