@@ -59,6 +59,7 @@
 			Array.prototype.forEach.call( document.querySelectorAll( '[data-saw-consent]' ), function ( form ) {
 				if ( form.querySelector( '[data-saw-pay-fields]' ) ) {
 					reset( form );
+					clearFieldErrors( form );
 					// reset() turns Pay back on; step() keeps it off on the methods of a sheet with nothing to pay with.
 					step( form, Number( form.getAttribute( STEP ) ) || 1, false );
 				}
@@ -378,9 +379,11 @@
 				} );
 				var again = next.querySelector( '[data-saw-split-amount]:enabled' );
 				var row = again ? again.closest( '[data-saw-method]' ) : null;
-				var split = row ? row.querySelector( 'input[type="radio"][name="payment_method"]' ) : null;
-				if ( null !== share && split && split.checked ) {
-					again.value = share;
+				// A sheet whose only method is the split marks it with a hidden input, not a radio.
+				var split = row ? row.querySelector( 'input[name="payment_method"]' ) : null;
+				if ( null !== share && split && ( 'hidden' === split.type || split.checked ) ) {
+					// The basket changed, so the new maximum can be below the typed share.
+					again.value = splitAmount( share, Infinity ) > ( parseFloat( again.max ) || 0 ) ? again.max : share;
 					again.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 				}
 				var errors = next.querySelector( '[data-saw-pay-errors]' );
