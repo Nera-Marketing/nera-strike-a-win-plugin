@@ -535,6 +535,30 @@ class Nera_SAW_Referral {
 	}
 
 	/**
+	 * Pay the bonus into the first candidate that can take it and mints at least one
+	 * ticket. A candidate that reserves but mints nothing has its reservation given back
+	 * by pay(), and the next one is tried. Call under the referrer's lock.
+	 *
+	 * @param int   $friend     Friend's user ID.
+	 * @param int   $referrer   Referrer's user ID.
+	 * @param int[] $candidates Competition IDs, in order of preference.
+	 * @param int   $origin     Free competition the friend played.
+	 * @param int   $run_id     Friend's run ID.
+	 * @return int Competition paid into, or 0 when none could.
+	 */
+	private static function pay_first( $friend, $referrer, array $candidates, $origin, $run_id ) {
+		foreach ( array_unique( array_map( 'intval', $candidates ) ) as $cid ) {
+			if ( ! self::reserve_target( $referrer, array( $cid ) ) ) {
+				continue;
+			}
+			if ( self::pay( $friend, $referrer, $cid, $origin, $run_id ) >= 1 ) {
+				return $cid;
+			}
+		}
+		return 0;
+	}
+
+	/**
 	 * Mint the friend's and the referrer's bonus tickets into a competition whose pool
 	 * already holds two for them, mark the friend rewarded and count them for the
 	 * referrer there. Call under the referrer's lock.
@@ -667,22 +691,13 @@ class Nera_SAW_Referral {
 		// a missed remove leaves an ID the catch-up drops once it finds no pending meta.
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 5 )', $lock ) ) ) {
 			if ( $add ) {
-				update_option( self::OPTION_REINDEX, 1, true );
+				self::set_reindex( true );
 			}
 			return false;
 		}
 		try {
 			$ids = self::stored_pending();
-			$ids = $add ? array_merge( $ids, array( (int) $friend ) ) : array_diff( $ids, array( (int) $friend ) );
-			$ids = array_values( array_unique( array_filter( $ids ) ) );
-			wp_cache_delete( self::OPTION_PENDING, 'options' );
-			wp_cache_delete( 'alloptions', 'options' );
-			wp_cache_delete( 'notoptions', 'options' );
-			if ( $ids ) {
-				update_option( self::OPTION_PENDING, $ids, true );
-			} else {
-				delete_option( self::OPTION_PENDING );
-			}
+			self::write_pending( $add ? array_merge( $ids, array( (int) $friend ) ) : array_diff( $ids, array( (int) $friend ) ) );
 		} finally {
 			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
 		}
@@ -690,19 +705,73 @@ class Nera_SAW_Referral {
 	}
 
 	/**
+	 * Store the pending list. Call under the pending-list lock.
+	 *
+	 * @param int[] $ids Friend user IDs.
+	 */
+	private static function write_pending( array $ids ) {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		self::forget_option( self::OPTION_PENDING );
+		if ( $ids ) {
+			update_option( self::OPTION_PENDING, $ids, true );
+		} else {
+			delete_option( self::OPTION_PENDING );
+		}
+	}
+
+	/**
+	 * Set or clear the rebuild flag in the table itself. update_option() compares with
+	 * this request's cached value, which another request may have changed since, and
+	 * would then skip the write. Clearing never creates the row.
+	 *
+	 * @param bool $on Set (true) or clear (false).
+	 */
+	private static function set_reindex( $on ) {
+		global $wpdb;
+		if ( $on ) {
+			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, '1', 'on' ) ON DUPLICATE KEY UPDATE option_value = '1'", self::OPTION_REINDEX ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} else {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = '0' WHERE option_name = %s AND option_value <> '0'", self::OPTION_REINDEX ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::forget_option( self::OPTION_REINDEX );
+	}
+
+	/**
+	 * Drop an option from the request's cache so the next read goes to the table.
+	 *
+	 * @param string $name Option name.
+	 */
+	private static function forget_option( $name ) {
+		wp_cache_delete( $name, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	}
+
+	/**
 	 * Put back into the pending list every friend who holds the pending meta but is
-	 * missing from it.
+	 * missing from it, in one write. Runs on a page request, so it never waits for the
+	 * list's lock: when busy, the rebuild flag stays set for the next catch-up.
 	 */
 	private static function reindex() {
 		global $wpdb;
-		// Cleared first: a failed add after the query below sets it again for the next catch-up. Kept as an
-		// autoloaded 0 rather than deleted, so the check on every request never queries for a missing option.
-		if ( get_option( self::OPTION_REINDEX ) ) {
-			update_option( self::OPTION_REINDEX, 0, true );
+		$lock = 'nera_saw_ref_pending';
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK( %s, 0 )', $lock ) ) ) {
+			return;
 		}
-		$held = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META_PENDING ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		foreach ( array_diff( $held, self::stored_pending() ) as $friend ) {
-			self::index_pending( (int) $friend, true );
+		try {
+			// Cleared before the query: a friend whose add fails after this has their meta written before the
+			// failed add, so either the query below finds them or their add sets the flag again. With referral
+			// on, the flag is absent until the first failed add and the per-request check costs one query until
+			// then; once written it is an autoloaded 0. With referral off nothing reads it.
+			self::set_reindex( false );
+			$held    = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META_PENDING ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$stored  = self::stored_pending();
+			$missing = array_diff( $held, $stored );
+			if ( $missing ) {
+				self::write_pending( array_merge( $stored, $missing ) );
+			}
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock ) );
 		}
 	}
 
@@ -781,7 +850,7 @@ class Nera_SAW_Referral {
 		if ( $post_before && 'publish' === $post_before->post_status ) {
 			return;
 		}
-		if ( ! self::has_pending_work() || ! Nera_SAW_Competition_Config::is_free( (int) $post_id ) ) {
+		if ( ! self::enabled() || ! self::has_pending_work() || ! Nera_SAW_Competition_Config::is_free( (int) $post_id ) ) {
 			return;
 		}
 		self::catch_up( array( (int) $post_id ) );
@@ -796,7 +865,7 @@ class Nera_SAW_Referral {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 			return;
 		}
-		if ( ! self::has_pending_work() || ! self::enabled() || get_transient( self::CATCH_UP ) ) {
+		if ( ! self::enabled() || ! self::has_pending_work() || get_transient( self::CATCH_UP ) ) {
 			return;
 		}
 		set_transient( self::CATCH_UP, 1, 5 * MINUTE_IN_SECONDS );
@@ -840,7 +909,8 @@ class Nera_SAW_Referral {
 	}
 
 	/**
-	 * Pay one pending friend into the first candidate that can take the bonus.
+	 * Pay one pending friend into the draw they played when it can still take the
+	 * bonus, else the first candidate that can.
 	 *
 	 * @param int   $friend     Friend's user ID.
 	 * @param int[] $candidates Competition IDs, in order of preference.
@@ -875,12 +945,8 @@ class Nera_SAW_Referral {
 				self::index_pending( $friend, false );
 				return;
 			}
-			$target = self::reserve_target( $referrer, $candidates );
+			$target = self::pay_first( $friend, $referrer, array_merge( array( $origin ), $candidates ), $origin, $log['run_id'] );
 			if ( ! $target ) {
-				return;
-			}
-			$held = self::pay( $friend, $referrer, $target, $origin, $log['run_id'] );
-			if ( $held < 1 ) {
 				return;
 			}
 			delete_user_meta( $friend, self::META_PENDING );
