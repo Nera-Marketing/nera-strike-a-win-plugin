@@ -5,8 +5,9 @@
  *
  * Lewis, 2 October: a run is a digital entry, so the checkout asks for as little as it can.
  *
- *  - BILLING: first name, last name, email, country. No street, town, postcode, phone,
- *    company or order notes (the date of birth is already taken at registration).
+ *  - BILLING: first name, last name, email and, when a setting asks for it, country (else
+ *    the United Kingdom). No street, town, postcode, phone, company or order notes (the date
+ *    of birth is already taken at registration).
  *  - COUNTRY: United Kingdom and Ireland only.
  *  - CONSENT: the one tick on Before you pay (age, terms and rules), nothing more at
  *    checkout. Since that is now the only record of the player's agreement, it is also
@@ -14,7 +15,7 @@
  *    back to Before you pay, and a submitted one is refused.
  *  - PAYMENT METHODS: Wallet only, until a provider is agreed. Which gateways show is a
  *    setting (Strike And Win -> Settings -> Checkout), so adding one later is ticking a box.
- *    The card gateway reads "Card" when it returns.
+ *    Each gateway keeps the title set for it in WooCommerce.
  *  - SPLIT PAYMENT: "Part wallet, part card" is its own value, `nera_wallet_split`, not the
  *    card gateway's `cashflows_card`, so the server can tell the two apart. It is mapped
  *    back to the card gateway for WooCommerce, and the order records that it was a split.
@@ -35,8 +36,15 @@ class Nera_SAW_Checkout {
 	/**
 	 * Settings keys.
 	 */
-	const SETTING_GATEWAYS = 'checkout_gateways';
-	const SETTING_COUPON   = 'checkout_show_coupon';
+	const SETTING_GATEWAYS  = 'checkout_gateways';
+	const SETTING_COUPON    = 'checkout_show_coupon';
+	const SETTING_COUNTRY   = 'checkout_show_country';
+	const SETTING_SHOW_LAST = 'checkout_show_last_name';
+	const SETTING_LAST      = 'checkout_last_name_required';
+	const SETTING_FACTS     = 'checkout_show_summary_facts';
+
+	/** The billing country when the checkout does not ask for one. */
+	const DEFAULT_COUNTRY = 'GB';
 
 	/**
 	 * The split-payment pseudo-gateway: its radio's value, and the settings key that shows it.
@@ -47,6 +55,15 @@ class Nera_SAW_Checkout {
 	 * The card gateway behind the split, and the one that returns by ticking its box.
 	 */
 	const CARD = 'cashflows_card';
+
+	/**
+	 * How Pay in the sheet takes a method: posted from the sheet, or on the checkout page.
+	 */
+	const MODE_POST     = 'post';
+	const MODE_CHECKOUT = 'checkout';
+
+	/** Query arg the sheet sends to the checkout page: the method chosen there. */
+	const ARG_METHOD = 'payment_method';
 
 	/**
 	 * Session key holding the consent given on Before you pay.
@@ -66,12 +83,23 @@ class Nera_SAW_Checkout {
 	/** Added to the address Before you pay is sent back to when a box was left unticked. */
 	const ARG_MISSING = 'saw_consent_missing';
 
+	/** Posted with the pay sheet's tick: the basket the sheet was drawn for. */
+	const ARG_HASH = 'saw_basket_hash';
+
 	/**
 	 * Whether this request is a split payment (set while the posted data is read).
 	 *
 	 * @var bool
 	 */
 	private static $split_posted = false;
+
+	/**
+	 * The basket's fingerprint as the checkout post found it, before the parent theme commits a
+	 * wallet share: that share changes the total, and so the cart hash, not what is bought.
+	 *
+	 * @var string|null
+	 */
+	private static $submitted_hash = null;
 
 	/**
 	 * Hooks.
@@ -88,8 +116,8 @@ class Nera_SAW_Checkout {
 		add_filter( 'woocommerce_checkout_show_terms', array( __CLASS__, 'hide_terms_tick' ), 99 );
 
 		add_filter( 'woocommerce_available_payment_gateways', array( __CLASS__, 'gateways' ), 99 );
-		add_filter( 'woocommerce_gateway_title', array( __CLASS__, 'card_title' ), 99, 2 );
 		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'map_split_payment' ), 5 );
+		add_filter( 'woocommerce_checkout_posted_data', array( __CLASS__, 'default_country' ), 10 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'record_split' ), 10, 1 );
 
 		// PayPal Payments loads its SDK and renders button containers on the checkout whether or
@@ -101,6 +129,7 @@ class Nera_SAW_Checkout {
 
 		add_action( 'template_redirect', array( __CLASS__, 'remove_coupon_prompt' ), 1 );
 		add_action( 'template_redirect', array( __CLASS__, 'require_consent' ), 15 );
+		add_action( 'woocommerce_checkout_process', array( __CLASS__, 'remember_submitted_basket' ), 1 );
 		add_action( 'woocommerce_after_checkout_validation', array( __CLASS__, 'validate_consent' ), 10, 2 );
 		add_action( 'woocommerce_checkout_order_processed', array( __CLASS__, 'forget_consent' ), 10, 0 );
 	}
@@ -120,7 +149,7 @@ class Nera_SAW_Checkout {
 	 *
 	 * @return bool
 	 */
-	private static function is_topup_cart() {
+	public static function is_topup_cart() {
 		return function_exists( 'is_wallet_rechargeable_cart' ) && is_wallet_rechargeable_cart();
 	}
 
@@ -129,7 +158,82 @@ class Nera_SAW_Checkout {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * First name, last name, email, country. Nothing else.
+	 * The competition of the basket's entry, for the per-competition checkout switches.
+	 *
+	 * @return int 0 when the basket holds none.
+	 */
+	private static function entry_competition_id() {
+		$entry = Nera_SAW_Standalone_Basket::current_entry();
+		return ( $entry && ! empty( $entry['spec']['id'] ) ) ? (int) $entry['spec']['id'] : 0;
+	}
+
+	/**
+	 * Does the checkout ask for the country? Off: no field, the billing country is DEFAULT_COUNTRY.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_country( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_COUNTRY, 'nera_saw_checkout_show_country', $competition_id );
+	}
+
+	/**
+	 * Does the checkout have a last name field? Off: no field, the order's billing last name is empty.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_last_name( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_SHOW_LAST, 'nera_saw_checkout_show_last_name', $competition_id );
+	}
+
+	/**
+	 * Is the last name a required field? Ignored while show_last_name() is off.
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function last_name_required( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_LAST, 'nera_saw_checkout_last_name_required', $competition_id );
+	}
+
+	/**
+	 * Does the pay sheet summary show its facts list (questions, timer, most this run, closes)?
+	 *
+	 * @param int $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	public static function show_summary_facts( $competition_id = 0 ) {
+		return self::switch_setting( self::SETTING_FACTS, 'nera_saw_checkout_show_summary_facts', $competition_id );
+	}
+
+	/**
+	 * An on/off setting: the global value, then the competition's override unless it inherits.
+	 *
+	 * @param string $key            Settings key, also the competition config key.
+	 * @param string $filter         Filter name; args value, competition id, global value.
+	 * @param int    $competition_id Competition product ID (0 = global setting).
+	 * @return bool
+	 */
+	private static function switch_setting( $key, $filter, $competition_id ) {
+		$s      = Nera_SAW_Constants::settings();
+		$global = ! empty( $s[ $key ] );
+		$value  = $global;
+
+		$competition_id = (int) $competition_id;
+		if ( $competition_id > 0 ) {
+			$config = Nera_SAW_Competition_Config::get( $competition_id );
+			$own    = Nera_SAW_Competition_Config::sanitize_switch_override( isset( $config[ $key ] ) ? $config[ $key ] : '' );
+			if ( '' !== $own ) {
+				$value = '1' === $own;
+			}
+		}
+
+		return (bool) apply_filters( $filter, $value, $competition_id, $global );
+	}
+
+	/**
+	 * First name, email and, when switched on, last name and country. Nothing else.
 	 *
 	 * @param array $fields Checkout fields.
 	 * @return array
@@ -138,6 +242,8 @@ class Nera_SAW_Checkout {
 		if ( ! self::is_entry_checkout() || self::is_topup_cart() || empty( $fields['billing'] ) ) {
 			return $fields;
 		}
+
+		$competition_id = self::entry_competition_id();
 
 		$keep = array(
 			'billing_first_name' => array( 10, 'form-row-first' ),
@@ -156,14 +262,36 @@ class Nera_SAW_Checkout {
 				continue;
 			}
 			$fields['billing'][ $key ]['priority'] = $layout[0];
-			$fields['billing'][ $key ]['required'] = true;
+			$fields['billing'][ $key ]['required'] = 'billing_last_name' === $key ? self::last_name_required( $competition_id ) : true;
 			// The theme's half/full-width helper classes are replaced, not added to.
 			$fields['billing'][ $key ]['class'] = array( $layout[1] );
+		}
+
+		if ( ! self::show_country( $competition_id ) ) {
+			unset( $fields['billing']['billing_country'] );
+		}
+		// Undeclared, WooCommerce neither reads a posted last name nor writes it to the customer.
+		if ( ! self::show_last_name( $competition_id ) ) {
+			unset( $fields['billing']['billing_last_name'] );
 		}
 
 		unset( $fields['shipping'], $fields['order'] );
 
 		return $fields;
+	}
+
+	/**
+	 * With no country field, the order and the customer are billed to DEFAULT_COUNTRY.
+	 *
+	 * @param array $data Posted checkout data.
+	 * @return array
+	 */
+	public static function default_country( $data ) {
+		if ( self::is_entry_checkout() && ! self::is_topup_cart() && ! self::show_country( self::entry_competition_id() ) ) {
+			$data['billing_country'] = self::DEFAULT_COUNTRY;
+		}
+
+		return $data;
 	}
 
 	/**
@@ -255,8 +383,18 @@ class Nera_SAW_Checkout {
 	 *
 	 * @return string
 	 */
-	private static function basket_hash() {
+	public static function basket_hash() {
+		if ( null !== self::$submitted_hash ) {
+			return self::$submitted_hash;
+		}
 		return ( function_exists( 'WC' ) && WC()->cart ) ? (string) WC()->cart->get_cart_hash() : '';
+	}
+
+	/**
+	 * Keeps the basket's fingerprint for the rest of the checkout post.
+	 */
+	public static function remember_submitted_basket() {
+		self::$submitted_hash = self::basket_hash();
 	}
 
 	/**
@@ -296,9 +434,16 @@ class Nera_SAW_Checkout {
 		if ( $ticked ) {
 			if ( WC()->session ) {
 				WC()->session->set( self::CONSENT_KEY, array( 'hash' => self::basket_hash(), 'at' => time() ) );
+
+				// The method chosen in the pay sheet is the one this page opens with.
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$chosen = isset( $_GET[ self::ARG_METHOD ] ) ? sanitize_key( wp_unslash( $_GET[ self::ARG_METHOD ] ) ) : '';
+				if ( '' !== $chosen && in_array( $chosen, self::enabled_gateways(), true ) ) {
+					WC()->session->set( 'chosen_payment_method', $chosen );
+				}
 			}
 			// Back to a clean address: the tick need not sit in the URL.
-			wp_safe_redirect( remove_query_arg( array( self::ARG_AGE, self::ARG_RULES, self::ARG_CHECKED ) ) );
+			wp_safe_redirect( remove_query_arg( array( self::ARG_AGE, self::ARG_RULES, self::ARG_CHECKED, self::ARG_METHOD ) ) );
 			exit;
 		}
 
@@ -311,12 +456,20 @@ class Nera_SAW_Checkout {
 
 		if ( ! self::has_consent() ) {
 			$to = Nera_SAW_Standalone_Basket::pre_payment_url();
-			if ( $to ) {
-				// A form submitted with a box unticked says why; a direct visit does not.
-				// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				if ( isset( $_GET[ self::ARG_CHECKED ] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( isset( $_GET[ self::ARG_CHECKED ] ) ) {
+				// A form submitted with a box unticked says why, on the page that has no script to.
+				if ( $to ) {
 					$to = add_query_arg( self::ARG_MISSING, '1', $to );
 				}
+			} else {
+				// A direct visit (an old link) opens the pay sheet, which takes the tick.
+				$sheet = Nera_SAW_Standalone_Basket::sheet_url();
+				if ( $sheet ) {
+					$to = $sheet;
+				}
+			}
+			if ( $to ) {
 				wp_safe_redirect( $to );
 				exit;
 			}
@@ -344,9 +497,49 @@ class Nera_SAW_Checkout {
 		if ( ! self::is_entry_checkout() || self::is_topup_cart() || null === Nera_SAW_Standalone_Basket::current_entry() ) {
 			return;
 		}
-		if ( ! self::has_consent() ) {
-			$errors->add( 'saw_consent', __( 'Please confirm your age and the rules on the previous screen before you pay.', 'nera-strikeawin' ) );
+		if ( self::has_consent() || self::posted_consent() ) {
+			return;
 		}
+		// The sheet was drawn for a basket that has changed since: the sheet redraws itself
+		// for the new one (WooCommerce prints the id as the message's data-id).
+		if ( self::posted_stale_basket() ) {
+			$errors->add( 'saw_basket_changed', __( 'Your basket has changed since this was opened. Check the new total, tick the box and pay again.', 'nera-strikeawin' ), array( 'id' => 'saw_basket_changed' ) );
+			return;
+		}
+		$errors->add( 'saw_consent', __( 'Please confirm your age and the rules on the previous screen before you pay.', 'nera-strikeawin' ) );
+	}
+
+	/**
+	 * The pay sheet's tick, posted for a basket other than the one being bought now.
+	 *
+	 * @return bool
+	 */
+	private static function posted_stale_basket() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$ticked = isset( $_POST[ self::ARG_AGE ] ) && '1' === (string) wp_unslash( $_POST[ self::ARG_AGE ] );
+		$hash   = isset( $_POST[ self::ARG_HASH ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::ARG_HASH ] ) ) : '';
+		// phpcs:enable
+		$now = self::basket_hash();
+
+		return $ticked && '' !== $hash && ! hash_equals( $now, $hash );
+	}
+
+	/**
+	 * The tick posted from the pay sheet, for the basket the sheet showed. A basket
+	 * changed since then (another tab, another add) is not the one agreed to.
+	 *
+	 * WooCommerce has checked the checkout nonce before validation runs.
+	 *
+	 * @return bool
+	 */
+	private static function posted_consent() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$ticked = isset( $_POST[ self::ARG_AGE ] ) && '1' === (string) wp_unslash( $_POST[ self::ARG_AGE ] );
+		$hash   = isset( $_POST[ self::ARG_HASH ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::ARG_HASH ] ) ) : '';
+		// phpcs:enable
+		$now = self::basket_hash();
+
+		return $ticked && '' !== $hash && '' !== $now && hash_equals( $now, $hash );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -374,6 +567,63 @@ class Nera_SAW_Checkout {
 	public static function split_enabled() {
 		$ids = self::enabled_gateways();
 		return in_array( self::SPLIT, $ids, true ) && in_array( self::CARD, $ids, true );
+	}
+
+	/**
+	 * How Pay in the sheet takes this method: `post` (the sheet posts the order and follows
+	 * WooCommerce's redirect) or `checkout` (the player goes on to the checkout page with it).
+	 *
+	 * A gateway whose payment fields hold form controls needs them filled on the page; any
+	 * other is posted. The split is posted with its wallet share chosen in the sheet, which the
+	 * parent theme's checkout commits; without that theme there is nothing to commit it, and
+	 * any other id WooCommerce does not know cannot be posted.
+	 *
+	 * @param string $gateway_id Gateway id, or the split pseudo-id.
+	 * @return string self::MODE_POST or self::MODE_CHECKOUT.
+	 */
+	public static function pay_sheet_mode( $gateway_id ) {
+		$gateway_id = sanitize_key( $gateway_id );
+		$gateways   = function_exists( 'WC' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : array();
+		$gateway    = isset( $gateways[ $gateway_id ] ) ? $gateways[ $gateway_id ] : null;
+
+		if ( self::SPLIT === $gateway_id ) {
+			$mode = function_exists( 'nera_wallet_checkout_commit_contribution' ) ? self::MODE_POST : self::MODE_CHECKOUT;
+		} elseif ( ! $gateway ) {
+			$mode = self::MODE_CHECKOUT;
+		} else {
+			$mode = self::asks_for_fields( $gateway ) ? self::MODE_CHECKOUT : self::MODE_POST;
+		}
+
+		/**
+		 * Filters how the pay sheet takes a payment method.
+		 *
+		 * @param string                  $mode       'post' or 'checkout'.
+		 * @param string                  $gateway_id Gateway id.
+		 * @param WC_Payment_Gateway|null $gateway    The gateway; null for the split.
+		 */
+		$mode = apply_filters( 'nera_saw_pay_sheet_method_mode', $mode, $gateway_id, $gateway );
+
+		return self::MODE_CHECKOUT === $mode ? self::MODE_CHECKOUT : self::MODE_POST;
+	}
+
+	/**
+	 * Does the gateway print form controls of its own (card number, bank pick, …)?
+	 * `has_fields` is no guide: some gateways set it and print only a description.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway.
+	 * @return bool
+	 */
+	private static function asks_for_fields( $gateway ) {
+		ob_start();
+		try {
+			$gateway->payment_fields();
+		} catch ( Throwable $e ) {
+			ob_end_clean();
+			return true;
+		}
+		$html = (string) ob_get_clean();
+
+		return (bool) preg_match( '/<(input|select|textarea)\b/i', $html );
 	}
 
 	/**
@@ -437,21 +687,6 @@ class Nera_SAW_Checkout {
 	}
 
 	/**
-	 * The card gateway says what it is.
-	 *
-	 * @param string $title      Title so far.
-	 * @param string $gateway_id Gateway ID.
-	 * @return string
-	 */
-	public static function card_title( $title, $gateway_id ) {
-		if ( self::CARD !== $gateway_id || is_admin() ) {
-			return $title;
-		}
-
-		return __( 'Card', 'nera-strikeawin' );
-	}
-
-	/**
 	 * Print one of the theme's split-payment parts, or nothing while it is off. The option
 	 * row's radio is given its own value so a posted split can be told from a plain card.
 	 *
@@ -477,6 +712,12 @@ class Nera_SAW_Checkout {
 				'$1' . self::SPLIT . '$2',
 				$html
 			);
+
+			// Chosen in the pay sheet: the split opens selected. It is printed after the gateways,
+			// so its tick wins over the one WooCommerce gives the first of them.
+			if ( WC()->session && self::SPLIT === WC()->session->get( 'chosen_payment_method' ) ) {
+				$html = (string) preg_replace( '/(<input\b[^>]*data-nera-wallet-radio)\b(?![^>]*\schecked)/s', '$1 checked', $html, 1 );
+			}
 		}
 
 		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the theme's own markup, with one attribute value replaced.

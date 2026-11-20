@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { api, breadcrumb } from './api.js';
 import { toBlob } from 'html-to-image';
+import { pickPluralForm, agreeNoun } from './plural.js';
 
 const props = defineProps( {
 	competitionId: { type: Number, required: true },
@@ -15,46 +16,6 @@ const props = defineProps( {
 
 const strings = ( window.NeraSAW && window.NeraSAW.strings ) || {};
 const t = ( key, fallback ) => strings[ key ] || fallback;
-
-/**
- * Russian's three plural forms (one/few/many) from a pipe-separated string —
- * identical to the client's own supplied `_plural_helper_js`
- * (languages/ru/02b-russian-strings-dev-build.json).
- */
-function ruPlural( n, forms ) {
-	const f = forms.split( '|' );
-	const m10 = n % 10;
-	const m100 = n % 100;
-	if ( m10 === 1 && m100 !== 11 ) {
-		return f[ 0 ];
-	}
-	if ( m10 >= 2 && m10 <= 4 && ( m100 < 12 || m100 > 14 ) ) {
-		return f[ 1 ];
-	}
-	return f[ 2 ];
-}
-
-/**
- * Picks the right form out of a pipe-separated plural TEMPLATE
- * (`Nera_SAW_I18n::n_template()` on the PHP side) once the actual count is
- * known — which, for several of these strings (a per-question ticket
- * reward, a running tickets total), only happens client-side as the quiz
- * runs, well after the chrome strings table is built. Two forms is English's
- * own singular/plural rule (unchanged from what `_n()` already did at these
- * call sites); three is Russian's one/few/many via `ruPlural()`. A value
- * with no `|` was never plural-packed (nothing to pick) and is returned as
- * given.
- */
-function pickPluralForm( n, template ) {
-	const f = template.split( '|' );
-	if ( f.length === 1 ) {
-		return f[ 0 ];
-	}
-	if ( f.length === 2 ) {
-		return 1 === n ? f[ 0 ] : f[ 1 ];
-	}
-	return ruPlural( n, template );
-}
 
 /**
  * Substitutes a string's placeholders from `args`, in the order each
@@ -240,6 +201,8 @@ const slotResults = ref( [] ); // [{ slot_no, outcome, spins_awarded }] — the 
 const drawDate = ref( '' );
 const drawCloses = ref( '' );
 const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
+const drawCap = ref( 0 ); // the draw's ticket cap (paid runs).
+const drawPool = ref( 0 ); // tickets earned or reserved so far in the draw (paid runs).
 const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
 const nextRunTotal = ref( 0 );
 const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
@@ -621,6 +584,24 @@ const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
 
 const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
 const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
+
+// The player's chance in a full draw and if entries closed now, as "1 in X" (X rounded up).
+// Shown only when the theme supplies the texts (window.NeraSAW.resultOdds); its ticketForms
+// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} / {pool} in the form the number needs.
+const oddsTexts = ( window.NeraSAW && window.NeraSAW.resultOdds && ! Array.isArray( window.NeraSAW.resultOdds ) ) ? window.NeraSAW.resultOdds : {};
+const fillVars = ( s, vars ) => String( s || '' ).replace( /\{(\w+)\}/g, ( m, k ) => ( k in vars ? vars[ k ] : m ) );
+const oddsRows = computed( () => {
+	const n = ticketsInDraw.value;
+	if ( ! oddsTexts.full || n < 1 || drawCap.value < 1 ) {
+		return [];
+	}
+	const oneIn = ( d ) => fillVars( oddsTexts.oneIn || '1 in {x}', { x: formatCount( Math.ceil( d / n ) ) } );
+	const rows = [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
+	if ( oddsTexts.now && drawPool.value > 0 ) {
+		rows.push( { key: 'now', label: fillVars( agreeNoun( oddsTexts.now, 'pool', drawPool.value, oddsTexts.ticketForms ), { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
+	}
+	return rows;
+} );
 
 const prefersReducedMotion = () =>
 	typeof window !== 'undefined' && window.matchMedia && window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
@@ -1781,6 +1762,8 @@ async function fetchRunComplete() {
 		drawDate.value = summary.draw_date || '';
 		drawCloses.value = summary.draw_closes || '';
 		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
+		drawCap.value = Number( summary.cap ) || 0;
+		drawPool.value = Number( summary.pool ) || 0;
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
@@ -2171,8 +2154,9 @@ onUnmounted( () => {
 			<template v-else-if="summaryReady">
 				<div v-if="hasTickets" class="saw-results__draw">
 					<div>{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div>
+					<template v-for="row in oddsRows" :key="row.key"><div class="saw-results__oddsk">{{ row.label }}</div><b class="saw-results__oddsv">{{ row.value }}</b></template><span v-if="oddsRows.length && oddsTexts.note" class="saw-results__oddsnote">{{ oddsTexts.note }}</span>
 				</div>
-				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div></div>
+				<div v-else class="saw-results__draw is-neutral">{{ t('noTicketsThisQuiz', 'No tickets from this quiz.') }}<div v-if="ticketsInDraw > 0" class="saw-results__drawsub">{{ t('ticketsInDraw', 'Your tickets in this draw') }}: <b>{{ ticketsWord( ticketsInDraw ) }}</b></div><template v-for="row in oddsRows" :key="row.key"><div class="saw-results__oddsk">{{ row.label }}</div><b class="saw-results__oddsv">{{ row.value }}</b></template><span v-if="oddsRows.length && oddsTexts.note" class="saw-results__oddsnote">{{ oddsTexts.note }}</span></div>
 			</template>
 
 			<p v-if="summaryReady && showBlock('draw_line')" class="saw-results__drawline">{{ fmt('resultDrawLine', 'Your tickets are entered in this prize draw · Live draw: {d}', drawDate || t('drawDateTbc', 'date to be confirmed')) }}</p>
@@ -2756,6 +2740,9 @@ onUnmounted( () => {
 .saw-results__draw { margin-top: 18px; padding: 14px; border-radius: 16px; border: 1px solid var(--saw-surface); font-size: 14px; line-height: 1.5; }
 .saw-results__draw b { font-size: 16px; }
 .saw-results__drawsub { margin-top: 6px; }
+.saw-results__oddsk { margin-top: 8px; }
+.saw-results__draw b.saw-results__oddsv { font-size: 22px; }
+.saw-results__oddsnote { display: block; margin-top: 8px; font-size: 12px; color: var(--saw-text-muted); }
 .saw-results__drawline { margin: 12px 0 0; font-size: 13px; color: var(--saw-text-muted); }
 .saw-results__entries, .saw-results__fine { margin-top: 16px; text-align: left; }
 .saw-results__label { margin: 0; font-size: 13px; color: var(--saw-text-muted); }

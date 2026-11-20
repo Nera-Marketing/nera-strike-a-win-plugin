@@ -1247,7 +1247,20 @@ class Nera_SAW_Run {
 		}
 		$is_free = class_exists( 'Nera_SAW_Free' ) && Nera_SAW_Run_Grants::is_free_run( $run );
 
-		return array(
+		// The draw's ticket cap and the tickets earned or reserved so far (read after minting),
+		// for a theme's chance figures on a paid result.
+		$odds = array();
+		if ( ! $is_free ) {
+			$spec = Nera_SAW_Competition_Spec::get( (int) $run->competition_id );
+			if ( $spec ) {
+				$odds = array(
+					'cap'  => (int) $spec['stock']['total'],
+					'pool' => (int) $spec['stock']['won'] + (int) $spec['stock']['reserved'],
+				);
+			}
+		}
+
+		return $odds + array(
 			'run_id'                => (int) $run_id,
 			'competition_id'        => (int) $run->competition_id,
 			'order_id'              => (int) $run->order_id,

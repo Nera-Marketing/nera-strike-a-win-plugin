@@ -214,9 +214,10 @@ Nera_SAW_Router::part(
 								<?php
 								$saw_buy_url = add_query_arg(
 									array(
-										'add-to-cart'                  => $saw_competition_id,
-										Nera_SAW_Cart_Entry::CART_KEY => $saw_key,
-										'saw_basket'                   => 1,
+										'add-to-cart'                    => $saw_competition_id,
+										Nera_SAW_Cart_Entry::CART_KEY    => $saw_key,
+										'saw_basket'                     => 1,
+										Nera_SAW_Standalone_Basket::OPEN => 1,
 									),
 									function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : get_permalink( $saw_competition_id )
 								);

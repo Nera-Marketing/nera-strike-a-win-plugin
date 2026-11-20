@@ -1,16 +1,18 @@
 /*
- * "Enter now" — confirm before leaving.
+ * "Continue" — add the entry, then open the pay sheet over the page.
  *
  * The form still posts to WooCommerce and still redirects to Before you pay. This
- * takes the same add over fetch first, so there is a moment of confirmation — a
- * toast and the site's two-note chime — instead of a blank pause while the next
- * page loads.
+ * takes the same add over fetch first, plays the site's two-note chime, and opens
+ * the pay sheet the add's response carries, so the player pays without leaving
+ * the competition page.
  *
  * Progressive enhancement, like the walkthrough:
  *   - no JavaScript, or a failed request, and the form submits normally;
  *   - the server does the same work either way, through the same validation, so
  *     basket segregation and the ceiling gate are not bypassed;
- *   - nothing here decides what was added. The response is WooCommerce's.
+ *   - nothing here decides what was added. The response is WooCommerce's, and so
+ *     is the sheet's total;
+ *   - a page with no slot for the sheet goes on to Before you pay.
  *
  * THE SOUND IS SYNTHESISED, NOT A FILE
  * The main site's chime is two sine notes built with Web Audio, so this matches it
@@ -68,26 +70,6 @@
 		}
 	}
 
-	/* ---- the toast ------------------------------------------------------- */
-
-	function toast( message ) {
-		var el = document.createElement( 'div' );
-		el.className = 'saw-toast';
-		/*
-		 * assertive, not polite: the page is about to be replaced, and a polite
-		 * region queued behind other output would be read after it has gone.
-		 */
-		el.setAttribute( 'role', 'status' );
-		el.setAttribute( 'aria-live', 'assertive' );
-		el.innerHTML =
-			'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" ' +
-			'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-			'<path d="M20 6L9 17l-5-5"></path></svg><span></span>';
-		el.querySelector( 'span' ).textContent = message;
-		document.body.appendChild( el );
-		return el;
-	}
-
 	/* ---- the add --------------------------------------------------------- */
 
 	form.addEventListener( 'submit', function ( e ) {
@@ -104,12 +86,24 @@
 
 		e.preventDefault();
 		busy = true;
+		// Captured before the buttons are disabled: a disabled button loses focus, and
+		// the sheet hands focus back to this one when it closes.
+		var opener = e.submitter || document.activeElement;
 
-		var button = form.querySelector( '.saw-cta' );
-		if ( button ) {
+		// Every Continue button (the form's and the phone bar's), not the first
+		// .saw-cta: that can be a tier's Play quiz link.
+		var buttons = Array.prototype.slice.call( form.querySelectorAll( '[data-saw-enter]' ) );
+		buttons.forEach( function ( button ) {
 			button.setAttribute( 'aria-busy', 'true' );
 			button.disabled = true;
-		}
+		} );
+		var release = function () {
+			busy = false;
+			buttons.forEach( function ( button ) {
+				button.removeAttribute( 'aria-busy' );
+				button.disabled = false;
+			} );
+		};
 
 		var body = new FormData();
 		body.append( 'product_id', product );
@@ -133,20 +127,32 @@
 				}
 
 				chime();
-				toast( cfg.added || 'Added' );
 
-				// Long enough to be seen and heard, short enough not to feel stuck.
-				window.setTimeout( function () {
+				var sheet = cfg.sheet && json.fragments ? json.fragments[ cfg.sheet ] : '';
+				var slot = sheet ? document.querySelector( cfg.sheet ) : null;
+				if ( ! slot ) {
 					window.location.href = cfg.next || form.action;
-				}, 1100 );
+					return;
+				}
+
+				// The new sheet keeps what the player typed in the last one.
+				var typed = {};
+				Array.prototype.forEach.call( slot.querySelectorAll( '[data-saw-pay-fields] [name]' ), function ( field ) {
+					typed[ field.name ] = field.value;
+				} );
+				slot.outerHTML = sheet;
+				var fresh = document.querySelector( cfg.sheet );
+				Array.prototype.forEach.call( fresh ? fresh.querySelectorAll( '[data-saw-pay-fields] [name]' ) : [], function ( field ) {
+					if ( Object.prototype.hasOwnProperty.call( typed, field.name ) ) {
+						field.value = typed[ field.name ];
+					}
+				} );
+				release();
+				document.dispatchEvent( new CustomEvent( 'saw:paysheet', { detail: { opener: opener } } ) );
 			} )
 			.catch( function () {
 				// Anything at all — submit the form for real and let the server answer.
-				busy = false;
-				if ( button ) {
-					button.removeAttribute( 'aria-busy' );
-					button.disabled = false;
-				}
+				release();
 				form.submit();
 			} );
 	} );
