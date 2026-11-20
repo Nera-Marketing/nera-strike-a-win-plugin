@@ -501,6 +501,7 @@ class Nera_SAW_Router {
 						: '',
 					'refresh' => class_exists( 'WC_AJAX' ) ? WC_AJAX::get_endpoint( 'get_refreshed_fragments' ) : '',
 					'sheet'   => class_exists( 'Nera_SAW_Standalone_Basket' ) ? Nera_SAW_Standalone_Basket::SHEET : '',
+					'login'   => class_exists( 'Nera_SAW_Standalone_Basket' ) ? Nera_SAW_Standalone_Basket::LOGIN : '',
 				)
 			);
 		}

@@ -159,6 +159,24 @@ class Nera_SAW_Standalone_Account {
 	}
 
 	/**
+	 * The section's My account page, coming back to a given address after logging
+	 * in or registering, or '' when the section has no account page.
+	 *
+	 * @param string $return_to Where to come back to; dropped unless it is inside the section.
+	 * @return string
+	 */
+	public static function login_url( $return_to ) {
+		$account_url = class_exists( 'Nera_SAW_Standalone_Pages' ) ? Nera_SAW_Standalone_Pages::url( 'my-account' ) : '';
+		if ( ! $account_url ) {
+			return '';
+		}
+		if ( '' === (string) $return_to || ! self::url_is_section( $return_to ) ) {
+			return $account_url;
+		}
+		return add_query_arg( self::RETURN_PARAM, rawurlencode( $return_to ), $account_url );
+	}
+
+	/**
 	 * Whether a URL points somewhere inside this section, so a return address
 	 * can never send a player (or an attacker crafting the query string)
 	 * off-section after logging in.

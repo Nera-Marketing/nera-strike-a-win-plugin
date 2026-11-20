@@ -56,6 +56,12 @@ class Nera_SAW_Standalone_Basket {
 	const NO_SCRIPT = 'saw_nojs';
 
 	/**
+	 * Fragment key that answers a logged-out player's add or sheet refresh with
+	 * where to sign in, in place of the sheet.
+	 */
+	const LOGIN = 'saw_login';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
@@ -73,6 +79,7 @@ class Nera_SAW_Standalone_Basket {
 		 */
 		add_action( 'wp_loaded', array( __CLASS__, 'load_basket_for_context' ), 1 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( __CLASS__, 'enforce_empty_basket' ) );
+		add_action( 'woocommerce_cart_loaded_from_session', array( __CLASS__, 'keep_newest_entry' ), 20 );
 		add_action( 'shutdown', array( __CLASS__, 'store_basket_for_context' ), 1 );
 
 		// One entry at a time is still the rule, but now only against other entries:
@@ -508,6 +515,36 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
+	 * A basket here holds one entry: after a login merges the account's saved basket
+	 * into this one, keep the entry the player chose last.
+	 *
+	 * WooCommerce merges the saved basket in front of the session's, so the session's
+	 * entry, the one the player was about to pay for, is the last one.
+	 */
+	public static function keep_newest_entry() {
+		if ( 'saw' !== self::context() || ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+
+		$contents = WC()->cart->get_cart_contents();
+		$entries  = array();
+		foreach ( $contents as $key => $item ) {
+			if ( ! empty( $item['product_id'] ) && Nera_SAW_Competition_Config::is_competition( (int) $item['product_id'] ) ) {
+				$entries[] = $key;
+			}
+		}
+		if ( count( $entries ) < 2 ) {
+			return;
+		}
+
+		array_pop( $entries );
+		foreach ( $entries as $key ) {
+			unset( $contents[ $key ] );
+		}
+		WC()->cart->set_cart_contents( $contents );
+	}
+
+	/**
 	 * Save this context's basket back at the end of the request.
 	 *
 	 * On shutdown rather than on a cart-changed hook, because a request can change
@@ -593,9 +630,13 @@ class Nera_SAW_Standalone_Basket {
 		// The competition form reaches here only when the sheet's script did not run, so
 		// it gets the no-script page. An add link (the play page's Buy a run) is followed
 		// the same way with or without script; it carries the sheet flag and opens the
-		// sheet like the competition page's Continue.
+		// sheet like the competition page's Continue; a logged-out player signs in first.
+		$to = '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$to = isset( $_GET[ self::OPEN ] ) ? self::sheet_url() : '';
+		if ( isset( $_GET[ self::OPEN ] ) ) {
+			$to = self::sheet_login_url();
+			$to = $to ? $to : self::sheet_url();
+		}
 		if ( ! $to ) {
 			$to = self::fallback_url();
 		}
@@ -926,6 +967,20 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
+	 * Where a logged-out player goes instead of the pay sheet: My account, coming back
+	 * to the sheet once signed in. '' when signed in or the basket holds no entry.
+	 *
+	 * @return string
+	 */
+	public static function sheet_login_url() {
+		if ( is_user_logged_in() || ! class_exists( 'Nera_SAW_Standalone_Account' ) ) {
+			return '';
+		}
+		$sheet = self::sheet_url();
+		return $sheet ? Nera_SAW_Standalone_Account::login_url( $sheet ) : '';
+	}
+
+	/**
 	 * Before you pay is not a step of the pay flow: links to it (the header
 	 * basket, emails, bookmarks) open the sheet over the competition instead.
 	 *
@@ -962,6 +1017,16 @@ class Nera_SAW_Standalone_Basket {
 	public static function pay_sheet_fragment( $fragments ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! isset( $_REQUEST['saw_basket'] ) || '1' !== (string) $_REQUEST['saw_basket'] || ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return $fragments;
+		}
+
+		// A sheet is only for a signed-in player. The decision is made here, after the
+		// tap, because the competition page itself is cached the same for everyone.
+		if ( ! is_user_logged_in() ) {
+			$login = self::sheet_login_url();
+			if ( $login ) {
+				$fragments[ self::LOGIN ] = $login;
+			}
 			return $fragments;
 		}
 

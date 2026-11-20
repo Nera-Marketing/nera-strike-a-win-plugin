@@ -126,6 +126,13 @@
 					throw new Error( 'refused' );
 				}
 
+				// Logged out: the entry is in the basket; sign in first, then the sheet opens.
+				var login = cfg.login && json.fragments ? json.fragments[ cfg.login ] : '';
+				if ( login ) {
+					window.location.href = login;
+					return;
+				}
+
 				chime();
 
 				var sheet = cfg.sheet && json.fragments ? json.fragments[ cfg.sheet ] : '';
