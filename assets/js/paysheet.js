@@ -340,7 +340,8 @@
 				typed.push( [ input.name, input.value ] );
 			}
 		} );
-		var method = form.querySelector( 'input[type="radio"][name="payment_method"]:checked' );
+		// A sheet whose only method is the split marks it with a hidden input, not a radio.
+		var method = form.querySelector( 'input[name="payment_method"]:checked' ) || form.querySelector( 'input[type="hidden"][name="payment_method"]' );
 		var chosen = method ? method.value : '';
 		// The split's wallet amount sits outside the fields: kept so the new sheet doesn't fall back to its suggestion.
 		var amount = form.querySelector( '[data-saw-split-amount]:enabled' );
