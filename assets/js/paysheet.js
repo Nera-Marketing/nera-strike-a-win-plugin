@@ -341,6 +341,9 @@
 		} );
 		var method = form.querySelector( 'input[type="radio"][name="payment_method"]:checked' );
 		var chosen = method ? method.value : '';
+		// The split's wallet amount sits outside the fields: kept so the new sheet doesn't fall back to its suggestion.
+		var amount = form.querySelector( '[data-saw-split-amount]:enabled' );
+		var share = amount ? amount.value : null;
 
 		var body = new FormData();
 		body.append( 'saw_basket', '1' );
@@ -373,15 +376,30 @@
 						radio.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 					}
 				} );
-				if ( next.hasAttribute( STEP ) ) {
-					step( next, 2, false );
+				var again = next.querySelector( '[data-saw-split-amount]:enabled' );
+				var row = again ? again.closest( '[data-saw-method]' ) : null;
+				var split = row ? row.querySelector( 'input[type="radio"][name="payment_method"]' ) : null;
+				if ( null !== share && split && split.checked ) {
+					again.value = share;
+					again.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 				}
 				var errors = next.querySelector( '[data-saw-pay-errors]' );
 				if ( errors ) {
 					errors.innerHTML = messages;
+				}
+				// A billing field WooCommerce names is fixed on step 1, as after any other failed Pay.
+				var named = !! errors && namesField( next, errors );
+				if ( next.hasAttribute( STEP ) ) {
+					step( next, named ? 1 : 2, false );
+				}
+				if ( errors ) {
 					errors.hidden = false;
-					errors.setAttribute( 'tabindex', '-1' );
-					errors.focus();
+					if ( named ) {
+						fieldErrors( next, errors );
+					} else {
+						errors.setAttribute( 'tabindex', '-1' );
+						errors.focus();
+					}
 				}
 			} )
 			.catch( away );
