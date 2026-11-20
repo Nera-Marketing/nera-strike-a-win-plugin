@@ -160,7 +160,8 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 	$saw_pay_guest = $saw_sheet && ! is_user_logged_in();
 
 	// The sheet's only method cannot be chosen (Wallet with too little in it): there is nothing to
-	// send, so Pay stays off while the methods show.
+	// send, so a signed-in player's Pay stays off while the methods show. A guest's Pay still goes on to the
+	// checkout page, which signs them in first.
 	$saw_pay_off = false;
 	?>
 	<form class="saw-consent" method="get" action="<?php echo esc_url( $saw_checkout ); ?>" novalidate data-saw-consent<?php echo $saw_sheet ? ' data-saw-pay-step-current="' . ( $saw_pay_guest ? '2' : '1' ) . '"' : ''; ?>>
@@ -215,7 +216,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 				<?php if ( $saw_pay_rows ) : ?>
 					<?php
 					$saw_pay_choice = count( $saw_pay_rows ) > 1;
-					$saw_pay_off    = ! $saw_pay_choice && $saw_pay_rows[0]['disabled'];
+					$saw_pay_off    = ! $saw_pay_guest && ! $saw_pay_choice && $saw_pay_rows[0]['disabled'];
 					?>
 					<<?php echo $saw_pay_choice ? 'fieldset' : 'div tabindex="-1"'; ?> class="saw-paysheet__methods" data-saw-pay-methods<?php echo $saw_pay_off ? ' data-saw-pay-off' : ''; ?>>
 						<?php if ( $saw_pay_choice ) : ?>
@@ -290,7 +291,7 @@ $saw_pp = (int) Nera_SAW_Standalone_Pages::page_id( Nera_SAW_Standalone_Basket::
 			? sprintf( $saw_cta, $saw_sum )
 			: trim( $saw_cta . ' ' . $saw_sum );
 		?>
-		<button type="submit" class="saw-cta"<?php disabled( $saw_pay_off && $saw_pay_guest ); ?>><?php echo esc_html( $saw_label ); ?></button>
+		<button type="submit" class="saw-cta"><?php echo esc_html( $saw_label ); ?></button>
 		<p class="saw-consent__msg" id="saw-consent-msg" role="alert"<?php echo $saw_missing ? '' : ' hidden'; ?>><?php esc_html_e( 'Tick the box to continue', 'nera-strikeawin' ); ?></p>
 		<?php if ( $saw_sheet ) : ?>
 			<div class="saw-paysheet__errors" data-saw-pay-errors data-saw-fallback="<?php esc_attr_e( 'Something went wrong. Please try again.', 'nera-strikeawin' ); ?>" role="alert" hidden></div>

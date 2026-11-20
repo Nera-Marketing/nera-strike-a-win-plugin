@@ -59,6 +59,8 @@
 			Array.prototype.forEach.call( document.querySelectorAll( '[data-saw-consent]' ), function ( form ) {
 				if ( form.querySelector( '[data-saw-pay-fields]' ) ) {
 					reset( form );
+					// reset() turns Pay back on; step() keeps it off on the methods of a sheet with nothing to pay with.
+					step( form, Number( form.getAttribute( STEP ) ) || 1, false );
 				}
 			} );
 		}
