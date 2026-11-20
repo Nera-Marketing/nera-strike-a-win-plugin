@@ -241,5 +241,21 @@
   "Follow [BRAND] so you don’t miss the next free competition.": "Подпишитесь на [BRAND], чтобы не пропустить следующий бесплатный конкурс.",
   "Follow on Instagram": "Instagram",
   "Join our Telegram channel": "Telegram-канал",
-  "Back to home": "На главную"
+  "Back to home": "На главную",
+  "Payment confirmed": "Оплата подтверждена",
+  "{n} quiz attempt ready to play.": "Готово к игре: {n} попытка.|Готово к игре: {n} попытки.|Готово к игре: {n} попыток.",
+  "Each quiz: {q}, {s}.": "В каждом квизе {q} {s}.",
+  "{n} question": "{n} вопрос|{n} вопроса|{n} вопросов",
+  "{n} second each": "по {n} секунде|по {n} секунды|по {n} секунд",
+  "Go to my challenge": "К моему испытанию",
+  "Email for your receipt and draw reminders": "Email для чека и напоминаний о розыгрыше",
+  "%s (optional)": "%s (необязательно)",
+  "Country": "Страна",
+  "Your Wallet Balance": "Баланс вашего кошелька",
+  "Balance after this order: %s": "Баланс после этого заказа: %s",
+  "Insufficient balance — your wallet is empty, so Wallet payment cannot be used for this order.": "Недостаточно средств — ваш кошелёк пуст, поэтому оплатить этот заказ кошельком нельзя.",
+  "Insufficient balance — your Wallet Balance of %1$s does not cover this Basket Total of %2$s.": "Недостаточно средств — баланса кошелька %1$s не хватает на сумму корзины %2$s.",
+  "Top Up Wallet": "Пополнить кошелёк",
+  "%1$s from wallet, %2$s by card": "%1$s с кошелька, %2$s картой",
+  "Your wallet credit will be used first: %1$s from wallet, %2$s to your card": "Сначала будут использованы средства кошелька: %1$s с кошелька, %2$s с карты"
 }

@@ -116,6 +116,10 @@ class Nera_SAW_Settings_Admin {
 			$checkout_gateways = array( 'wallet' );
 		}
 		$checkout_coupon = ! empty( $_POST['checkout_show_coupon'] );
+		$checkout_country   = ! empty( $_POST['checkout_show_country'] );
+		$checkout_show_last = ! empty( $_POST['checkout_show_last_name'] );
+		$checkout_last_name = ! empty( $_POST['checkout_last_name_required'] );
+		$checkout_facts     = ! empty( $_POST['checkout_show_summary_facts'] );
 
 		// Whole days, at least one; blank or nonsense falls back to the default.
 		$share_link_days = isset( $_POST['share_link_days'] ) ? (int) $_POST['share_link_days'] : Nera_SAW_Share::DEFAULT_DAYS;
@@ -161,6 +165,10 @@ class Nera_SAW_Settings_Admin {
 				'wallet_topup_max_per_day'         => $wallet_per_day,
 				'checkout_gateways'                => $checkout_gateways,
 				'checkout_show_coupon'             => $checkout_coupon,
+				'checkout_show_country'            => $checkout_country,
+				'checkout_show_last_name'          => $checkout_show_last,
+				'checkout_last_name_required'      => $checkout_last_name,
+				'checkout_show_summary_facts'      => $checkout_facts,
 				// Unticking every box posts nothing: that is an empty list, not the default.
 				'result_display'                   => Nera_SAW_Constants::sanitize_result_display( isset( $_POST['result_display'] ) ? (array) wp_unslash( $_POST['result_display'] ) : array() ),
 				'share_link_days'                  => $share_link_days,
@@ -450,7 +458,7 @@ class Nera_SAW_Settings_Admin {
 		$checkout_on = Nera_SAW_Checkout::enabled_gateways();
 		echo '<div class="saw-card">';
 		echo '<h2 class="saw-card__head">' . esc_html__( 'Checkout', 'nera-strikeawin' ) . '</h2>';
-		echo '<p class="saw-muted">' . esc_html__( 'The checkout asks for first name, last name, email and country (United Kingdom or Ireland) and nothing else; consent is the two ticks on Before you pay. Which payment methods it offers is set here: Wallet only until a payment provider is agreed. Tick a provider to bring it back. A wallet top-up is unaffected.', 'nera-strikeawin' ) . '</p>';
+		echo '<p class="saw-muted">' . esc_html__( 'The checkout asks for first name, last name and email, and a country (United Kingdom or Ireland) only when shown below, and nothing else; consent is the tick on Before you pay. Which payment methods it offers is set here: Wallet only until a payment provider is agreed. Tick a provider to bring it back. A wallet top-up is unaffected.', 'nera-strikeawin' ) . '</p>';
 		echo '<div class="saw-field-block"><strong>' . esc_html__( 'Payment methods shown', 'nera-strikeawin' ) . '</strong>';
 		$choices = array();
 		if ( function_exists( 'WC' ) && WC()->payment_gateways() ) {
@@ -472,6 +480,26 @@ class Nera_SAW_Settings_Admin {
 			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_coupon" value="1"%1$s> <span>%2$s</span></label>',
 			checked( Nera_SAW_Checkout::coupon_prompt_enabled(), true, false ),
 			esc_html__( 'Show the "Have a coupon?" prompt at checkout. Off by default; it is how a coupon prize from an offline draw is redeemed, so switch it on if you award them.', 'nera-strikeawin' )
+		);
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_country" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::show_country(), true, false ),
+			esc_html__( 'Ask for the country (United Kingdom or Ireland). Off by default: no country field, and the billing country is the United Kingdom. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+		);
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_last_name" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::show_last_name(), true, false ),
+			esc_html__( 'Show the last name field. On by default. Off: no last name field, and the order\'s billing last name is left empty (the player\'s saved last name is not changed). A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+		);
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_last_name_required" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::last_name_required(), true, false ),
+			esc_html__( 'Require the last name. Off by default: the last name is optional. Has no effect while the last name field is hidden. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
+		);
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="checkout_show_summary_facts" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Checkout::show_summary_facts(), true, false ),
+			esc_html__( 'Show the facts list in the pay sheet summary (questions, timer, most this run, closes). On by default. A competition can override this on its Strike And Win tab.', 'nera-strikeawin' )
 		);
 		echo '</div>';
 

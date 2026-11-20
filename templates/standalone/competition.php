@@ -466,5 +466,8 @@ if ( is_user_logged_in() ) {
 </article>
 </div>
 
+<?php // The pay sheet, filled from the add-to-cart response after Continue. ?>
+<div class="saw-scrim" data-saw-sheet hidden></div>
+
 <?php
 Nera_SAW_Router::part( 'footer.php' );

@@ -40,12 +40,31 @@ class Nera_SAW_Standalone_Basket {
 	const ROUTE = 'before-you-pay';
 
 	/**
+	 * The pay sheet's slot on the competition page, and its fragment key.
+	 */
+	const SHEET = 'div[data-saw-sheet]';
+
+	/**
+	 * Query flag that opens the pay sheet when the competition page loads.
+	 */
+	const OPEN = 'saw_pay';
+
+	/**
+	 * Query flag that keeps Before you pay as a page: the sheet needs script, and
+	 * this is where a player without it (or whose sheet failed to load) pays.
+	 */
+	const NO_SCRIPT = 'saw_nojs';
+
+	/**
 	 * Hooks.
 	 */
 	public static function init() {
 		if ( ! Nera_SAW_Mode::is_standalone() ) {
 			return;
 		}
+
+		// Same priority as the checkout's consent check, which sends here too.
+		add_action( 'template_redirect', array( __CLASS__, 'open_sheet_instead' ), 15 );
 
 		/*
 		 * The two baskets. Priority 1 on wp_loaded, because WC_Cart_Session hydrates
@@ -68,6 +87,9 @@ class Nera_SAW_Standalone_Basket {
 		add_filter( 'woocommerce_is_order_received_page', array( __CLASS__, 'declare_order_received' ) );
 		add_filter( 'woocommerce_get_order_item_totals', array( __CLASS__, 'plain_payment_row' ), 20, 1 );
 		add_filter( 'woocommerce_get_checkout_url', array( __CLASS__, 'checkout_url_for_entries' ) );
+
+		// Continue on the competition page opens the pay sheet from the add's own response.
+		add_filter( 'woocommerce_add_to_cart_fragments', array( __CLASS__, 'pay_sheet_fragment' ) );
 
 		// The checkout form says which basket it is for, so the submission does not
 		// have to be inferred from a referer that does not survive being re-rendered.
@@ -561,13 +583,22 @@ class Nera_SAW_Standalone_Basket {
 	}
 
 	/**
-	 * Send an add-to-cart to Before you pay.
+	 * Where an add-to-cart that left the page goes: the pay sheet when the add asked
+	 * for it, else Before you pay.
 	 *
 	 * @param string $url Where WooCommerce was going.
 	 * @return string
 	 */
 	public static function redirect_after_add( $url ) {
-		$to = self::pre_payment_url();
+		// The competition form reaches here only when the sheet's script did not run, so
+		// it gets the no-script page. An add link (the play page's Buy a run) is followed
+		// the same way with or without script; it carries the sheet flag and opens the
+		// sheet like the competition page's Continue.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$to = isset( $_GET[ self::OPEN ] ) ? self::sheet_url() : '';
+		if ( ! $to ) {
+			$to = self::fallback_url();
+		}
 		return $to ? $to : $url;
 	}
 
@@ -700,7 +731,12 @@ class Nera_SAW_Standalone_Basket {
 		$ajax = ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() )
 			|| ! empty( $_GET['wc-ajax'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		return $ajax && null !== self::current_entry() && self::basket_is_only_entries();
+		// Without script the checkout form posts to the page itself, and WooCommerce
+		// takes the order on wp_loaded, before the page is known.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$placing = isset( $_POST['woocommerce_checkout_place_order'] ) && 'saw' === self::context();
+
+		return ( $ajax || $placing ) && null !== self::current_entry() && self::basket_is_only_entries();
 	}
 
 	/**
@@ -859,6 +895,455 @@ class Nera_SAW_Standalone_Basket {
 	 */
 	public static function pre_payment_url() {
 		return Nera_SAW_Standalone_Pages::url( self::ROUTE );
+	}
+
+	/**
+	 * Before you pay as a page, for a player the sheet cannot open for.
+	 *
+	 * @return string '' while the page is missing.
+	 */
+	public static function fallback_url() {
+		$url = self::pre_payment_url();
+		return $url ? add_query_arg( self::NO_SCRIPT, '1', $url ) : '';
+	}
+
+	/**
+	 * The entry's competition page with the pay sheet open, or '' when the basket
+	 * holds no entry (empty, or a wallet top-up).
+	 *
+	 * @return string
+	 */
+	public static function sheet_url() {
+		if ( Nera_SAW_Checkout::is_topup_cart() ) {
+			return '';
+		}
+		$entry = self::current_entry();
+		if ( ! $entry || empty( $entry['spec']['id'] ) ) {
+			return '';
+		}
+		$url = Nera_SAW_Router::competition_url( '', $entry['spec']['id'] );
+		return $url ? add_query_arg( self::OPEN, '1', $url ) : '';
+	}
+
+	/**
+	 * Before you pay is not a step of the pay flow: links to it (the header
+	 * basket, emails, bookmarks) open the sheet over the competition instead.
+	 *
+	 * Not for a visit sent back for a missing tick, nor the no-script fallback.
+	 */
+	public static function open_sheet_instead() {
+		if ( is_admin() || ! function_exists( 'is_page' ) || ! is_page() ) {
+			return;
+		}
+		$id = Nera_SAW_Standalone_Pages::page_id( self::ROUTE );
+		if ( ! $id || (int) $id !== (int) get_queried_object_id() ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET[ self::NO_SCRIPT ] ) || isset( $_GET[ Nera_SAW_Checkout::ARG_MISSING ] ) ) {
+			return;
+		}
+		$to = self::sheet_url();
+		if ( $to ) {
+			wp_safe_redirect( $to );
+			exit;
+		}
+	}
+
+	/**
+	 * The pay sheet, drawn into the section's add-to-cart response.
+	 *
+	 * Only there: the response is never cached, so the basket total and the
+	 * account's billing values never reach a cached competition page.
+	 *
+	 * @param array $fragments Selector => HTML.
+	 * @return array
+	 */
+	public static function pay_sheet_fragment( $fragments ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_REQUEST['saw_basket'] ) || '1' !== (string) $_REQUEST['saw_basket'] || ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return $fragments;
+		}
+
+		// The add has not been totalled yet in this request.
+		WC()->cart->calculate_totals();
+
+		ob_start();
+		echo '<div class="saw-scrim" data-saw-sheet hidden>';
+		Nera_SAW_Router::part(
+			'parts/paysheet.php',
+			array(
+				'saw_entry' => self::current_entry(),
+				'saw_sheet' => true,
+			)
+		);
+		echo '</div>';
+		$fragments[ self::SHEET ] = ob_get_clean();
+
+		return $fragments;
+	}
+
+	/**
+	 * The gateway the pay sheet preselects: the first method it offers that can be used.
+	 *
+	 * @param array[]|null $rows pay_sheet_rows(), when the caller has them already.
+	 * @return string
+	 */
+	public static function pay_sheet_gateway( $rows = null ) {
+		$rows = null === $rows ? self::pay_sheet_rows() : $rows;
+		foreach ( $rows as $row ) {
+			if ( ! $row['disabled'] ) {
+				return $row['id'];
+			}
+		}
+		return $rows ? $rows[0]['id'] : '';
+	}
+
+	/**
+	 * The methods the pay sheet offers: every method ticked for the section checkout that
+	 * WooCommerce has switched on, in the settings' order, with "Part wallet, part card"
+	 * only while the split is on.
+	 *
+	 * Switched on rather than available: availability depends on the basket and balance at
+	 * the moment, and the checkout reports that when Pay is pressed.
+	 *
+	 * @return array Method id => plain label.
+	 */
+	public static function pay_sheet_methods() {
+		if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways() ) {
+			return array();
+		}
+
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		$methods  = array();
+		foreach ( Nera_SAW_Checkout::enabled_gateways() as $id ) {
+			if ( Nera_SAW_Checkout::SPLIT === $id ) {
+				if ( Nera_SAW_Checkout::split_enabled() ) {
+					$methods[ $id ] = __( 'Part wallet, part card', 'nera-strikeawin' );
+				}
+				continue;
+			}
+			if ( ! isset( $gateways[ $id ] ) || 'yes' !== $gateways[ $id ]->enabled ) {
+				continue;
+			}
+
+			$title = self::plain_label( $gateways[ $id ]->get_title() );
+			if ( '' === $title ) {
+				$title = trim( wp_strip_all_tags( (string) $gateways[ $id ]->get_method_title() ) );
+			}
+			$methods[ $id ] = '' !== $title ? $title : $id;
+		}
+
+		return $methods;
+	}
+
+	/**
+	 * The pay sheet's method rows, in pay_sheet_methods() order. The one place that decides
+	 * which method can be chosen and the wallet figures the rows show; the sheet part and its
+	 * script only draw and follow it.
+	 *
+	 * @return array[] Each: id, title (plain), icon (SVG), brand (gateway icon HTML), info (HTML,
+	 *                 shown under the chosen row), disabled (bool), note (HTML, why it cannot be
+	 *                 chosen), mode (Nera_SAW_Checkout::pay_sheet_mode()), amount (split only, with
+	 *                 the parent theme: the wallet share's value, max, basket, money format and the
+	 *                 parent's two amount errors; else null).
+	 */
+	public static function pay_sheet_rows() {
+		$methods = self::pay_sheet_methods();
+		if ( ! $methods ) {
+			return array();
+		}
+
+		$gateways = WC()->payment_gateways()->payment_gateways();
+		$wallet   = self::pay_sheet_wallet();
+		$rows     = array();
+		foreach ( $methods as $id => $title ) {
+			$gateway = isset( $gateways[ $id ] ) ? $gateways[ $id ] : null;
+			$row     = array(
+				'id'       => (string) $id,
+				'title'    => $title,
+				'icon'     => self::method_icon( 'card' ),
+				'brand'    => $gateway ? wp_kses_post( (string) $gateway->get_icon() ) : '',
+				'info'     => '',
+				'disabled' => false,
+				'note'     => '',
+				'mode'     => Nera_SAW_Checkout::pay_sheet_mode( $id ),
+				'amount'   => null,
+			);
+
+			if ( Nera_SAW_Checkout::SPLIT === $id ) {
+				// The parent offers the split only while the balance covers the basket; with the
+				// parent absent the split stays as the settings have it.
+				if ( '' !== $wallet['state'] && 'optional' !== $wallet['state'] ) {
+					continue;
+				}
+				$row['icon'] = self::method_icon( 'wallet' );
+				$row['info'] = self::wallet_line( $wallet['balance'] );
+				if ( '' !== $wallet['state'] ) {
+					// The amount the parent's checkout suggests first: half of what the wallet can cover.
+					$part         = floor( $wallet['max'] * 50 ) / 100;
+					$row['info'] .= '<p data-saw-split="line">' . sprintf(
+						/* translators: 1: amount from the wallet, 2: amount charged to the card */
+						esc_html__( '%1$s from wallet, %2$s by card', 'nera-strikeawin' ),
+						'<strong data-saw-split="part">' . wc_price( $part ) . '</strong>',
+						'<strong data-saw-split="rest">' . wc_price( max( 0, $wallet['basket'] - $part ) ) . '</strong>'
+					) . '</p>';
+					// The errors are the parent's notices word for word, so the sheet can tell them apart.
+					$row['amount'] = array(
+						'value'  => $part,
+						'max'    => $wallet['max'],
+						'basket' => $wallet['basket'],
+						'money'  => array(
+							'symbol'   => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+							'format'   => html_entity_decode( get_woocommerce_price_format(), ENT_QUOTES, 'UTF-8' ),
+							'decimals' => (int) wc_get_price_decimals(),
+							'dsep'     => wc_get_price_decimal_separator(),
+							'tsep'     => wc_get_price_thousand_separator(),
+						),
+						'errors' => array(
+							'zero'  => __( 'Choose a wallet amount greater than zero, or pay by card.', 'nera-competitions' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+							'whole' => __( 'That covers the whole order — please select Wallet payment instead.', 'nera-competitions' ), // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+						),
+					);
+				}
+			} elseif ( 'wallet' === $id ) {
+				$row['icon'] = self::method_icon( 'wallet' );
+				if ( $wallet['balance'] < $wallet['basket'] || $wallet['balance'] <= 0 ) {
+					$row['disabled'] = true;
+					$row['note']     = '<p>' . ( $wallet['balance'] <= 0
+						? esc_html__( 'Insufficient balance — your wallet is empty, so Wallet payment cannot be used for this order.', 'nera-strikeawin' )
+						: sprintf(
+							/* translators: 1: wallet balance, 2: basket total */
+							esc_html__( 'Insufficient balance — your Wallet Balance of %1$s does not cover this Basket Total of %2$s.', 'nera-strikeawin' ),
+							'<strong>' . wc_price( $wallet['balance'] ) . '</strong>',
+							'<strong>' . wc_price( $wallet['basket'] ) . '</strong>'
+						) ) . '</p>';
+					$topup = self::wallet_topup_url();
+					if ( '' !== $topup ) {
+						$row['note'] .= '<p><a href="' . esc_url( $topup ) . '">' . esc_html__( 'Top Up Wallet', 'nera-strikeawin' ) . '</a></p>';
+					}
+				} else {
+					$row['info'] = self::wallet_line( $wallet['balance'] ) . '<p>' . sprintf(
+						/* translators: %s: wallet balance left once this order is paid */
+						esc_html__( 'Balance after this order: %s', 'nera-strikeawin' ),
+						'<strong>' . wc_price( $wallet['balance'] - $wallet['basket'] ) . '</strong>'
+					) . '</p>';
+				}
+			} elseif ( $gateway ) {
+				$custom = function_exists( 'nera_cashflow_card_gateway_ids' ) && function_exists( 'nera_cashflow_use_custom_info' ) && function_exists( 'nera_cashflow_card_description' )
+					&& in_array( $id, (array) nera_cashflow_card_gateway_ids(), true ) && nera_cashflow_use_custom_info();
+				$row['info'] = $custom
+					? wpautop( esc_html( nera_cashflow_card_description() ) )
+					: wpautop( wp_kses_post( (string) $gateway->get_description() ) );
+			}
+
+			$rows[] = $row;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * What the sheet says above the methods when the wallet pays first whatever is chosen
+	 * (the parent's auto-deduct state), else ''.
+	 *
+	 * @return string HTML.
+	 */
+	public static function pay_sheet_notice() {
+		$wallet = self::pay_sheet_wallet();
+		if ( 'forced' !== $wallet['state'] ) {
+			return '';
+		}
+
+		return '<p>' . sprintf(
+			/* translators: 1: amount from the wallet, 2: amount charged to the card */
+			esc_html__( 'Your wallet credit will be used first: %1$s from wallet, %2$s to your card', 'nera-strikeawin' ),
+			'<strong>' . wc_price( $wallet['contribution'] ) . '</strong>',
+			'<strong>' . wc_price( $wallet['remainder'] ) . '</strong>'
+		) . '</p>';
+	}
+
+	/**
+	 * The wallet figures for this basket: the parent theme's state when it is there, else the
+	 * wallet plugin's balance against the basket ('' state).
+	 *
+	 * @return array{state:string, balance:float, basket:float, max:float, contribution:float, remainder:float}
+	 */
+	public static function pay_sheet_wallet() {
+		if ( function_exists( 'nera_wallet_partial_state' ) ) {
+			$s = nera_wallet_partial_state();
+			return array(
+				'state'        => (string) $s['state'],
+				'balance'      => (float) $s['balance'],
+				'basket'       => (float) $s['basket'],
+				'max'          => (float) $s['max'],
+				'contribution' => (float) $s['contribution'],
+				'remainder'    => (float) $s['remainder'],
+			);
+		}
+
+		$balance = function_exists( 'woo_wallet' ) && is_user_logged_in() ? (float) woo_wallet()->wallet->get_wallet_balance( get_current_user_id(), 'edit' ) : 0.0;
+		$basket  = function_exists( 'get_woowallet_cart_total' ) ? (float) get_woowallet_cart_total() : (float) WC()->cart->get_total( 'edit' );
+
+		return array(
+			'state'        => '',
+			'balance'      => $balance,
+			'basket'       => $basket,
+			'max'          => (float) min( max( 0, $balance ), $basket ),
+			'contribution' => 0.0,
+			'remainder'    => $basket,
+		);
+	}
+
+	/**
+	 * Where the player tops up the wallet, as the parent's checkout links it; '' when top-ups are off.
+	 *
+	 * @return string
+	 */
+	public static function wallet_topup_url() {
+		if ( ! apply_filters( 'woo_wallet_is_enable_top_up', true ) ) {
+			return '';
+		}
+		return add_query_arg( 'action', 'add', wc_get_account_endpoint_url( 'woo-wallet' ) );
+	}
+
+	/**
+	 * "Your Wallet Balance £x".
+	 *
+	 * @param float $balance Balance.
+	 * @return string HTML.
+	 */
+	private static function wallet_line( $balance ) {
+		return '<p>' . esc_html__( 'Your Wallet Balance', 'nera-strikeawin' ) . ' <strong>' . wc_price( $balance ) . '</strong></p>';
+	}
+
+	/**
+	 * A method row's icon. Inline: the sheet loads no icon font.
+	 *
+	 * @param string $kind 'wallet' or 'card'.
+	 * @return string SVG.
+	 */
+	private static function method_icon( $kind ) {
+		$path = 'wallet' === $kind
+			? '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18v3"/><path d="M3 7.5V17a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H5.5A2.5 2.5 0 0 1 3 7.5z"/><circle cx="16" cy="13.5" r="1.2"/>'
+			: '<rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 15h4"/>';
+
+		return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . $path . '</svg>';
+	}
+
+	/**
+	 * The signed-in player's billing values, for the fields the section checkout asks for.
+	 *
+	 * @return array Field name => value; empty for a visitor.
+	 */
+	public static function pay_sheet_billing() {
+		if ( ! is_user_logged_in() || ! function_exists( 'WC' ) ) {
+			return array();
+		}
+
+		$user     = wp_get_current_user();
+		$customer = WC()->customer;
+		$values   = array(
+			'billing_first_name' => $customer ? $customer->get_billing_first_name() : '',
+			'billing_last_name'  => $customer ? $customer->get_billing_last_name() : '',
+			'billing_email'      => $customer ? $customer->get_billing_email() : '',
+			'billing_country'    => $customer ? $customer->get_billing_country() : '',
+		);
+
+		// A player who never checked out has no billing name or email yet; the account's own stand in.
+		$fallback = array(
+			'billing_first_name' => $user->first_name,
+			'billing_last_name'  => $user->last_name,
+			'billing_email'      => $user->user_email,
+		);
+		foreach ( $fallback as $key => $value ) {
+			if ( '' === (string) $values[ $key ] ) {
+				$values[ $key ] = (string) $value;
+			}
+		}
+
+		return $values;
+	}
+
+	/**
+	 * The billing fields the pay sheet shows, prefilled from pay_sheet_billing().
+	 *
+	 * Field names are WooCommerce's, so Pay posts them to the checkout as they are.
+	 *
+	 * @param int $competition_id The basket entry's competition.
+	 * @return array[] Each: name, label, type (text|email|select), value, required, autocomplete, options (select only).
+	 */
+	public static function pay_sheet_fields( $competition_id ) {
+		$values = self::pay_sheet_billing();
+		$last   = Nera_SAW_Checkout::last_name_required( $competition_id );
+		$fields = array(
+			array(
+				'name'         => 'billing_first_name',
+				'label'        => __( 'First name', 'nera-strikeawin' ),
+				'type'         => 'text',
+				'required'     => true,
+				'autocomplete' => 'given-name',
+			),
+			array(
+				'name'         => 'billing_last_name',
+				/* translators: %s: field label */
+				'label'        => $last ? __( 'Last name', 'nera-strikeawin' ) : sprintf( __( '%s (optional)', 'nera-strikeawin' ), __( 'Last name', 'nera-strikeawin' ) ),
+				'type'         => 'text',
+				'required'     => $last,
+				'autocomplete' => 'family-name',
+			),
+			array(
+				'name'         => 'billing_email',
+				'label'        => __( 'Email for your receipt and draw reminders', 'nera-strikeawin' ),
+				'type'         => 'email',
+				'required'     => true,
+				'autocomplete' => 'email',
+			),
+		);
+
+		if ( ! Nera_SAW_Checkout::show_last_name( $competition_id ) ) {
+			$fields = array_values( array_filter( $fields, function ( $field ) {
+				return 'billing_last_name' !== $field['name'];
+			} ) );
+		}
+
+		if ( Nera_SAW_Checkout::show_country( $competition_id ) && function_exists( 'WC' ) && WC()->countries ) {
+			$fields[] = array(
+				'name'         => 'billing_country',
+				'label'        => __( 'Country', 'nera-strikeawin' ),
+				'type'         => 'select',
+				'required'     => true,
+				'autocomplete' => 'country',
+				'options'      => WC()->countries->get_allowed_countries(),
+			);
+		}
+
+		// The sheet checks the fields before anything is sent, so it shows WooCommerce's own
+		// words for the same faults, built the way WC_Checkout::validate_posted_data() builds them.
+		$wc_fields = ( function_exists( 'WC' ) && WC()->checkout() ) ? WC()->checkout()->get_checkout_fields( 'billing' ) : array();
+
+		foreach ( $fields as $i => $field ) {
+			$fields[ $i ]['value'] = isset( $values[ $field['name'] ] ) ? (string) $values[ $field['name'] ] : '';
+			if ( 'select' === $field['type'] && ! isset( $field['options'][ $fields[ $i ]['value'] ] ) ) {
+				$fields[ $i ]['value'] = Nera_SAW_Checkout::DEFAULT_COUNTRY;
+			}
+
+			/* translators: %s: field name */
+			$label = sprintf( _x( 'Billing %s', 'checkout-validation', 'woocommerce' ), isset( $wc_fields[ $field['name'] ]['label'] ) ? $wc_fields[ $field['name'] ]['label'] : $field['label'] );
+			$bold  = '<strong>' . esc_html( $label ) . '</strong>';
+			$plain = function ( $html ) {
+				return html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' );
+			};
+
+			$fields[ $i ]['errors'] = array(
+				/* translators: %s: field name */
+				'required' => $plain( apply_filters( 'woocommerce_checkout_required_field_notice', sprintf( __( '%s is a required field.', 'woocommerce' ), $bold ), $label, $field['name'] ) ),
+				/* translators: %s: email address */
+				'email'    => 'email' === $field['type'] ? $plain( sprintf( __( '%s is not a valid email address.', 'woocommerce' ), $bold ) ) : '',
+			);
+		}
+
+		return $fields;
 	}
 
 	/**
