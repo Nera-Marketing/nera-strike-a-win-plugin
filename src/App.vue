@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import { api, breadcrumb } from './api.js';
 import { toBlob } from 'html-to-image';
+import { pickPluralForm, agreeNoun } from './plural.js';
 
 const props = defineProps( {
 	competitionId: { type: Number, required: true },
@@ -15,46 +16,6 @@ const props = defineProps( {
 
 const strings = ( window.NeraSAW && window.NeraSAW.strings ) || {};
 const t = ( key, fallback ) => strings[ key ] || fallback;
-
-/**
- * Russian's three plural forms (one/few/many) from a pipe-separated string —
- * identical to the client's own supplied `_plural_helper_js`
- * (languages/ru/02b-russian-strings-dev-build.json).
- */
-function ruPlural( n, forms ) {
-	const f = forms.split( '|' );
-	const m10 = n % 10;
-	const m100 = n % 100;
-	if ( m10 === 1 && m100 !== 11 ) {
-		return f[ 0 ];
-	}
-	if ( m10 >= 2 && m10 <= 4 && ( m100 < 12 || m100 > 14 ) ) {
-		return f[ 1 ];
-	}
-	return f[ 2 ];
-}
-
-/**
- * Picks the right form out of a pipe-separated plural TEMPLATE
- * (`Nera_SAW_I18n::n_template()` on the PHP side) once the actual count is
- * known — which, for several of these strings (a per-question ticket
- * reward, a running tickets total), only happens client-side as the quiz
- * runs, well after the chrome strings table is built. Two forms is English's
- * own singular/plural rule (unchanged from what `_n()` already did at these
- * call sites); three is Russian's one/few/many via `ruPlural()`. A value
- * with no `|` was never plural-packed (nothing to pick) and is returned as
- * given.
- */
-function pickPluralForm( n, template ) {
-	const f = template.split( '|' );
-	if ( f.length === 1 ) {
-		return f[ 0 ];
-	}
-	if ( f.length === 2 ) {
-		return 1 === n ? f[ 0 ] : f[ 1 ];
-	}
-	return ruPlural( n, template );
-}
 
 /**
  * Substitutes a string's placeholders from `args`, in the order each
@@ -625,7 +586,8 @@ const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document 
 const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
 
 // The player's chance in a full draw and if entries closed now, as "1 in X" (X rounded up).
-// Shown only when the theme supplies the texts (window.NeraSAW.resultOdds).
+// Shown only when the theme supplies the texts (window.NeraSAW.resultOdds); its ticketForms
+// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} / {pool} in the form the number needs.
 const oddsTexts = ( window.NeraSAW && window.NeraSAW.resultOdds && ! Array.isArray( window.NeraSAW.resultOdds ) ) ? window.NeraSAW.resultOdds : {};
 const fillVars = ( s, vars ) => String( s || '' ).replace( /\{(\w+)\}/g, ( m, k ) => ( k in vars ? vars[ k ] : m ) );
 const oddsRows = computed( () => {
@@ -634,9 +596,9 @@ const oddsRows = computed( () => {
 		return [];
 	}
 	const oneIn = ( d ) => fillVars( oddsTexts.oneIn || '1 in {x}', { x: formatCount( Math.ceil( d / n ) ) } );
-	const rows = [ { key: 'full', label: fillVars( oddsTexts.full, { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
+	const rows = [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
 	if ( oddsTexts.now && drawPool.value > 0 ) {
-		rows.push( { key: 'now', label: fillVars( oddsTexts.now, { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
+		rows.push( { key: 'now', label: fillVars( agreeNoun( oddsTexts.now, 'pool', drawPool.value, oddsTexts.ticketForms ), { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
 	}
 	return rows;
 } );
