@@ -661,6 +661,12 @@
 				return r.ok ? r.json() : Promise.reject( new Error( r.status ) );
 			} )
 			.then( function ( json ) {
+				// Logged out: sign in first, then come back here with the sheet open.
+				var login = cfg.login && json && json.fragments ? json.fragments[ cfg.login ] : '';
+				if ( login ) {
+					window.location.replace( login );
+					return;
+				}
 				var html = json && json.fragments ? json.fragments[ cfg.sheet ] : '';
 				var slot = html ? document.querySelector( cfg.sheet ) : null;
 				if ( ! slot ) {
