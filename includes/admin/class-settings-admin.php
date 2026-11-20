@@ -125,6 +125,10 @@ class Nera_SAW_Settings_Admin {
 		$share_link_days = isset( $_POST['share_link_days'] ) ? (int) $_POST['share_link_days'] : Nera_SAW_Share::DEFAULT_DAYS;
 		$share_link_days = $share_link_days >= 1 ? $share_link_days : Nera_SAW_Share::DEFAULT_DAYS;
 
+		// Whole friends, at least one; blank or nonsense falls back to the default.
+		$referral_cap = isset( $_POST['referral_cap'] ) ? (int) $_POST['referral_cap'] : Nera_SAW_Referral::CAP_DEFAULT;
+		$referral_cap = $referral_cap >= 1 ? $referral_cap : Nera_SAW_Referral::CAP_DEFAULT;
+
 		$tiers = array();
 		foreach ( (array) ( $_POST['tier'] ?? array() ) as $row ) {
 			$key = isset( $row['key'] ) ? sanitize_key( $row['key'] ) : '';
@@ -174,6 +178,8 @@ class Nera_SAW_Settings_Admin {
 				'share_link_days'                  => $share_link_days,
 				'social_instagram_url'             => isset( $_POST['social_instagram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_instagram_url'] ) ) ) : '',
 				'social_telegram_url'              => isset( $_POST['social_telegram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_telegram_url'] ) ) ) : '',
+				'referral_enabled'                 => empty( $_POST['referral_enabled'] ) ? 0 : 1,
+				'referral_cap'                     => $referral_cap,
 				'tiers'              => $tiers,
 			)
 		);
@@ -560,6 +566,24 @@ class Nera_SAW_Settings_Admin {
 			'<label class="saw-field"><span>%s</span><input type="number" name="share_link_days" min="1" step="1" value="%d"></label>',
 			esc_html__( 'Link lives for (days)', 'nera-strikeawin' ),
 			(int) Nera_SAW_Share::days()
+		);
+		echo '</div>';
+		echo '</div>';
+
+		// --- Referral card -------------------------------------------------
+		echo '<div class="saw-card">';
+		echo '<h2 class="saw-card__head">' . esc_html__( 'Referral', 'nera-strikeawin' ) . '</h2>';
+		printf(
+			'<label class="saw-field saw-field--check"><input type="checkbox" name="referral_enabled" value="1"%1$s> <span>%2$s</span></label>',
+			checked( Nera_SAW_Referral::enabled(), true, false ),
+			esc_html__( 'Give players a personal link that rewards friends who join', 'nera-strikeawin' )
+		);
+		echo '<p class="saw-muted">' . esc_html__( 'A friend counts once they have created an account through the link, verified their email and finished the free quiz. The player and the friend then each get one bonus ticket in that free competition. Off: no link is shown and nothing is rewarded.', 'nera-strikeawin' ) . '</p>';
+		echo '<div class="saw-field-row">';
+		printf(
+			'<label class="saw-field"><span>%s</span><input type="number" name="referral_cap" min="1" step="1" value="%d"></label>',
+			esc_html__( 'Most friends rewarded per player in each free competition', 'nera-strikeawin' ),
+			(int) Nera_SAW_Referral::cap()
 		);
 		echo '</div>';
 		echo '</div>';

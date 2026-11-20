@@ -275,6 +275,8 @@ class Nera_SAW_Frontend {
 			'competition'        => $quiz_competition,
 			// The free result's follow box (each link only when set) and its Back to home.
 			'social'             => Nera_SAW_Constants::social_urls(),
+			// The free result's bonus challenge card: the player's personal link and rewarded friends.
+			'referral'           => self::referral_data( ! empty( $quiz_competition['is_free'] ), $competition_id ),
 			'homeUrl'            => esc_url_raw( class_exists( 'Nera_SAW_Router' ) && Nera_SAW_Mode::is_standalone() ? Nera_SAW_Router::url() : home_url( '/' ) ),
 			// "Back to competitions" on the results screen — the section's own list
 			// in standalone; the main shop page in mix, where there is no equivalent
@@ -474,6 +476,7 @@ class Nera_SAW_Frontend {
 				'sharePlayFree'      => Nera_SAW_I18n::t( 'Play free at' ),
 				'shareAge'           => Nera_SAW_I18n::t( '18+ · Skill-based prize competitions' ),
 				'shareText'          => Nera_SAW_I18n::t( 'I scored {r}/{n} on [BRAND]. Can you beat my score?' ),
+				'inviteText'         => Nera_SAW_I18n::t( 'I scored {r}/10 on the free Strike & Win quiz. Can you beat my score?' ),
 				// Free competition result and its story card.
 				'shareFreeKicker'    => Nera_SAW_I18n::t( 'Free quiz' ),
 				'shareFreeFor'       => Nera_SAW_I18n::t( 'Free competition' ),
@@ -491,6 +494,24 @@ class Nera_SAW_Frontend {
 				'followInstagram'    => Nera_SAW_I18n::t( 'Follow on Instagram' ),
 				'followTelegram'     => Nera_SAW_I18n::t( 'Join our Telegram channel' ),
 				'backToHome'         => Nera_SAW_I18n::t( 'Back to home' ),
+				// Free result: bonus challenge (invite friends) card.
+				'invKicker'          => Nera_SAW_I18n::t( 'Bonus challenge' ),
+				'invTitle'           => Nera_SAW_I18n::t( 'Invite {n} friends. Earn up to {n} extra tickets.' ),
+				'invSub'             => Nera_SAW_I18n::t( 'And your friends get a bonus ticket too.' ),
+				'invYou'             => Nera_SAW_I18n::t( 'You get' ),
+				'invFriend'          => Nera_SAW_I18n::t( 'Your friend gets' ),
+				'invUnit'            => Nera_SAW_I18n::t( 'Bonus ticket' ),
+				'invProg'            => Nera_SAW_I18n::t( '{x} / {m} friends rewarded' ),
+				'invLeft'            => Nera_SAW_I18n::t( '{n} bonus tickets still available' ),
+				'invLeft1'           => Nera_SAW_I18n::t( '1 bonus ticket still available' ),
+				'invLeft0'           => Nera_SAW_I18n::t( 'All bonus tickets earned' ),
+				'invSlot'            => Nera_SAW_I18n::t( 'Friend {n}' ),
+				'invHow'             => Nera_SAW_I18n::t( 'Your friend joins, verifies their email and completes the free quiz. You both receive a bonus ticket once eligible.' ),
+				'invGo'              => Nera_SAW_I18n::t( 'Invite friends now' ),
+				'invLink'            => Nera_SAW_I18n::t( 'Your personal link' ),
+				'invShare'           => Nera_SAW_I18n::t( 'Share' ),
+				'invCopy'            => self::t_as( 'Copy link (invite card)', 'Copy link' ),
+				'invCopied'          => Nera_SAW_I18n::t( 'Copied' ),
 			),
 		);
 
@@ -917,6 +938,32 @@ class Nera_SAW_Frontend {
 		return array(
 			'logo'  => esc_url_raw( (string) ( $card['logo'] ?? '' ) ),
 			'brand' => (string) ( $card['brand'] ?? Nera_SAW_Brand::name() ),
+		);
+	}
+
+	/**
+	 * Data for the free result's bonus challenge card; `enabled` 0 hides it.
+	 *
+	 * @param bool $is_free        Whether the competition is the free one.
+	 * @param int  $competition_id The free competition just played; `rewarded` counts there.
+	 * @return array{enabled:int,cap?:int,rewarded?:int,link?:string}
+	 */
+	private static function referral_data( $is_free, $competition_id ) {
+		$user_id = get_current_user_id();
+		if ( ! $is_free || ! $user_id || ! class_exists( 'Nera_SAW_Referral' ) || ! Nera_SAW_Referral::enabled() ) {
+			return array( 'enabled' => 0 );
+		}
+		// link() creates the player's code on first use, so it is only called when the card shows.
+		$link = Nera_SAW_Referral::link( $user_id );
+		if ( '' === $link ) {
+			return array( 'enabled' => 0 );
+		}
+		$cap = Nera_SAW_Referral::cap();
+		return array(
+			'enabled'  => 1,
+			'cap'      => $cap,
+			'rewarded' => min( $cap, Nera_SAW_Referral::rewarded_count( $user_id, (int) $competition_id ) ),
+			'link'     => esc_url_raw( $link ),
 		);
 	}
 

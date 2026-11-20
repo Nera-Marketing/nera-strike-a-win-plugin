@@ -162,6 +162,13 @@ class Nera_SAW_Account_Pages {
 					$user_id
 				)
 			);
+			if ( class_exists( 'Nera_SAW_Referral' ) ) {
+				foreach ( Nera_SAW_Referral::bonus_by_competition( $user_id ) as $cid => $n ) {
+					if ( 'lty_lottery_finished' !== get_post_meta( $cid, 'lty_lottery_status', true ) ) {
+						$cache[ $user_id ] += $n;
+					}
+				}
+			}
 		}
 		return $cache[ $user_id ];
 	}

@@ -26,7 +26,7 @@ class Nera_SAW_Free_Review {
 	/**
 	 * Review reasons, in the order they are stored.
 	 */
-	const REASONS = array( 'ip', 'device' );
+	const REASONS = array( 'ip', 'device', 'ref' );
 
 	/**
 	 * Hooks.
@@ -98,7 +98,7 @@ class Nera_SAW_Free_Review {
 	/**
 	 * A stored reason list plus new reasons, de-duplicated, in fixed order.
 	 *
-	 * @param string $stored  Stored value ('', 'ip', 'device', 'ip,device').
+	 * @param string $stored  Stored value: '' or a comma list of REASONS ('ref' = same IP as the referrer).
 	 * @param array  $reasons Reasons to add.
 	 * @return string
 	 */
@@ -114,15 +114,21 @@ class Nera_SAW_Free_Review {
 	 * @return string
 	 */
 	public static function label( $review ) {
-		switch ( (string) $review ) {
-			case 'ip':
-				return __( 'Same IP', 'nera-strikeawin' );
-			case 'device':
-				return __( 'Same device', 'nera-strikeawin' );
-			case 'ip,device':
-				return __( 'Same IP and device', 'nera-strikeawin' );
+		$parts  = '' === (string) $review ? array() : explode( ',', (string) $review );
+		$ip     = in_array( 'ip', $parts, true );
+		$device = in_array( 'device', $parts, true );
+		$out    = array();
+		if ( $ip && $device ) {
+			$out[] = __( 'Same IP and device', 'nera-strikeawin' );
+		} elseif ( $ip ) {
+			$out[] = __( 'Same IP', 'nera-strikeawin' );
+		} elseif ( $device ) {
+			$out[] = __( 'Same device', 'nera-strikeawin' );
 		}
-		return '';
+		if ( in_array( 'ref', $parts, true ) ) {
+			$out[] = __( 'Same IP as referrer', 'nera-strikeawin' );
+		}
+		return implode( ' · ', $out );
 	}
 
 	/**

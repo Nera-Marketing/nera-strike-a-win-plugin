@@ -25,7 +25,8 @@ consequences live in [docs/adr/](docs/adr/).
 2. **Tickets are minted only by `Nera_SAW_Ticket_Award` at run finalize.** Purchase
    must never mint. `Nera_SAW_Integrations` actively blocks LFW from doing so; if a
    change makes tickets appear at checkout, that is a compliance failure, not a bug
-   to smooth over.
+   to smooth over. The one other mint is the referral bonus, at the referred
+   friend's free-run finalize ([ADR 0040](docs/adr/0040-referral-bonus-tickets-are-minted-at-the-friends-finalize.md)).
 3. **The answer key never leaves the server.** `serve_slot()` returns a question
    without its correct option; scoring happens in `submit_answer()`.
 4. **The server owns every clock.** Deadlines are stamped server-side and scored

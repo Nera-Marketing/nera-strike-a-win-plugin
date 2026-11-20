@@ -228,6 +228,9 @@ class Nera_SAW_Constants {
 			// Follow links on the free result and My tickets (site-wide; empty hides the button).
 			'social_instagram_url'             => '',
 			'social_telegram_url'              => '',
+			// Referral (Nera_SAW_Referral): off until go-live; lifetime rewarded friends per player.
+			'referral_enabled'                 => 0,
+			'referral_cap'                     => 5,
 			'tiers'              => array(
 				array( 'key' => 'standard', 'label' => 'Standard', 'price' => 5.0,  'multiplier' => 1,  'ceiling' => 0 ),
 				array( 'key' => 'premium',  'label' => 'Premium',  'price' => 25.0, 'multiplier' => 10, 'ceiling' => 0 ),
