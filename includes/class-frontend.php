@@ -493,6 +493,7 @@ class Nera_SAW_Frontend {
 				'freeFollowSub'      => Nera_SAW_I18n::t( 'Follow [BRAND] so you don’t miss the next free competition.' ),
 				'followInstagram'    => Nera_SAW_I18n::t( 'Follow on Instagram' ),
 				'followTelegram'     => Nera_SAW_I18n::t( 'Join our Telegram channel' ),
+				'followFacebook'     => Nera_SAW_I18n::t( 'Follow on Facebook' ),
 				'backToHome'         => Nera_SAW_I18n::t( 'Back to home' ),
 				// Free result: bonus challenge (invite friends) card.
 				'invKicker'          => Nera_SAW_I18n::t( 'Bonus challenge' ),

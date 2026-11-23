@@ -2154,12 +2154,13 @@ onUnmounted( () => {
 					</div>
 				</section>
 
-				<section v-if="social.instagram || social.telegram" class="saw-fres__follow">
+				<section v-if="social.instagram || social.telegram || social.facebook" class="saw-fres__follow">
 					<h2 class="saw-fres__h">{{ t('freeFollowTitle', 'More free prizes are coming.') }}</h2>
 					<p class="saw-fres__sub">{{ t('freeFollowSub', 'Follow us so you don’t miss the next free competition.') }}</p>
 					<div class="saw-fres__fbtns">
 						<a v-if="social.instagram" class="saw-fres__fbtn" :href="social.instagram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /></svg>{{ t('followInstagram', 'Follow on Instagram') }}</a>
 						<a v-if="social.telegram" class="saw-fres__fbtn" :href="social.telegram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 3.5L2.5 10.8l6.2 2.3 2.4 6.4 3.4-4.2 5.3 3.9z" /></svg>{{ t('followTelegram', 'Join our Telegram channel') }}</a>
+						<a v-if="social.facebook" class="saw-fres__fbtn" :href="social.facebook" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>{{ t('followFacebook', 'Follow on Facebook') }}</a>
 					</div>
 				</section>
 

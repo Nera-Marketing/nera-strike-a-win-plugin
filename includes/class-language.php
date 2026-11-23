@@ -2108,6 +2108,8 @@ class Nera_SAW_Language {
 				'Help and support'      => 'Помощь и поддержка',
 				'Our commitment to player protection'
 					=> 'Наши обязательства по защите игроков',
+				// Settings, Follow links card.
+				'Facebook URL'          => 'Ссылка на Facebook',
 			);
 		}
 
