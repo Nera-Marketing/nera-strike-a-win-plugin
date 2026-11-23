@@ -306,6 +306,10 @@ let holdAdvance = null; // closure that advances past the reveal (button or time
 // Reactive: the template's disabled states (options, Submit) depend on it, so a
 // plain let would only repaint by luck, whenever some other ref happened to change.
 const locked = ref( false );
+// Tap-through guard (selectOption()): when the current question went on screen, and
+// when the latest press on the answers began (page clock, ms).
+let questionShownAt = 0;
+let answerPressAt = -1;
 let navGuardActive = false;
 let navListenersBound = false;
 let historyTrapDepth = 0;
@@ -406,14 +410,16 @@ function stopPing() {
 	}
 }
 
-// Resume the run, then re-read the live question so its clock is the server's.
-async function resumeThen( slotNo ) {
+// Resume the run and carry on from the screen the player is on: the question keeps the
+// seconds it has left and a reveal its hold (onLeaveStay()). Reloading the slot here would
+// put an answered question back on screen, or give a live one a fresh full timer.
+async function resumeThen() {
 	try {
 		await api.resumeRun( runId.value );
 	} catch ( e ) {
 		return fail( e );
 	}
-	return loadSlot( slotNo );
+	startPing();
 }
 
 // Tab regained focus: ask the server, once, whether anything actually
@@ -437,7 +443,7 @@ async function checkAfterReturn() {
 			if ( leave ) {
 				await proceedLeave( toEnd );
 			} else {
-				await resumeThen( slot.slot_no );
+				await resumeThen();
 			}
 		}
 		// Neither: nothing lapsed, continue exactly as if nothing happened.
@@ -783,7 +789,9 @@ function startHold( state ) {
 
 function resumeHold() {
 	clearHoldTicker();
-	if ( phase.value !== 'reveal' || ! holdAdvance ) {
+	// A question that times out behind the Leave dialog starts a new reveal; it must wait
+	// for Stay too, or every later question would be served and lapse behind the dialog.
+	if ( phase.value !== 'reveal' || ! holdAdvance || leaveDialogOpen.value ) {
 		return;
 	}
 	holdTicker = setInterval( () => {
@@ -1615,6 +1623,7 @@ async function loadSlot( slotNo ) {
 	pendingJust = null;
 
 	phase.value = 'question';
+	questionShownAt = performance.now();
 	startCountdown();
 }
 
@@ -1638,8 +1647,29 @@ function startCountdown() {
 // it immediately, and the reveal (screen 27) is the same layout with colours and a
 // banked-line applied, not a new screen. selectedAnswer is kept only for the
 // brief "submitting" highlight between click and the server's reply.
-function selectOption( index ) {
+function eventTime( e ) {
+	// Some engines stamp events with epoch time instead of the page clock.
+	return e.timeStamp > 1e12 ? e.timeStamp - performance.timeOrigin : e.timeStamp;
+}
+
+// Recorded on the window in the capture phase: during the reveal the answer's spot
+// may be covered (the flying ticket) or the answer disabled, and that press must
+// still count.
+function noteAnswerPress( e ) {
+	answerPressAt = eventTime( e );
+}
+
+function selectOption( index, e ) {
 	if ( locked.value || submitting.value ) {
+		return;
+	}
+	// Tap-through: the click ends a press whose finger came down before this question
+	// was on screen (on the reveal, or on the previous question's answer in the same
+	// spot), so the player never saw what it answers. Keyboard clicks (detail 0) and
+	// clicks with no recorded press have no press to judge and count.
+	const pressAt = answerPressAt;
+	answerPressAt = -1;
+	if ( e && e.detail > 0 && pressAt >= 0 && pressAt < questionShownAt ) {
 		return;
 	}
 	selectedAnswer.value = index;
@@ -1868,6 +1898,8 @@ function pickLanguage( code ) {
 }
 
 onMounted( () => {
+	window.addEventListener( 'pointerdown', noteAnswerPress, true );
+	window.addEventListener( 'touchstart', noteAnswerPress, { capture: true, passive: true } );
 	if ( hasLanguageChoice && ! props.resume && ! props.leaveNow ) {
 		// Screen 24: the player picks before anything is drawn, so the run itself
 		// is created in the chosen language — see pickLanguage() -> start(). No
@@ -1879,6 +1911,8 @@ onMounted( () => {
 	start();
 } );
 onUnmounted( () => {
+	window.removeEventListener( 'pointerdown', noteAnswerPress, true );
+	window.removeEventListener( 'touchstart', noteAnswerPress, true );
 	clearTicker();
 	stopCountUp();
 	removeTicketFly();
@@ -1980,7 +2014,7 @@ onUnmounted( () => {
 							:class="optionClass(a)"
 							:disabled="locked || submitting"
 							:aria-pressed="selectedAnswer === a.index"
-							@click="selectOption(a.index)"
+							@click="selectOption(a.index, $event)"
 						><em aria-hidden="true">{{ 'ABCDEFGHIJ'.charAt(i) }}</em>{{ a.text }}</button>
 					</div>
 				</div>
