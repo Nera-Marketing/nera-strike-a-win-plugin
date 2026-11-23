@@ -202,7 +202,6 @@ const drawDate = ref( '' );
 const drawCloses = ref( '' );
 const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
 const drawCap = ref( 0 ); // the draw's ticket cap (paid runs).
-const drawPool = ref( 0 ); // tickets earned or reserved so far in the draw (paid runs).
 const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
 const nextRunTotal = ref( 0 );
 const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
@@ -591,9 +590,9 @@ const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
 const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
 const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
 
-// The player's chance in a full draw and if entries closed now, as "1 in X" (X rounded up).
+// The player's chance in a full draw, as "1 in X" (X rounded up).
 // Shown only when the theme supplies the texts (window.NeraSAW.resultOdds); its ticketForms
-// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} / {pool} in the form the number needs.
+// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} in the form the number needs.
 const oddsTexts = ( window.NeraSAW && window.NeraSAW.resultOdds && ! Array.isArray( window.NeraSAW.resultOdds ) ) ? window.NeraSAW.resultOdds : {};
 const fillVars = ( s, vars ) => String( s || '' ).replace( /\{(\w+)\}/g, ( m, k ) => ( k in vars ? vars[ k ] : m ) );
 const oddsRows = computed( () => {
@@ -602,11 +601,7 @@ const oddsRows = computed( () => {
 		return [];
 	}
 	const oneIn = ( d ) => fillVars( oddsTexts.oneIn || '1 in {x}', { x: formatCount( Math.ceil( d / n ) ) } );
-	const rows = [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
-	if ( oddsTexts.now && drawPool.value > 0 ) {
-		rows.push( { key: 'now', label: fillVars( agreeNoun( oddsTexts.now, 'pool', drawPool.value, oddsTexts.ticketForms ), { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
-	}
-	return rows;
+	return [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
 } );
 
 const prefersReducedMotion = () =>
@@ -1793,7 +1788,6 @@ async function fetchRunComplete() {
 		drawCloses.value = summary.draw_closes || '';
 		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
 		drawCap.value = Number( summary.cap ) || 0;
-		drawPool.value = Number( summary.pool ) || 0;
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
