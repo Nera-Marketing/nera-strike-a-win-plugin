@@ -699,18 +699,31 @@ class Nera_SAW_Run {
 			}
 			$slot          = $by_no[ $slot_no ];
 			$snapshot      = self::ensure_slot_snapshot( $slot );
+			$options       = $snapshot ? (array) $snapshot['answers'] : array();
 			$correct_index = $snapshot ? (int) $snapshot['correct_index'] : -1;
 			$chosen_index  = isset( $a['chosen_index'] ) ? (int) $a['chosen_index'] : -1;
-			$correct       = ( $chosen_index === $correct_index );
+			// -1 is the client's "time ran out"; an index outside the snapshot is no answer either.
+			$has_choice    = $chosen_index >= 0 && isset( $options[ $chosen_index ] );
+			$correct       = ( $has_choice && $chosen_index === $correct_index );
 			$awarded       = $correct ? (int) $slot->reward_base * $multiplier : 0;
+
+			if ( $correct ) {
+				$outcome = 'correct';
+			} elseif ( $has_choice ) {
+				$outcome = 'wrong';
+			} else {
+				$outcome = 'timeout';
+			}
 
 			self::update_slot(
 				$slot->id,
 				array(
 					'answered_at'   => $now,
 					'chosen_index'  => $chosen_index,
+					'chosen_text'   => $has_choice ? (string) $options[ $chosen_index ]['text'] : null,
+					'correct_text'  => isset( $options[ $correct_index ] ) ? (string) $options[ $correct_index ]['text'] : null,
 					'is_correct'    => $correct ? 1 : 0,
-					'outcome'       => $correct ? 'correct' : 'wrong',
+					'outcome'       => $outcome,
 					'spins_awarded' => $awarded,
 				)
 			);
