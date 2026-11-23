@@ -662,7 +662,8 @@
 			} )
 			.then( function ( json ) {
 				// Logged out: sign in first, then come back here with the sheet open.
-				var login = cfg.login && json && json.fragments ? json.fragments[ cfg.login ] : '';
+				// A page cached before the key was printed still gets the login redirect.
+				var login = json && json.fragments ? json.fragments[ cfg.login || 'saw_login' ] : '';
 				if ( login ) {
 					window.location.replace( login );
 					return;

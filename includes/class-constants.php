@@ -162,16 +162,17 @@ class Nera_SAW_Constants {
 	}
 
 	/**
-	 * Follow links for the free result and My tickets: Instagram and Telegram,
-	 * '' when not set.
+	 * Follow links for the free result and My tickets: Instagram, Telegram and
+	 * Facebook, '' when not set.
 	 *
-	 * @return array{instagram: string, telegram: string}
+	 * @return array{instagram: string, telegram: string, facebook: string}
 	 */
 	public static function social_urls() {
 		$settings = self::settings();
 		return array(
 			'instagram' => esc_url_raw( (string) ( $settings['social_instagram_url'] ?? '' ) ),
 			'telegram'  => esc_url_raw( (string) ( $settings['social_telegram_url'] ?? '' ) ),
+			'facebook'  => esc_url_raw( (string) ( $settings['social_facebook_url'] ?? '' ) ),
 		);
 	}
 
@@ -228,6 +229,7 @@ class Nera_SAW_Constants {
 			// Follow links on the free result and My tickets (site-wide; empty hides the button).
 			'social_instagram_url'             => '',
 			'social_telegram_url'              => '',
+			'social_facebook_url'              => '',
 			// Referral (Nera_SAW_Referral): off until go-live; lifetime rewarded friends per player.
 			'referral_enabled'                 => 0,
 			'referral_cap'                     => 5,

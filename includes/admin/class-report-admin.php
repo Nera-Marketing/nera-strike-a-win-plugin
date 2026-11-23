@@ -389,6 +389,7 @@ class Nera_SAW_Report_Admin {
 
 		$answered   = 0;
 		foreach ( $slots as $s ) {
+			list( $s->chosen_text, $s->correct_text ) = self::answer_texts( $s );
 			if ( null !== $s->chosen_text && '' !== (string) $s->chosen_text ) {
 				$answered++;
 			}
@@ -683,6 +684,33 @@ class Nera_SAW_Report_Admin {
 			$sum += (int) $s->spins_awarded;
 		}
 		return $sum;
+	}
+
+	/**
+	 * A slot's chosen and correct answer text. Slots completed through submit-all
+	 * before it stored the texts hold only chosen_index, so the texts are read
+	 * from the slot's question snapshot.
+	 *
+	 * @param object $s Slot row.
+	 * @return array{0: ?string, 1: ?string} Chosen text, correct text.
+	 */
+	private static function answer_texts( $s ) {
+		$chosen  = isset( $s->chosen_text ) ? $s->chosen_text : null;
+		$correct = isset( $s->correct_text ) ? $s->correct_text : null;
+		if ( ( null !== $chosen && '' !== (string) $chosen ) || empty( $s->question_snapshot ) ) {
+			return array( $chosen, $correct );
+		}
+		$snap    = json_decode( $s->question_snapshot, true );
+		$options = ( is_array( $snap ) && ! empty( $snap['answers'] ) ) ? (array) $snap['answers'] : array();
+		$idx     = ( isset( $s->chosen_index ) && is_numeric( $s->chosen_index ) ) ? (int) $s->chosen_index : -1;
+		if ( $idx >= 0 && isset( $options[ $idx ]['text'] ) ) {
+			$chosen = (string) $options[ $idx ]['text'];
+		}
+		$ci = isset( $snap['correct_index'] ) ? (int) $snap['correct_index'] : -1;
+		if ( ( null === $correct || '' === (string) $correct ) && isset( $options[ $ci ]['text'] ) ) {
+			$correct = (string) $options[ $ci ]['text'];
+		}
+		return array( $chosen, $correct );
 	}
 
 	/**

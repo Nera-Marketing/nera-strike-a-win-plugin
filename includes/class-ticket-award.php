@@ -214,7 +214,7 @@ class Nera_SAW_Ticket_Award {
 			// holds the same way via Nera_LTY_Async_Prepick::cleanup_holds().)
 			self::release_holds( $competition_id, $picked );
 		} finally {
-			if ( false !== $lock_token ) {
+			if ( is_string( $lock_token ) ) {
 				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
 			}
 		}
@@ -286,7 +286,7 @@ class Nera_SAW_Ticket_Award {
 				$product->update_post_meta( 'lty_ticket_count', (int) $product->get_lty_ticket_count() + count( $picked ) );
 			}
 		} finally {
-			if ( false !== $lock_token ) {
+			if ( is_string( $lock_token ) ) {
 				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
 			}
 		}
@@ -351,7 +351,7 @@ class Nera_SAW_Ticket_Award {
 				}
 			}
 		} finally {
-			if ( false !== $lock_token ) {
+			if ( is_string( $lock_token ) ) {
 				Nera_LTY_Async_Locks::release( $competition_id, $lock_token );
 			}
 		}
@@ -608,12 +608,12 @@ class Nera_SAW_Ticket_Award {
 	 * clean one down.
 	 *
 	 * @param int $competition_id Product ID.
-	 * @return string|false Lock token, or false if the async plugin is absent or
-	 *                       every attempt lost the race.
+	 * @return string|false|null Lock token; null when the async plugin (and so the
+	 *                            lock) is absent; false when every attempt lost the race.
 	 */
 	private static function acquire_mint_lock( $competition_id ) {
 		if ( ! class_exists( 'Nera_LTY_Async_Locks' ) ) {
-			return false;
+			return null;
 		}
 		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
 			$token = Nera_LTY_Async_Locks::acquire( $competition_id );

@@ -178,6 +178,7 @@ class Nera_SAW_Settings_Admin {
 				'share_link_days'                  => $share_link_days,
 				'social_instagram_url'             => isset( $_POST['social_instagram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_instagram_url'] ) ) ) : '',
 				'social_telegram_url'              => isset( $_POST['social_telegram_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_telegram_url'] ) ) ) : '',
+				'social_facebook_url'              => isset( $_POST['social_facebook_url'] ) ? esc_url_raw( trim( wp_unslash( $_POST['social_facebook_url'] ) ) ) : '',
 				'referral_enabled'                 => empty( $_POST['referral_enabled'] ) ? 0 : 1,
 				'referral_cap'                     => $referral_cap,
 				'tiers'              => $tiers,
@@ -436,6 +437,11 @@ class Nera_SAW_Settings_Admin {
 			'<label class="saw-field"><span>%1$s</span><input type="url" name="social_telegram_url" value="%2$s" placeholder="https://"></label>',
 			esc_html__( 'Telegram URL', 'nera-strikeawin' ),
 			esc_attr( $social['telegram'] )
+		);
+		printf(
+			'<label class="saw-field"><span>%1$s</span><input type="url" name="social_facebook_url" value="%2$s" placeholder="https://"></label>',
+			esc_html__( 'Facebook URL', 'nera-strikeawin' ),
+			esc_attr( $social['facebook'] )
 		);
 		echo '</div>';
 

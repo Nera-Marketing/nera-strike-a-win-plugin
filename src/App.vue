@@ -202,7 +202,6 @@ const drawDate = ref( '' );
 const drawCloses = ref( '' );
 const ticketsInDraw = ref( 0 ); // the player's live tickets on this competition after this run.
 const drawCap = ref( 0 ); // the draw's ticket cap (paid runs).
-const drawPool = ref( 0 ); // tickets earned or reserved so far in the draw (paid runs).
 const nextRunNo = ref( 0 ); // "Play quiz 2 of 6": 0 when the tier has no run left.
 const nextRunTotal = ref( 0 );
 const summaryReady = ref( false ); // the run summary has arrived: the draw line and actions use its data.
@@ -306,6 +305,12 @@ let holdAdvance = null; // closure that advances past the reveal (button or time
 // Reactive: the template's disabled states (options, Submit) depend on it, so a
 // plain let would only repaint by luck, whenever some other ref happened to change.
 const locked = ref( false );
+// Tap-through guard (selectOption()): when the current question went on screen, when
+// the latest press on the answers began, and when that press lifted (page clock, ms).
+let questionShownAt = 0;
+let answerPressAt = -1;
+let answerLiftAt = -1;
+const LIFT_EVENTS = [ 'pointerup', 'pointercancel', 'touchend', 'touchcancel' ];
 let navGuardActive = false;
 let navListenersBound = false;
 let historyTrapDepth = 0;
@@ -406,14 +411,16 @@ function stopPing() {
 	}
 }
 
-// Resume the run, then re-read the live question so its clock is the server's.
-async function resumeThen( slotNo ) {
+// Resume the run and carry on from the screen the player is on: the question keeps the
+// seconds it has left and a reveal its hold (onLeaveStay()). Reloading the slot here would
+// put an answered question back on screen, or give a live one a fresh full timer.
+async function resumeThen() {
 	try {
 		await api.resumeRun( runId.value );
 	} catch ( e ) {
 		return fail( e );
 	}
-	return loadSlot( slotNo );
+	startPing();
 }
 
 // Tab regained focus: ask the server, once, whether anything actually
@@ -437,7 +444,7 @@ async function checkAfterReturn() {
 			if ( leave ) {
 				await proceedLeave( toEnd );
 			} else {
-				await resumeThen( slot.slot_no );
+				await resumeThen();
 			}
 		}
 		// Neither: nothing lapsed, continue exactly as if nothing happened.
@@ -585,9 +592,9 @@ const showBlock = ( key ) => resultDisplay.indexOf( key ) !== -1;
 const formatCount = ( n ) => Number( n || 0 ).toLocaleString( ( typeof document !== 'undefined' && document.documentElement.lang ) || undefined );
 const ticketsWord = ( n ) => fmt( 'ticketsCount', '{n} ticket|{n} tickets', n, { n: formatCount( n ) } );
 
-// The player's chance in a full draw and if entries closed now, as "1 in X" (X rounded up).
+// The player's chance in a full draw, as "1 in X" (X rounded up).
 // Shown only when the theme supplies the texts (window.NeraSAW.resultOdds); its ticketForms
-// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} / {pool} in the form the number needs.
+// ("ticket|tickets", Russian one|few|many) puts the noun after {cap} in the form the number needs.
 const oddsTexts = ( window.NeraSAW && window.NeraSAW.resultOdds && ! Array.isArray( window.NeraSAW.resultOdds ) ) ? window.NeraSAW.resultOdds : {};
 const fillVars = ( s, vars ) => String( s || '' ).replace( /\{(\w+)\}/g, ( m, k ) => ( k in vars ? vars[ k ] : m ) );
 const oddsRows = computed( () => {
@@ -596,11 +603,7 @@ const oddsRows = computed( () => {
 		return [];
 	}
 	const oneIn = ( d ) => fillVars( oddsTexts.oneIn || '1 in {x}', { x: formatCount( Math.ceil( d / n ) ) } );
-	const rows = [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
-	if ( oddsTexts.now && drawPool.value > 0 ) {
-		rows.push( { key: 'now', label: fillVars( agreeNoun( oddsTexts.now, 'pool', drawPool.value, oddsTexts.ticketForms ), { pool: formatCount( drawPool.value ) } ), value: oneIn( drawPool.value ) } );
-	}
-	return rows;
+	return [ { key: 'full', label: fillVars( agreeNoun( oddsTexts.full, 'cap', drawCap.value, oddsTexts.ticketForms ), { cap: formatCount( drawCap.value ) } ), value: oneIn( drawCap.value ) } ];
 } );
 
 const prefersReducedMotion = () =>
@@ -783,7 +786,9 @@ function startHold( state ) {
 
 function resumeHold() {
 	clearHoldTicker();
-	if ( phase.value !== 'reveal' || ! holdAdvance ) {
+	// A question that times out behind the Leave dialog starts a new reveal; it must wait
+	// for Stay too, or every later question would be served and lapse behind the dialog.
+	if ( phase.value !== 'reveal' || ! holdAdvance || leaveDialogOpen.value ) {
 		return;
 	}
 	holdTicker = setInterval( () => {
@@ -1615,6 +1620,7 @@ async function loadSlot( slotNo ) {
 	pendingJust = null;
 
 	phase.value = 'question';
+	questionShownAt = performance.now();
 	startCountdown();
 }
 
@@ -1638,8 +1644,44 @@ function startCountdown() {
 // it immediately, and the reveal (screen 27) is the same layout with colours and a
 // banked-line applied, not a new screen. selectedAnswer is kept only for the
 // brief "submitting" highlight between click and the server's reply.
-function selectOption( index ) {
+function eventTime( e ) {
+	// Some engines stamp events with epoch time instead of the page clock.
+	return e.timeStamp > 1e12 ? e.timeStamp - performance.timeOrigin : e.timeStamp;
+}
+
+// Recorded on the window in the capture phase: during the reveal the answer's spot
+// may be covered (the flying ticket) or the answer disabled, and that press must
+// still count. Presses elsewhere (Leave, Stay, the page) are not answer presses, so a
+// later click with no press of its own (assistive tech) is not judged against them.
+function noteAnswerPress( e ) {
+	if ( ! ( e.target instanceof Element ) || ! e.target.closest( '.saw-answers' ) ) {
+		return;
+	}
+	answerPressAt = eventTime( e );
+	answerLiftAt = -1;
+}
+
+function noteAnswerLift( e ) {
+	if ( answerPressAt >= 0 && answerLiftAt < 0 ) {
+		answerLiftAt = eventTime( e );
+	}
+}
+
+function selectOption( index, e ) {
 	if ( locked.value || submitting.value ) {
+		return;
+	}
+	// Tap-through: the click ends a press whose finger came down before this question
+	// was on screen (on the reveal, or on the previous question's answer in the same
+	// spot), so the player never saw what it answers. Keyboard clicks (detail 0) and
+	// clicks with no recorded press have no press to judge and count. A press that
+	// lifted before the question showed is over: this click is not its tap.
+	const pressAt = answerPressAt;
+	const liftAt = answerLiftAt;
+	answerPressAt = -1;
+	answerLiftAt = -1;
+	const liftedBefore = liftAt >= 0 && liftAt < questionShownAt;
+	if ( e && e.detail > 0 && pressAt >= 0 && pressAt < questionShownAt && ! liftedBefore ) {
 		return;
 	}
 	selectedAnswer.value = index;
@@ -1763,7 +1805,6 @@ async function fetchRunComplete() {
 		drawCloses.value = summary.draw_closes || '';
 		ticketsInDraw.value = Number( summary.tickets_in_draw ) || 0;
 		drawCap.value = Number( summary.cap ) || 0;
-		drawPool.value = Number( summary.pool ) || 0;
 		nextRunNo.value = Number( summary.next_run_no ) || 0;
 		nextRunTotal.value = Number( summary.next_run_total ) || 0;
 		summaryReady.value = true;
@@ -1868,6 +1909,11 @@ function pickLanguage( code ) {
 }
 
 onMounted( () => {
+	window.addEventListener( 'pointerdown', noteAnswerPress, true );
+	window.addEventListener( 'touchstart', noteAnswerPress, { capture: true, passive: true } );
+	for ( const type of LIFT_EVENTS ) {
+		window.addEventListener( type, noteAnswerLift, { capture: true, passive: true } );
+	}
 	if ( hasLanguageChoice && ! props.resume && ! props.leaveNow ) {
 		// Screen 24: the player picks before anything is drawn, so the run itself
 		// is created in the chosen language — see pickLanguage() -> start(). No
@@ -1879,6 +1925,11 @@ onMounted( () => {
 	start();
 } );
 onUnmounted( () => {
+	window.removeEventListener( 'pointerdown', noteAnswerPress, true );
+	window.removeEventListener( 'touchstart', noteAnswerPress, true );
+	for ( const type of LIFT_EVENTS ) {
+		window.removeEventListener( type, noteAnswerLift, true );
+	}
 	clearTicker();
 	stopCountUp();
 	removeTicketFly();
@@ -1980,7 +2031,7 @@ onUnmounted( () => {
 							:class="optionClass(a)"
 							:disabled="locked || submitting"
 							:aria-pressed="selectedAnswer === a.index"
-							@click="selectOption(a.index)"
+							@click="selectOption(a.index, $event)"
 						><em aria-hidden="true">{{ 'ABCDEFGHIJ'.charAt(i) }}</em>{{ a.text }}</button>
 					</div>
 				</div>
@@ -2103,12 +2154,13 @@ onUnmounted( () => {
 					</div>
 				</section>
 
-				<section v-if="social.instagram || social.telegram" class="saw-fres__follow">
+				<section v-if="social.instagram || social.telegram || social.facebook" class="saw-fres__follow">
 					<h2 class="saw-fres__h">{{ t('freeFollowTitle', 'More free prizes are coming.') }}</h2>
 					<p class="saw-fres__sub">{{ t('freeFollowSub', 'Follow us so you don’t miss the next free competition.') }}</p>
 					<div class="saw-fres__fbtns">
 						<a v-if="social.instagram" class="saw-fres__fbtn" :href="social.instagram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /></svg>{{ t('followInstagram', 'Follow on Instagram') }}</a>
 						<a v-if="social.telegram" class="saw-fres__fbtn" :href="social.telegram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 3.5L2.5 10.8l6.2 2.3 2.4 6.4 3.4-4.2 5.3 3.9z" /></svg>{{ t('followTelegram', 'Join our Telegram channel') }}</a>
+						<a v-if="social.facebook" class="saw-fres__fbtn" :href="social.facebook" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>{{ t('followFacebook', 'Follow on Facebook') }}</a>
 					</div>
 				</section>
 

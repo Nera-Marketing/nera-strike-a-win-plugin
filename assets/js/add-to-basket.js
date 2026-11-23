@@ -32,6 +32,19 @@
 	var busy = false;
 	var ctx = null;
 
+	// Back after a redirect restores this page from the back/forward cache as it
+	// was left mid-add: busy, every Continue disabled.
+	window.addEventListener( 'pageshow', function ( event ) {
+		if ( ! event.persisted ) {
+			return;
+		}
+		busy = false;
+		Array.prototype.forEach.call( form.querySelectorAll( '[data-saw-enter]' ), function ( button ) {
+			button.removeAttribute( 'aria-busy' );
+			button.disabled = false;
+		} );
+	} );
+
 	/* ---- the chime ------------------------------------------------------- */
 
 	function chime() {
@@ -127,7 +140,8 @@
 				}
 
 				// Logged out: the entry is in the basket; sign in first, then the sheet opens.
-				var login = cfg.login && json.fragments ? json.fragments[ cfg.login ] : '';
+				// A page cached before the key was printed still gets the login redirect.
+				var login = json.fragments ? json.fragments[ cfg.login || 'saw_login' ] : '';
 				if ( login ) {
 					window.location.href = login;
 					return;
