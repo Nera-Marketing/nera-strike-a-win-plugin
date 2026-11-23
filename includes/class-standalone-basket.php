@@ -516,10 +516,13 @@ class Nera_SAW_Standalone_Basket {
 
 	/**
 	 * A basket here holds one entry: after a login merges the account's saved basket
-	 * into this one, keep the entry the player chose last.
+	 * into this one, keep only the entry the player chose last. Anything else the saved
+	 * basket brought (an ordinary product, a wallet top-up) would be charged with it.
 	 *
 	 * WooCommerce merges the saved basket in front of the session's, so the session's
 	 * entry, the one the player was about to pay for, is the last one.
+	 *
+	 * A basket with no entry is left alone: a top-up made here stays a top-up.
 	 */
 	public static function keep_newest_entry() {
 		if ( 'saw' !== self::context() || ! function_exists( 'WC' ) || ! WC()->cart ) {
@@ -527,21 +530,19 @@ class Nera_SAW_Standalone_Basket {
 		}
 
 		$contents = WC()->cart->get_cart_contents();
-		$entries  = array();
+		$newest   = null;
 		foreach ( $contents as $key => $item ) {
 			if ( ! empty( $item['product_id'] ) && Nera_SAW_Competition_Config::is_competition( (int) $item['product_id'] ) ) {
-				$entries[] = $key;
+				$newest = $key;
 			}
 		}
-		if ( count( $entries ) < 2 ) {
+		if ( null === $newest || 1 === count( $contents ) ) {
 			return;
 		}
 
-		array_pop( $entries );
-		foreach ( $entries as $key ) {
-			unset( $contents[ $key ] );
-		}
-		WC()->cart->set_cart_contents( $contents );
+		WC()->cart->set_cart_contents( array( $newest => $contents[ $newest ] ) );
+		// Writes the trimmed basket back to the session, which a load with no merge would not.
+		WC()->cart->calculate_totals();
 	}
 
 	/**
