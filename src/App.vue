@@ -305,10 +305,12 @@ let holdAdvance = null; // closure that advances past the reveal (button or time
 // Reactive: the template's disabled states (options, Submit) depend on it, so a
 // plain let would only repaint by luck, whenever some other ref happened to change.
 const locked = ref( false );
-// Tap-through guard (selectOption()): when the current question went on screen, and
-// when the latest press on the answers began (page clock, ms).
+// Tap-through guard (selectOption()): when the current question went on screen, when
+// the latest press on the answers began, and when that press lifted (page clock, ms).
 let questionShownAt = 0;
 let answerPressAt = -1;
+let answerLiftAt = -1;
+const LIFT_EVENTS = [ 'pointerup', 'pointercancel', 'touchend', 'touchcancel' ];
 let navGuardActive = false;
 let navListenersBound = false;
 let historyTrapDepth = 0;
@@ -1649,9 +1651,20 @@ function eventTime( e ) {
 
 // Recorded on the window in the capture phase: during the reveal the answer's spot
 // may be covered (the flying ticket) or the answer disabled, and that press must
-// still count.
+// still count. Presses elsewhere (Leave, Stay, the page) are not answer presses, so a
+// later click with no press of its own (assistive tech) is not judged against them.
 function noteAnswerPress( e ) {
+	if ( ! ( e.target instanceof Element ) || ! e.target.closest( '.saw-answers' ) ) {
+		return;
+	}
 	answerPressAt = eventTime( e );
+	answerLiftAt = -1;
+}
+
+function noteAnswerLift( e ) {
+	if ( answerPressAt >= 0 && answerLiftAt < 0 ) {
+		answerLiftAt = eventTime( e );
+	}
 }
 
 function selectOption( index, e ) {
@@ -1661,10 +1674,14 @@ function selectOption( index, e ) {
 	// Tap-through: the click ends a press whose finger came down before this question
 	// was on screen (on the reveal, or on the previous question's answer in the same
 	// spot), so the player never saw what it answers. Keyboard clicks (detail 0) and
-	// clicks with no recorded press have no press to judge and count.
+	// clicks with no recorded press have no press to judge and count. A press that
+	// lifted before the question showed is over: this click is not its tap.
 	const pressAt = answerPressAt;
+	const liftAt = answerLiftAt;
 	answerPressAt = -1;
-	if ( e && e.detail > 0 && pressAt >= 0 && pressAt < questionShownAt ) {
+	answerLiftAt = -1;
+	const liftedBefore = liftAt >= 0 && liftAt < questionShownAt;
+	if ( e && e.detail > 0 && pressAt >= 0 && pressAt < questionShownAt && ! liftedBefore ) {
 		return;
 	}
 	selectedAnswer.value = index;
@@ -1894,6 +1911,9 @@ function pickLanguage( code ) {
 onMounted( () => {
 	window.addEventListener( 'pointerdown', noteAnswerPress, true );
 	window.addEventListener( 'touchstart', noteAnswerPress, { capture: true, passive: true } );
+	for ( const type of LIFT_EVENTS ) {
+		window.addEventListener( type, noteAnswerLift, { capture: true, passive: true } );
+	}
 	if ( hasLanguageChoice && ! props.resume && ! props.leaveNow ) {
 		// Screen 24: the player picks before anything is drawn, so the run itself
 		// is created in the chosen language — see pickLanguage() -> start(). No
@@ -1907,6 +1927,9 @@ onMounted( () => {
 onUnmounted( () => {
 	window.removeEventListener( 'pointerdown', noteAnswerPress, true );
 	window.removeEventListener( 'touchstart', noteAnswerPress, true );
+	for ( const type of LIFT_EVENTS ) {
+		window.removeEventListener( type, noteAnswerLift, true );
+	}
 	clearTicker();
 	stopCountUp();
 	removeTicketFly();
